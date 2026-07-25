@@ -32,7 +32,6 @@ function onOpen() {
           .addItem('Visual Repair Board', 'showCalendarRepairBoard')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('Legacy Calendar Job Engine', 'showPmosJobEngine')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
