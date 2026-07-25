@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('Stylesheet'); ?>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <strong>PMOS</strong>
+            <span>v<?= pmosVersion ?></span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Primary navigation">
+          <button class="nav-item active" data-view="dashboard">Dashboard</button>
+          <button class="nav-item" data-view="routes">Route Manager</button>
+          <button class="nav-item" data-view="customers">Add Customer</button>
+          <button class="nav-item" data-view="history">Route History</button>
+          <button class="nav-item" data-view="calendar">Calendar</button>
+          <button class="nav-item" data-view="chemistry">Chemistry</button>
+          <button class="nav-item" data-view="jobs">Job Center</button>
+          <button class="nav-item" data-view="settings">Settings</button>
+          <button class="nav-item" data-view="featurelab">Feature Lab</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="status-dot" id="connectionDot"></span>
+          <span id="connectionText">Connecting…</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-button mobile-only" id="menuButton" aria-label="Open navigation">☰</button>
+          <div>
+            <h1 id="viewTitle">Dashboard</h1>
+            <p id="viewSubtitle">Operational status and route overview</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="button secondary" id="refreshButton">Refresh</button>
+            <span class="pill" id="saveState">Ready</span>
+          </div>
+        </header>
+
+        <div id="alertRegion" class="alert-region" aria-live="polite"></div>
+
+        <section class="view active" id="view-dashboard">
+          <div class="metric-grid">
+            <article class="metric-card"><span>Routes</span><strong id="metricRoutes">—</strong></article>
+            <article class="metric-card"><span>Customers on routes</span><strong id="metricCustomers">—</strong></article>
+            <article class="metric-card"><span>Pending changes</span><strong id="metricPending">—</strong></article>
+            <article class="metric-card"><span>Saved versions</span><strong id="metricVersions">—</strong></article>
+          </div>
+          <div class="panel-grid">
+            <article class="panel">
+              <div class="panel-heading"><div><h2>Route overview</h2><p>Current stop counts by layer</p></div></div>
+              <div id="routeOverview" class="stack"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><h2>Pending synchronization</h2><p>Spreadsheet changes awaiting Calendar work</p></div></div>
+              <div id="pendingOverview" class="stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-routes">
+          <div class="toolbar panel">
+            <label>Route layer<select id="routeSelect"></select></label>
+            <label>Search<input id="routeSearch" type="search" placeholder="Customer or address"></label>
+            <div class="toolbar-spacer"></div>
+            <span class="muted" id="routeCount"></span>
+          </div>
+          <article class="panel route-panel">
+            <div class="panel-heading">
+              <div><h2 id="routeHeading">Route</h2><p>Drag stops or use the arrow controls. Saving creates a restorable route version.</p></div>
+              <button class="button primary" id="saveRouteButton" disabled>Save route order</button>
+            </div>
+            <div id="routeList" class="route-list"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-customers">
+          <article class="panel narrow-panel">
+            <div class="panel-heading"><div><h2>Add a customer to a route</h2><p>This adds a route row and marks the layer pending. The spreadsheet remains authoritative.</p></div></div>
+            <form id="customerForm" class="form-grid">
+              <label>Route layer<select name="layer" id="customerLayer" required></select></label>
+              <label>Calendar title<input name="title" required></label>
+              <label>Full name(s)<input name="fullName"></label>
+              <label>Full address<input name="address"></label>
+              <label>Frequency<select name="frequency"><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option></select></label>
+              <label>Insert after stop<input name="afterStop" type="number" min="0" value="0"><small>Use 0 to insert at the beginning.</small></label>
+              <div class="form-actions"><button class="button primary" type="submit">Add customer</button></div>
+            </form>
+          </article>
+        </section>
+
+        <section class="view" id="view-history">
+          <article class="panel">
+            <div class="panel-heading"><div><h2>Route History</h2><p>Restore a previous route snapshot. Restoration is itself backed up first.</p></div></div>
+            <div id="historyList" class="stack"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-calendar"></section>
+        <section class="view" id="view-chemistry"></section>
+        <section class="view" id="view-jobs"></section>
+        <section class="view" id="view-settings"></section>
+        <section class="view" id="view-featurelab"></section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="confirmModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <h2 id="confirmTitle">Confirm action</h2>
+        <p id="confirmMessage"></p>
+        <div class="modal-actions">
+          <button class="button secondary" id="confirmCancel">Cancel</button>
+          <button class="button danger" id="confirmAccept">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <?!= include('Client'); ?>
+  </body>
+</html>

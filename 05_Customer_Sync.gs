@@ -1,0 +1,460 @@
+/**
+ * PMOS v1.9.0 — Customer synchronization and identity management.
+ * Move-only refactor: public names and operational behavior are preserved.
+ */
+
+function addCustomerToRoute(payload) {
+  if (!payload || !payload.layer || !payload.title) {
+    throw new Error('Missing customer information.');
+  }
+
+
+  ensureSupportSheets_();
+  saveRouteVersion_('Before adding customer', snapshotRoutes_());
+
+
+  const sheet = getRoutesSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(v => String(v).trim());
+  const row = new Array(headers.length).fill('');
+
+
+  setByHeader_(row, headers, 'Layer', payload.layer);
+  setByHeader_(row, headers, 'Calendar Title', payload.title);
+  setByHeader_(row, headers, 'Full Name(s)', payload.fullName || payload.title);
+  setByHeader_(row, headers, 'Full Address', payload.address || '');
+  setByHeader_(row, headers, 'Frequency', payload.frequency || 'weekly');
+  setByHeader_(row, headers, 'Customer ID', payload.customerId || '');
+
+
+  const layerCol = headers.indexOf('Layer');
+  const routeIndexes = [];
+
+
+  values.slice(1).forEach((existing, index) => {
+    if (String(existing[layerCol] || '').trim() === payload.layer) {
+      routeIndexes.push(index);
+    }
+  });
+
+
+  const afterStop = Math.max(0, Number(payload.afterStop || 0));
+  const insertionBodyIndex = routeIndexes.length
+    ? routeIndexes[Math.min(afterStop, routeIndexes.length) - 1] + 1
+    : values.length - 1;
+
+
+  sheet.insertRowBefore(insertionBodyIndex + 2);
+  sheet.getRange(insertionBodyIndex + 2, 1, 1, headers.length).setValues([row]);
+
+
+  normalizeRoutesFromPhysicalOrder_(false);
+  addPendingChange_(payload.layer, 1, 'Customer added');
+  storeRouteSignatures_();
+  updateSyncStatus_('Route changes pending', `${payload.title} was added to ${payload.layer}.`);
+
+
+  return {
+    ok: true,
+    route: getRoute_(payload.layer),
+    pending: getPendingChanges_()
+  };
+}
+
+function syncCustomerDatabaseFromSheet() {
+  const result = synchronizeCustomerDatabase_(true);
+
+
+  SpreadsheetApp.getUi().alert(
+    'Customer database synchronized',
+    [
+      `${result.idsCreated} Customer ID(s) created.`,
+      `${result.routeRowsUpdated} route row(s) refreshed.`,
+      `${result.routeRowsCreated} missing route row(s) created.`,
+      `${result.changedLayers.length} route layer(s) marked for Calendar synchronization.`,
+      '',
+      result.changedLayers.length
+        ? 'Use PMOS → Preview Route Changes, then Apply Calendar Changes.'
+        : 'Everything is already synchronized.'
+    ].join('\n'),
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+function synchronizeCustomerDatabase_(markPending) {
+  ensureSupportSheets_();
+  const idsCreated = ensureCustomerIds_();
+  ensureRouteCustomerIdColumn_();
+
+
+  const customerLookup = getCustomerLookup_();
+  const routeSheet = getRoutesSheet_();
+  const values = routeSheet.getDataRange().getValues();
+  const headers = values[0].map(v => String(v).trim());
+
+
+  const idCol = headers.indexOf('Customer ID');
+  const layerCol = headers.indexOf('Layer');
+  const titleCol = headers.indexOf('Calendar Title');
+  const fullNameCol = headers.indexOf('Full Name(s)');
+  const addressCol = headers.indexOf('Full Address');
+  const frequencyCol = headers.indexOf('Frequency');
+  const entryCol = headers.indexOf('Entry Information');
+  const notesCol = headers.indexOf('Customer Notes');
+
+
+  const changedLayers = new Set();
+  let routeRowsUpdated = 0;
+
+
+  for (let index = 1; index < values.length; index++) {
+    const routeId = String(values[index][idCol] || '').trim();
+    const routeTitle = String(values[index][titleCol] || '').trim();
+    const customer = customerLookup.byId[routeId] ||
+      customerLookup.byTitle[normalize_(routeTitle)];
+
+
+    if (!customer) continue;
+
+
+    const updates = [
+      [idCol, customer['Customer ID']],
+      [titleCol, customer['Calendar Title']],
+      [fullNameCol, customer['Full Name(s)']],
+      [addressCol, customer['Full Address']],
+      [frequencyCol, customer['Frequency']],
+      [entryCol, buildCustomerEntryInformation_(customer)],
+      [notesCol, customer['Customer Notes']]
+    ].filter(item => item[0] >= 0);
+
+
+    let changed = false;
+    updates.forEach(([column, value]) => {
+      const normalizedValue = value == null ? '' : value;
+      if (String(values[index][column] || '') !== String(normalizedValue)) {
+        values[index][column] = normalizedValue;
+        changed = true;
+      }
+    });
+
+
+    if (changed) {
+      routeRowsUpdated++;
+      const layer = String(values[index][layerCol] || '').trim();
+      if (layer) changedLayers.add(layer);
+    }
+  }
+
+
+  if (values.length > 1) {
+    routeSheet.getRange(2, 1, values.length - 1, headers.length)
+      .setValues(values.slice(1));
+  }
+
+
+  const creationResult = createMissingRouteRowsFromCustomers_(
+    customerLookup.list,
+    customerLookup.routeCustomerIds
+  );
+
+
+  creationResult.changedLayers.forEach(layer => changedLayers.add(layer));
+
+
+  normalizeRoutesFromPhysicalOrder_(false);
+
+
+  if (markPending && changedLayers.size) {
+    [...changedLayers].forEach(layer =>
+      addPendingChange_(layer, 1, 'Customer database synchronization')
+    );
+
+
+    updateSyncStatus_(
+      'Route changes pending',
+      `${changedLayers.size} route layer(s) changed from the Customers sheet.`
+    );
+  }
+
+
+  return {
+    idsCreated,
+    routeRowsUpdated,
+    routeRowsCreated: creationResult.created,
+    changedLayers: [...changedLayers]
+  };
+}
+
+function ensureCustomerIds_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!sheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
+
+
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) return 0;
+
+
+  const headers = values[0].map(v => String(v).trim());
+  let idCol = headers.indexOf('Customer ID');
+
+
+  if (idCol < 0) {
+    sheet.insertColumnBefore(1);
+    sheet.getRange(1, 1).setValue('Customer ID');
+    return ensureCustomerIds_();
+  }
+
+
+  const titleCol = headers.indexOf('Calendar Title');
+  const fullNameCol = headers.indexOf('Full Name(s)');
+  const existing = new Set();
+  let maxNumber = 0;
+
+
+  values.slice(1).forEach(row => {
+    const id = String(row[idCol] || '').trim();
+    if (!id) return;
+    existing.add(id);
+    const match = id.match(/(\d+)$/);
+    if (match) maxNumber = Math.max(maxNumber, Number(match[1]));
+  });
+
+
+  const updates = [];
+  let created = 0;
+
+
+for (let index = 1; index < values.length; index++) {
+  const hasCustomer =
+    String(values[index][titleCol] || '').trim() ||
+    String(values[index][fullNameCol] || '').trim();
+
+  const currentId = String(values[index][idCol] || '').trim();
+
+  const id = (() => {
+    if (!hasCustomer || currentId) {
+      return currentId;
+    }
+
+    let generatedId;
+
+    do {
+      maxNumber++;
+      generatedId = `PMOS-${String(maxNumber).padStart(5, '0')}`;
+    } while (existing.has(generatedId));
+
+    existing.add(generatedId);
+    created++;
+
+    return generatedId;
+  })();
+
+  updates.push([id]);
+}
+
+  if (updates.length) {
+    sheet.getRange(2, idCol + 1, updates.length, 1).setValues(updates);
+  }
+
+
+  return created;
+}
+
+function ensureRouteCustomerIdColumn_() {
+  const sheet = getRoutesSheet_();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0].map(v => String(v).trim());
+
+
+  if (headers.includes('Customer ID')) return;
+
+
+  const titleCol = headers.indexOf('Calendar Title');
+  sheet.insertColumnAfter(titleCol >= 0 ? titleCol + 1 : sheet.getLastColumn());
+  sheet.getRange(1, titleCol >= 0 ? titleCol + 2 : sheet.getLastColumn())
+    .setValue('Customer ID');
+}
+
+function getCustomerLookup_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!sheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
+
+
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(v => String(v).trim());
+  const list = [];
+  const byId = {};
+  const byTitle = {};
+
+
+  values.slice(1)
+    .filter(row => row.some(value => value !== '' && value != null))
+    .forEach(row => {
+      const customer = {};
+      headers.forEach((header, index) => customer[header] = row[index]);
+
+
+      const id = String(customer['Customer ID'] || '').trim();
+      const title = String(customer['Calendar Title'] || '').trim();
+
+
+      if (!title && !customer['Full Name(s)']) return;
+
+
+      list.push(customer);
+      if (id) byId[id] = customer;
+      if (title) byTitle[normalize_(title)] = customer;
+    });
+
+
+  const routeCustomerIds = new Set(
+    readRouteCustomerIdsWithoutCustomerLookup_()
+  );
+
+
+  return { list, byId, byTitle, routeCustomerIds };
+}
+
+function readRouteCustomerIdsWithoutCustomerLookup_() {
+  const sheet = getRoutesSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(v => String(v).trim());
+  const idCol = headers.indexOf('Customer ID');
+
+
+  if (idCol < 0) return [];
+
+
+  return values.slice(1)
+    .map(row => String(row[idCol] || '').trim())
+    .filter(Boolean);
+}
+
+function createMissingRouteRowsFromCustomers_(customers, routeCustomerIds) {
+  const sheet = getRoutesSheet_();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0].map(v => String(v).trim());
+
+
+  const existingLayers = [...new Set(
+    sheet.getDataRange().getValues().slice(1)
+      .map(row => String(row[headers.indexOf('Layer')] || '').trim())
+      .filter(Boolean)
+  )];
+
+
+  const newRows = [];
+  const changedLayers = new Set();
+
+
+  customers.forEach(customer => {
+    const id = String(customer['Customer ID'] || '').trim();
+    if (!id || routeCustomerIds.has(id)) return;
+
+
+    const days = parseCustomerDays_(customer['Route Day(s)']);
+    const weeks = parseCustomerWeeks_(
+      customer['Rotation Week(s)'],
+      customer['Frequency']
+    );
+
+
+    if (!days.length || !weeks.length) return;
+
+
+    weeks.forEach(week => {
+      days.forEach(day => {
+        const matches = existingLayers.filter(layer => {
+          const parsed = parseLayer_(layer);
+          return parsed.week === week && parsed.day === day;
+        });
+
+
+        if (matches.length !== 1) return;
+
+
+        const row = new Array(headers.length).fill('');
+        setByHeader_(row, headers, 'Layer', matches[0]);
+        setByHeader_(row, headers, 'Customer ID', id);
+        setByHeader_(row, headers, 'Calendar Title', customer['Calendar Title']);
+        setByHeader_(row, headers, 'Full Name(s)', customer['Full Name(s)']);
+        setByHeader_(row, headers, 'Full Address', customer['Full Address']);
+        setByHeader_(row, headers, 'Frequency', customer['Frequency']);
+        setByHeader_(row, headers, 'Color Category', customer['Frequency']);
+        setByHeader_(row, headers, 'Entry Information', buildCustomerEntryInformation_(customer));
+        setByHeader_(row, headers, 'Customer Notes', customer['Customer Notes']);
+
+
+        newRows.push(row);
+        changedLayers.add(matches[0]);
+      });
+    });
+  });
+
+
+  if (newRows.length) {
+    sheet.getRange(
+      sheet.getLastRow() + 1,
+      1,
+      newRows.length,
+      headers.length
+    ).setValues(newRows);
+  }
+
+
+  return { created: newRows.length, changedLayers: [...changedLayers] };
+}
+
+function parseCustomerDays_(value) {
+  const valid = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+
+  return valid.filter(day =>
+    String(value || '').toLowerCase().includes(day.toLowerCase())
+  );
+}
+
+function parseCustomerWeeks_(value, frequency) {
+  const text = String(value || '').trim();
+  const explicit = [...text.matchAll(/[1-4]/g)].map(match => Number(match[0]));
+
+
+  if (explicit.length) return [...new Set(explicit)];
+
+
+  const normalizedFrequency = normalize_(frequency);
+
+
+  if (normalizedFrequency.includes('weekly')) return [1, 2, 3, 4];
+  if (normalizedFrequency.includes('monthly') || normalizedFrequency.includes('4 week')) return [1];
+
+
+  return [];
+}
+
+function buildCustomerEntryInformation_(customer) {
+  const lines = [];
+
+
+  if (customer['Gate Code']) lines.push(`Gate code: ${customer['Gate Code']}`);
+  if (customer['Lockbox Code']) lines.push(`Lockbox code: ${customer['Lockbox Code']}`);
+  if (customer['Lockbox Location']) lines.push(`Lockbox: ${customer['Lockbox Location']}`);
+  if (customer['Entry Notes']) lines.push(String(customer['Entry Notes']));
+
+
+  return lines.join('\n').trim();
+}
+
+function eventMatchesCustomer_(event, row) {
+  const description = String(event.getDescription() || '');
+
+
+  if (row.customerId) {
+    const marker = `PMOS_CUSTOMER_ID=${row.customerId}`;
+    if (description.includes(marker)) return true;
+  }
+
+
+  return normalize_(event.getTitle()) === normalize_(row.title);
+}
+
