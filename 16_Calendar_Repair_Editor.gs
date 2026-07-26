@@ -79,17 +79,43 @@ let items=${JSON.stringify(plan.items)};
 let dragged=null;
 let working=false;
 let syncingScroll=false;
+let autoScrollFrame=null;
+let dragPointerX=0;
+let dragPointerY=0;
 function byId(id){return document.getElementById(id)}
 function option(value,text){const o=document.createElement('option');o.value=value;o.textContent=text;return o}
 function setWorking(value,message){working=Boolean(value);document.querySelectorAll('button').forEach(button=>button.disabled=working);if(message)byId('status').textContent=message}
 function syncScrollWidth(){const board=byId('board');byId('topScrollInner').style.width=board.scrollWidth+'px'}
 function setupScrollSync(){const top=byId('topScroll');const board=byId('board');top.addEventListener('scroll',()=>{if(syncingScroll)return;syncingScroll=true;board.scrollLeft=top.scrollLeft;syncingScroll=false});board.addEventListener('scroll',()=>{if(syncingScroll)return;syncingScroll=true;top.scrollLeft=board.scrollLeft;syncingScroll=false});syncScrollWidth()}
-function setup(){customers.forEach((c,i)=>byId('customerSelect').appendChild(option(i,c.title)));lanes.forEach(l=>byId('dateSelect').appendChild(option(l.date,l.day+' — '+l.date)));render();setupScrollSync();window.addEventListener('resize',syncScrollWidth)}
+function edgeScrollSpeed(distance,zone,maxSpeed){const strength=Math.max(0,Math.min(1,(zone-distance)/zone));return Math.ceil(maxSpeed*strength*strength)}
+function stopAutoScroll(){if(autoScrollFrame!==null){cancelAnimationFrame(autoScrollFrame);autoScrollFrame=null}}
+function autoScrollTick(){
+  if(!dragged){stopAutoScroll();return}
+  const verticalZone=85;
+  const horizontalZone=85;
+  const maxVerticalSpeed=22;
+  const maxHorizontalSpeed=24;
+  if(dragPointerY<verticalZone){
+    window.scrollBy(0,-edgeScrollSpeed(dragPointerY,verticalZone,maxVerticalSpeed));
+  }else if(dragPointerY>window.innerHeight-verticalZone){
+    window.scrollBy(0,edgeScrollSpeed(window.innerHeight-dragPointerY,verticalZone,maxVerticalSpeed));
+  }
+  const board=byId('board');
+  const box=board.getBoundingClientRect();
+  if(dragPointerX>=box.left-horizontalZone&&dragPointerX<box.left+horizontalZone){
+    board.scrollLeft-=edgeScrollSpeed(Math.max(0,dragPointerX-box.left),horizontalZone,maxHorizontalSpeed);
+  }else if(dragPointerX<=box.right+horizontalZone&&dragPointerX>box.right-horizontalZone){
+    board.scrollLeft+=edgeScrollSpeed(Math.max(0,box.right-dragPointerX),horizontalZone,maxHorizontalSpeed);
+  }
+  autoScrollFrame=requestAnimationFrame(autoScrollTick)
+}
+function updateAutoScrollPointer(e){if(!dragged)return;dragPointerX=e.clientX;dragPointerY=e.clientY;if(autoScrollFrame===null)autoScrollFrame=requestAnimationFrame(autoScrollTick)}
+function setup(){customers.forEach((c,i)=>byId('customerSelect').appendChild(option(i,c.title)));lanes.forEach(l=>byId('dateSelect').appendChild(option(l.date,l.day+' — '+l.date)));render();setupScrollSync();document.addEventListener('dragover',updateAutoScrollPointer);document.addEventListener('drop',stopAutoScroll);window.addEventListener('resize',syncScrollWidth)}
 function renumberStops(){document.querySelectorAll('.lane').forEach(lane=>lane.querySelectorAll('.stop').forEach((stop,index)=>{const number=stop.querySelector('.stop-number');if(number)number.textContent=(index+1)+'.'}))}
 function getInsertBefore(lane,y){const cards=Array.from(lane.querySelectorAll('.stop:not(.dragging)'));let closest={offset:Number.NEGATIVE_INFINITY,element:null};cards.forEach(card=>{const box=card.getBoundingClientRect();const offset=y-box.top-box.height/2;if(offset<0&&offset>closest.offset)closest={offset,element:card}});return closest.element}
 function positionDragged(lane,y){if(!dragged)return;const before=getInsertBefore(lane,y);if(before)lane.insertBefore(dragged,before);else lane.appendChild(dragged);renumberStops()}
-function card(item){const c=document.createElement('div');c.className='stop';c.draggable=true;c.dataset.id=item.id;c.dataset.customerId=item.customerId||'';c.dataset.title=item.title||'';const number=document.createElement('span');number.className='stop-number';const title=document.createElement('span');title.className='stop-title';title.textContent=item.title;c.appendChild(number);c.appendChild(title);const x=document.createElement('button');x.className='remove';x.type='button';x.textContent='×';x.title='Remove from this repair preview';x.onclick=e=>{e.stopPropagation();c.remove();renumberStops()};c.appendChild(x);c.ondragstart=e=>{dragged=c;c.classList.add('dragging');e.dataTransfer.effectAllowed='move'};c.ondragend=()=>{c.classList.remove('dragging');dragged=null;renumberStops()};return c}
-function render(){byId('board').innerHTML='';lanes.forEach(l=>{const lane=document.createElement('div');lane.className='lane';lane.dataset.date=l.date;lane.innerHTML='<h3>'+l.day+'<br>'+l.date+'</h3>';lane.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';positionDragged(lane,e.clientY)};lane.ondrop=e=>{e.preventDefault();positionDragged(lane,e.clientY)};items.filter(i=>i.date===l.date).sort((a,b)=>a.order-b.order).forEach(i=>lane.appendChild(card(i)));byId('board').appendChild(lane)});renumberStops();requestAnimationFrame(syncScrollWidth)}
+function card(item){const c=document.createElement('div');c.className='stop';c.draggable=true;c.dataset.id=item.id;c.dataset.customerId=item.customerId||'';c.dataset.title=item.title||'';const number=document.createElement('span');number.className='stop-number';const title=document.createElement('span');title.className='stop-title';title.textContent=item.title;c.appendChild(number);c.appendChild(title);const x=document.createElement('button');x.className='remove';x.type='button';x.textContent='×';x.title='Remove from this repair preview';x.onclick=e=>{e.stopPropagation();c.remove();renumberStops()};c.appendChild(x);c.ondragstart=e=>{dragged=c;dragPointerX=e.clientX;dragPointerY=e.clientY;c.classList.add('dragging');e.dataTransfer.effectAllowed='move';if(autoScrollFrame===null)autoScrollFrame=requestAnimationFrame(autoScrollTick)};c.ondragend=()=>{c.classList.remove('dragging');dragged=null;stopAutoScroll();renumberStops()};return c}
+function render(){byId('board').innerHTML='';lanes.forEach(l=>{const lane=document.createElement('div');lane.className='lane';lane.dataset.date=l.date;lane.innerHTML='<h3>'+l.day+'<br>'+l.date+'</h3>';lane.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';updateAutoScrollPointer(e);positionDragged(lane,e.clientY)};lane.ondrop=e=>{e.preventDefault();positionDragged(lane,e.clientY);stopAutoScroll()};items.filter(i=>i.date===l.date).sort((a,b)=>a.order-b.order).forEach(i=>lane.appendChild(card(i)));byId('board').appendChild(lane)});renumberStops();requestAnimationFrame(syncScrollWidth)}
 function addCustomer(){const customer=customers[Number(byId('customerSelect').value)];const lane=document.querySelector('.lane[data-date="'+byId('dateSelect').value+'"]');if(!customer||!lane)return;const item={id:'added-'+Date.now()+'-'+Math.random().toString(16).slice(2),customerId:customer.customerId||'',title:customer.title};const newCard=card(item);const requested=Math.floor(Number(byId('stopInput').value||0));const existing=lane.querySelectorAll('.stop');if(requested>0&&requested<=existing.length)lane.insertBefore(newCard,existing[requested-1]);else lane.appendChild(newCard);renumberStops();byId('stopInput').value='';byId('status').textContent=customer.title+' added to the preview.'}
 function collectChanges(){const changes=[];document.querySelectorAll('.lane').forEach(l=>l.querySelectorAll('.stop').forEach((c,index)=>changes.push({id:c.dataset.id,customerId:c.dataset.customerId||'',title:c.dataset.title||'',date:l.dataset.date,order:index+1})));return changes}
 function originalChanges(){return originalItems.map(item=>({id:item.id,customerId:item.customerId||'',title:item.title||'',date:item.date,order:item.order}))}
