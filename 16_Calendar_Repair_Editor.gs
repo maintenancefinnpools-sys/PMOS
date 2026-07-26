@@ -45,10 +45,11 @@ function openCalendarRepairBoard(startValue, endValue) {
   const customers = getCalendarRepairCustomerPool_();
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
-*{box-sizing:border-box}body{font-family:Arial;margin:0;padding:14px;color:#1f2937}h2{margin:0 0 4px}.muted{font-size:12px;color:#6b7280;line-height:1.4}.workspace{display:grid;grid-template-columns:270px 1fr;gap:12px;margin-top:14px}.sidebar{border:1px solid #cbd5e1;border-radius:9px;padding:10px;background:#fff}.sidebar label{display:block;font-size:12px;font-weight:700;margin:8px 0 4px}.sidebar select,.sidebar input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:7px}.board{display:flex;gap:10px;overflow:auto;padding-bottom:10px}.lane{min-width:220px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;padding:8px;min-height:420px}.lane h3{font-size:13px;margin:0 0 7px}.stop{position:relative;padding:8px 29px 8px 8px;margin:6px 0;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;cursor:grab;font-size:12px}.stop.dragging{opacity:.45}.stop-number{display:inline-block;min-width:22px;font-weight:700;color:#1d4ed8}.remove{position:absolute;right:5px;top:4px;border:0;background:transparent;color:#991b1b;font-size:16px;cursor:pointer}.buttons{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb}.apply{background:#166534;color:#fff}.danger-note{margin-top:10px;padding:8px;background:#fff7ed;border-radius:7px;font-size:12px}.status{margin-top:10px;white-space:pre-wrap}
+*{box-sizing:border-box}body{font-family:Arial;margin:0;padding:14px;color:#1f2937}h2{margin:0 0 4px}.muted{font-size:12px;color:#6b7280;line-height:1.4}.workspace{display:grid;grid-template-columns:270px 1fr;gap:12px;margin-top:14px}.sidebar{border:1px solid #cbd5e1;border-radius:9px;padding:10px;background:#fff}.sidebar label{display:block;font-size:12px;font-weight:700;margin:8px 0 4px}.sidebar select,.sidebar input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:7px}.board{display:flex;gap:10px;overflow:auto;padding-bottom:10px}.lane{min-width:220px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;padding:8px;min-height:420px}.lane h3{font-size:13px;margin:0 0 7px}.stop{position:relative;padding:8px 29px 8px 8px;margin:6px 0;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;cursor:grab;font-size:12px}.stop.dragging{opacity:.45}.stop-number{display:inline-block;min-width:22px;font-weight:700;color:#1d4ed8}.remove{position:absolute;right:5px;top:4px;border:0;background:transparent;color:#991b1b;font-size:16px;cursor:pointer}.buttons{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb}.apply{background:#166534;color:#fff}.discard{background:#fee2e2;color:#991b1b}.save-note{margin-top:8px;padding:8px 10px;background:#ecfdf5;color:#166534;border-radius:7px;font-size:12px}.danger-note{margin-top:10px;padding:8px;background:#fff7ed;border-radius:7px;font-size:12px}.status{margin-top:10px;white-space:pre-wrap}
 </style></head><body>
 <h2>Calendar Repair Preview</h2>
 <div class="muted">This is a temporary repair plan for the selected date range. Drag visits between dates or vertically to change stop order. Add customers who should appear during this transition week, and remove visits that should not be recreated. The permanent route plan is not changed.</div>
+<div class="save-note"><b>Close Preview saves your changes.</b> Use Discard Changes only when you want to restore the preview to the way it was when this window opened.</div>
 <div class="workspace">
   <div class="sidebar">
     <b>Add a customer</b>
@@ -61,8 +62,8 @@ function openCalendarRepairBoard(startValue, endValue) {
   <div id="board" class="board"></div>
 </div>
 <div class="buttons">
-  <button class="primary" onclick="saveAndReturn()">Save Edited Preview</button>
-  <button class="secondary" onclick="returnToJobEngine()">Close Preview</button>
+  <button class="discard" onclick="discardChanges()">Discard Changes</button>
+  <button class="secondary" onclick="closePreview()">Close Preview (Saves Changes)</button>
   <button class="apply" onclick="applyRepair()">Apply Repair</button>
 </div>
 <div id="status" class="status"></div>
@@ -71,6 +72,7 @@ const lanes=${JSON.stringify(lanes)};
 const customers=${JSON.stringify(customers)};
 const repairStart=${JSON.stringify(startText)};
 const repairEnd=${JSON.stringify(endText)};
+const originalItems=${JSON.stringify(plan.items)};
 let items=${JSON.stringify(plan.items)};
 let dragged=null;
 let working=false;
@@ -85,8 +87,9 @@ function card(item){const c=document.createElement('div');c.className='stop';c.d
 function render(){byId('board').innerHTML='';lanes.forEach(l=>{const lane=document.createElement('div');lane.className='lane';lane.dataset.date=l.date;lane.innerHTML='<h3>'+l.day+'<br>'+l.date+'</h3>';lane.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';positionDragged(lane,e.clientY)};lane.ondrop=e=>{e.preventDefault();positionDragged(lane,e.clientY)};items.filter(i=>i.date===l.date).sort((a,b)=>a.order-b.order).forEach(i=>lane.appendChild(card(i)));byId('board').appendChild(lane)});renumberStops()}
 function addCustomer(){const customer=customers[Number(byId('customerSelect').value)];const lane=document.querySelector('.lane[data-date="'+byId('dateSelect').value+'"]');if(!customer||!lane)return;const item={id:'added-'+Date.now()+'-'+Math.random().toString(16).slice(2),customerId:customer.customerId||'',title:customer.title};const newCard=card(item);const requested=Math.floor(Number(byId('stopInput').value||0));const existing=lane.querySelectorAll('.stop');if(requested>0&&requested<=existing.length)lane.insertBefore(newCard,existing[requested-1]);else lane.appendChild(newCard);renumberStops();byId('stopInput').value='';byId('status').textContent=customer.title+' added to the preview.'}
 function collectChanges(){const changes=[];document.querySelectorAll('.lane').forEach(l=>l.querySelectorAll('.stop').forEach((c,index)=>changes.push({id:c.dataset.id,customerId:c.dataset.customerId||'',title:c.dataset.title||'',date:l.dataset.date,order:index+1})));return changes}
-function saveAndReturn(){setWorking(true,'Saving edited preview…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveCalendarRepairBoardAndReturn(collectChanges())}
-function returnToJobEngine(){setWorking(true,'Returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).returnToCalendarRepairJobEngine()}
+function originalChanges(){return originalItems.map(item=>({id:item.id,customerId:item.customerId||'',title:item.title||'',date:item.date,order:item.order}))}
+function closePreview(){setWorking(true,'Saving changes and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveCalendarRepairBoardAndReturn(collectChanges())}
+function discardChanges(){if(!confirm('Discard all changes made since this repair preview was opened?\n\nThe preview will be restored to its previous saved state.'))return;setWorking(true,'Discarding changes and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).discardCalendarRepairBoardChanges(originalChanges())}
 function applyRepair(){if(!confirm('Save this edited preview and apply the Calendar repair now?'))return;setWorking(true,'Saving and applying Calendar repair…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveAndApplyCalendarRepairBoard(collectChanges(),repairStart,repairEnd)}
 setup();
 </script></body></html>`).setWidth(1280).setHeight(760);
@@ -140,6 +143,15 @@ function saveCalendarRepairBoardAndReturn(changes) {
   const result = saveCalendarRepairBoardPlan(changes);
   showIntegratedPmosJobEngine('CALENDAR_REPAIR');
   return result;
+}
+
+function discardCalendarRepairBoardChanges(originalChanges) {
+  const result = saveCalendarRepairBoardPlan(originalChanges);
+  showIntegratedPmosJobEngine('CALENDAR_REPAIR');
+  return {
+    summary: 'Repair preview changes were discarded. The previous saved preview has been restored.',
+    result
+  };
 }
 
 function returnToCalendarRepairJobEngine() {
