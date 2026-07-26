@@ -29,8 +29,9 @@ function onOpen() {
           .addItem('Schedule New Maintenance Client', 'showNewMaintenanceClientNotice')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
+          .addItem('Calendar Safety Center', 'showCalendarSafetyCenter')
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('Calendar Job Engine', 'showPmosJobEngine')
+          .addItem('Calendar Job Engine (Legacy)', 'showPmosJobEngine')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
@@ -116,4 +117,3 @@ function showFeatureLab() {
 
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Feature Lab');
 }
-
