@@ -65,7 +65,7 @@ function openCalendarRepairBoard(startValue, endValue) {
 </div>
 <div class="buttons">
   <button class="discard" onclick="discardChanges()">Discard Changes</button>
-  <button class="secondary" onclick="closePreview()">Close Preview (Saves Changes)</button>
+  <button class="secondary" onclick="savePreview()">Save Preview</button>
   <button class="apply" onclick="applyRepair()">Apply Repair</button>
 </div>
 <div id="status" class="status"></div>
@@ -119,8 +119,8 @@ function render(){byId('board').innerHTML='';lanes.forEach(l=>{const lane=docume
 function addCustomer(){const customer=customers[Number(byId('customerSelect').value)];const lane=document.querySelector('.lane[data-date="'+byId('dateSelect').value+'"]');if(!customer||!lane)return;const item={id:'added-'+Date.now()+'-'+Math.random().toString(16).slice(2),customerId:customer.customerId||'',title:customer.title};const newCard=card(item);const requested=Math.floor(Number(byId('stopInput').value||0));const existing=lane.querySelectorAll('.stop');if(requested>0&&requested<=existing.length)lane.insertBefore(newCard,existing[requested-1]);else lane.appendChild(newCard);renumberStops();byId('stopInput').value='';byId('status').textContent=customer.title+' added to the preview.'}
 function collectChanges(){const changes=[];document.querySelectorAll('.lane').forEach(l=>l.querySelectorAll('.stop').forEach((c,index)=>changes.push({id:c.dataset.id,customerId:c.dataset.customerId||'',title:c.dataset.title||'',date:l.dataset.date,order:index+1})));return changes}
 function originalChanges(){return originalItems.map(item=>({id:item.id,customerId:item.customerId||'',title:item.title||'',date:item.date,order:item.order}))}
-function closePreview(){setWorking(true,'Saving changes and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveCalendarRepairBoardAndReturn(collectChanges())}
-function discardChanges(){if(!confirm('Discard all changes made since this repair preview was opened?\n\nThe preview will be restored to its previous saved state.'))return;setWorking(true,'Discarding changes and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).discardCalendarRepairBoardChanges(originalChanges())}
+function savePreview(){setWorking(true,'Saving preview and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveCalendarRepairBoardAndReturn(collectChanges())}
+function discardChanges(){if(!confirm('Discard all changes made since this repair preview was opened?\\n\\nThe preview will be restored to its previous saved state.'))return;setWorking(true,'Discarding changes and returning to Job Engine…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).discardCalendarRepairBoardChanges(originalChanges())}
 function applyRepair(){if(!confirm('Save this edited preview and apply the Calendar repair now?'))return;setWorking(true,'Saving and applying Calendar repair…');google.script.run.withSuccessHandler(()=>{}).withFailureHandler(e=>{setWorking(false,e.message||String(e))}).saveAndApplyCalendarRepairBoard(collectChanges(),repairStart,repairEnd)}
 setup();
 </script></body></html>`).setWidth(1280).setHeight(760);
