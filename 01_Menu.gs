@@ -13,10 +13,7 @@ function showNewMaintenanceClientNotice() {
 
 function onOpen() {
   const initialized = isPmosInitialized_();
-
-
   const menu = SpreadsheetApp.getUi().createMenu('PMOS');
-
 
   if (!initialized) {
     menu.addItem('Initialize PMOS', 'initializePmos');
@@ -30,7 +27,7 @@ function onOpen() {
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('Calendar Job Engine', 'showPmosJobEngine')
+          .addItem('Calendar Job Engine', 'showIntegratedPmosJobEngine')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
@@ -40,17 +37,13 @@ function onOpen() {
       .addItem('Update PMOS', 'updatePmos');
   }
 
-
   menu.addToUi();
 }
 
 function showUpdateCenter() {
   ensureUpdateCenterSheet_();
-
-
   const installed = PropertiesService.getDocumentProperties().getProperty('PMOS_VERSION') || 'Not initialized';
   const initialized = isPmosInitialized_() ? 'Initialized' : 'Not initialized';
-
 
   const html = HtmlService.createHtmlOutput(
     `<div style="font-family:Arial;padding:18px">
@@ -70,22 +63,17 @@ function showUpdateCenter() {
     </div>`
   ).setWidth(480).setHeight(420);
 
-
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Update Center');
 }
 
 function showFeatureLab() {
   ensureFeatureLabSheet_();
-
-
   const sheet = SpreadsheetApp.getActive().getSheetByName('Feature Lab');
   const rows = sheet.getDataRange().getValues().slice(1);
-
 
   const htmlRows = rows.map((row, index) => {
     const checked = String(row[1]).toLowerCase() === 'on' ? 'checked' : '';
     const disabled = String(row[3]).toLowerCase() === 'stable' ? 'disabled' : '';
-
 
     return `<div style="border-bottom:1px solid #ddd;padding:10px 0">
       <label style="display:flex;gap:10px;align-items:flex-start">
@@ -99,7 +87,6 @@ function showFeatureLab() {
     </div>`;
   }).join('');
 
-
   const html = HtmlService.createHtmlOutput(
     `<div style="font-family:Arial;padding:18px">
       <h2>PMOS Feature Lab</h2>
@@ -112,7 +99,6 @@ function showFeatureLab() {
       </script>
     </div>`
   ).setWidth(560).setHeight(560);
-
 
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Feature Lab');
 }
