@@ -8,6 +8,9 @@ function showIntegratedPmosJobEngine(initialType) {
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
   const remembered = PropertiesService.getUserProperties().getProperty('PMOS_LAST_INTEGRATED_JOB_TYPE') || '';
   const selected = initialType || remembered || 'CALENDAR_STATUS';
+  const savedRepairPlan = readRepairPlan_();
+  const savedRepairStart = savedRepairPlan && savedRepairPlan.start ? savedRepairPlan.start : '';
+  const savedRepairEnd = savedRepairPlan && savedRepairPlan.end ? savedRepairPlan.end : today;
 
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html>
@@ -43,7 +46,7 @@ function showIntegratedPmosJobEngine(initialType) {
       <h3 id="selectedTitle">Purpose</h3>
       <div id="purpose" class="purpose"></div>
       <div id="reconcileFields" class="fields"><div class="field-row"><label class="field">Effective date<input id="effectiveDate" type="date" value="${today}"></label></div></div>
-      <div id="repairFields" class="fields"><div class="field-row"><label class="field">Begin date<input id="repairStart" type="date"></label><label class="field">End date<input id="repairEnd" type="date" value="${today}"></label></div></div>
+      <div id="repairFields" class="fields"><div class="field-row"><label class="field">Begin date<input id="repairStart" type="date" value="${savedRepairStart}"></label><label class="field">End date<input id="repairEnd" type="date" value="${savedRepairEnd}"></label></div></div>
       <div id="autoNote" class="auto-note">Auto Continue runs the current batch immediately and schedules later batches automatically.</div>
       <div id="statusBox" class="status">Ready.</div>
       <div class="progress"><div id="progressBar" class="bar"></div></div>
@@ -62,6 +65,7 @@ function showIntegratedPmosJobEngine(initialType) {
   </div>
 <script>
   var selectedType=${JSON.stringify(selected)};var currentState={};var busy=false;
+  var savedRepairDates={start:${JSON.stringify(savedRepairStart)},end:${JSON.stringify(savedRepairEnd)}};
   var jobs={
     CALENDAR_STATUS:{label:'Calendar Status',purpose:'View the current PMOS Calendar synchronization status, pending work, progress, and most recent result.',supportsAuto:false,runLabel:'Refresh Status'},
     VERIFY_CALENDAR:{label:'Verify Calendar',purpose:'Compare the PMOS 4-Week Route Template, Calendar Series Registry, and Google Calendar to identify missing, extra, or mismatched visits.',supportsAuto:false,runLabel:'Run Verification'},
@@ -77,10 +81,11 @@ function showIntegratedPmosJobEngine(initialType) {
   function selectJob(button){selectedType=button.dataset.type;google.script.run.withFailureHandler(function(){}).rememberIntegratedPmosJobType(selectedType);renderSelection()}
   function renderSelection(){Array.prototype.forEach.call(document.getElementsByClassName('job'),function(b){b.className='job'+(b.dataset.type===selectedType?' selected':'')});var j=jobs[selectedType]||{};byId('selectedTitle').textContent=j.label||'Purpose';byId('purpose').textContent=j.purpose||'Select an operation.';byId('reconcileFields').style.display=selectedType==='RECONCILE_FUTURE'?'block':'none';byId('repairFields').style.display=selectedType==='CALENDAR_REPAIR'?'block':'none';byId('autoNote').style.display=j.supportsAuto?'block':'none';updateButtons()}
   function updateButtons(){var j=jobs[selectedType];var repair=selectedType==='CALENDAR_REPAIR';byId('runButton').textContent=j?j.runLabel:'Run';byId('runButton').disabled=busy||!j;byId('runButton').style.order=repair?'99':'0';byId('autoButton').style.display=j&&j.supportsAuto?'inline-block':'none';byId('previewButton').style.display=(selectedType==='RECONCILE_FUTURE'||repair)?'inline-block':'none';byId('expandButton').style.display=repair?'inline-block':'none';byId('pauseButton').style.display=currentState&&currentState.type&&currentState.status!=='Complete'&&currentState.status!=='Cancelled'&&currentState.status!=='Idle'?'inline-block':'none'}
-  function dates(){return {start:byId('repairStart').value,end:byId('repairEnd').value}}
-  function previewSelected(){busy=true;updateButtons();if(selectedType==='RECONCILE_FUTURE'){google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).previewReconcileFutureCalendar(byId('effectiveDate').value)}else{var d=dates();google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).previewCalendarRepairPlan(d.start,d.end)}}
-  function expandRepair(){var d=dates();busy=true;updateButtons();google.script.run.withSuccessHandler(function(r){busy=false;byId('statusBox').textContent=r&&r.summary?r.summary:'Repair preview opened.';updateButtons()}).withFailureHandler(fail).openCalendarRepairBoard(d.start,d.end)}
-  function runSelected(autoMode){busy=true;byId('errorBox').style.display='none';updateButtons();if(selectedType==='RECONCILE_FUTURE'){if(!confirm('Apply future-only reconciliation from the selected effective date?')){busy=false;updateButtons();return}google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).reconcileFutureCalendar(byId('effectiveDate').value,true);return}if(selectedType==='CALENDAR_REPAIR'){var d=dates();if(!confirm('Apply the current Calendar repair preview?')){busy=false;updateButtons();return}google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).applyCalendarRepairPlan(d.start,d.end);return}if(selectedType==='CUSTOMER_SYNC'){google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).runSmartCustomerDatabaseSync();return}if(selectedType==='CALENDAR_STATUS'){refreshState(true);return}google.script.run.withSuccessHandler(function(s){currentState=s||{};showResult(s)}).withFailureHandler(fail).startPmosJob(selectedType,Boolean(autoMode),false)}
+  function dates(){return {start:byId('repairStart').value||savedRepairDates.start,end:byId('repairEnd').value||savedRepairDates.end}}
+  function rememberRepairDates(d){if(!d.start||!d.end)return; savedRepairDates={start:d.start,end:d.end};google.script.run.withFailureHandler(function(){}).rememberCalendarRepairDates(d.start,d.end)}
+  function previewSelected(){busy=true;updateButtons();if(selectedType==='RECONCILE_FUTURE'){google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).previewReconcileFutureCalendar(byId('effectiveDate').value)}else{var d=dates();rememberRepairDates(d);google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).previewCalendarRepairPlan(d.start,d.end)}}
+  function expandRepair(){var d=dates();rememberRepairDates(d);busy=true;updateButtons();google.script.run.withSuccessHandler(function(r){busy=false;byId('statusBox').textContent=r&&r.summary?r.summary:'Repair preview opened.';updateButtons()}).withFailureHandler(fail).openCalendarRepairBoard(d.start,d.end)}
+  function runSelected(autoMode){busy=true;byId('errorBox').style.display='none';updateButtons();if(selectedType==='RECONCILE_FUTURE'){if(!confirm('Apply future-only reconciliation from the selected effective date?')){busy=false;updateButtons();return}google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).reconcileFutureCalendar(byId('effectiveDate').value,true);return}if(selectedType==='CALENDAR_REPAIR'){var d=dates();rememberRepairDates(d);if(!confirm('Apply the current Calendar repair preview?')){busy=false;updateButtons();return}google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).applyCalendarRepairPlan(d.start,d.end);return}if(selectedType==='CUSTOMER_SYNC'){google.script.run.withSuccessHandler(showResult).withFailureHandler(fail).runSmartCustomerDatabaseSync();return}if(selectedType==='CALENDAR_STATUS'){refreshState(true);return}google.script.run.withSuccessHandler(function(s){currentState=s||{};showResult(s)}).withFailureHandler(fail).startPmosJob(selectedType,Boolean(autoMode),false)}
   function refreshState(showBusy){if(showBusy){busy=true;updateButtons()}google.script.run.withSuccessHandler(function(s){currentState=s||{};busy=false;var p=0;if(s&&s.status==='Complete')p=100;else if(s&&s.originalTotal>0&&s.remaining!=null)p=Math.round((s.originalTotal-s.remaining)/s.originalTotal*100);byId('progressBar').style.width=Math.max(0,Math.min(100,p))+'%';byId('statusBox').textContent=['Job: '+(s.label||'No active job'),'Status: '+(s.status||'Idle'),'Progress: '+p+'%','Processed items: '+Number(s.processedItems||0),'Remaining: '+(s.remaining==null?'—':s.remaining),s.lastSummary?'Last result: '+s.lastSummary:''].filter(Boolean).join('\\n');updateButtons()}).withFailureHandler(fail).getPmosJobStatus()}
   function pauseJob(){busy=true;updateButtons();google.script.run.withSuccessHandler(function(s){currentState=s||{};showResult(s)}).withFailureHandler(fail).pausePmosJob()}
   function openHistory(){google.script.run.withFailureHandler(fail).showPmosJobHistory()}
@@ -94,4 +99,13 @@ function showIntegratedPmosJobEngine(initialType) {
 function rememberIntegratedPmosJobType(type) {
   PropertiesService.getUserProperties().setProperty('PMOS_LAST_INTEGRATED_JOB_TYPE', String(type || ''));
   return type;
+}
+
+function rememberCalendarRepairDates(startValue, endValue) {
+  const start = parseRepairDate_(startValue, 'Begin date');
+  const end = parseRepairDate_(endValue, 'End date');
+  const properties = PropertiesService.getUserProperties();
+  properties.setProperty('PMOS_LAST_REPAIR_START', Utilities.formatDate(start, PMOS.TIMEZONE, 'yyyy-MM-dd'));
+  properties.setProperty('PMOS_LAST_REPAIR_END', Utilities.formatDate(end, PMOS.TIMEZONE, 'yyyy-MM-dd'));
+  return {start: startValue, end: endValue};
 }
