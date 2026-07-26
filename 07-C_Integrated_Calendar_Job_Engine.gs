@@ -7,7 +7,7 @@ function showIntegratedPmosJobEngine(initialType) {
   ensurePmosJobHistorySheet_();
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
   const remembered = PropertiesService.getUserProperties().getProperty('PMOS_LAST_INTEGRATED_JOB_TYPE') || '';
-  const selected = initialType || remembered || 'CALENDAR_SYNC';
+  const selected = initialType || remembered || 'CALENDAR_STATUS';
 
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html>
@@ -31,13 +31,13 @@ function showIntegratedPmosJobEngine(initialType) {
   <div class="muted">Select an operation, review its purpose, then run it.</div>
   <div class="layout">
     <div class="jobs">
-      <button type="button" class="job" data-type="CALENDAR_SYNC" onclick="selectJob(this)">Calendar Sync</button>
-      <button type="button" class="job" data-type="CALENDAR_REPAIR" onclick="selectJob(this)">Calendar Repair</button>
-      <button type="button" class="job" data-type="VERIFY_CALENDAR" onclick="selectJob(this)">Verify Calendar</button>
-      <button type="button" class="job" data-type="RECONCILE_FUTURE" onclick="selectJob(this)">Reconcile Future Calendar</button>
       <button type="button" class="job" data-type="CALENDAR_STATUS" onclick="selectJob(this)">Calendar Status</button>
+      <button type="button" class="job" data-type="VERIFY_CALENDAR" onclick="selectJob(this)">Verify Calendar</button>
+      <button type="button" class="job" data-type="CALENDAR_SYNC" onclick="selectJob(this)">Calendar Sync</button>
+      <button type="button" class="job" data-type="RECONCILE_FUTURE" onclick="selectJob(this)">Reconcile Future Calendar</button>
       <button type="button" class="job" data-type="CUSTOMER_SYNC" onclick="selectJob(this)">Customer Database Sync</button>
       <button type="button" class="job" data-type="MAP_EXPORT" onclick="selectJob(this)">Export Updated Map Layers</button>
+      <button type="button" class="job" data-type="CALENDAR_REPAIR" onclick="selectJob(this)">Calendar Repair</button>
     </div>
     <div class="panel">
       <h3 id="selectedTitle">Purpose</h3>
@@ -63,13 +63,13 @@ function showIntegratedPmosJobEngine(initialType) {
 <script>
   var selectedType=${JSON.stringify(selected)};var currentState={};var busy=false;
   var jobs={
-    CALENDAR_SYNC:{label:'Calendar Sync',purpose:'Create, update, and remove recurring Google Calendar series so the Calendar matches the verified PMOS route plan.',supportsAuto:true,runLabel:'Run One Batch'},
-    CALENDAR_REPAIR:{label:'Calendar Repair',purpose:'Choose a begin and end date, preview missing or mismatched route visits, optionally expand the preview and drag customers between stops, days, and weeks, then apply the edited repair plan.',supportsAuto:false,runLabel:'Apply Previewed Repair'},
-    VERIFY_CALENDAR:{label:'Verify Calendar',purpose:'Compare the verified PMOS route plan, Calendar Series Registry, and Google Calendar without intentionally changing the Calendar.',supportsAuto:false,runLabel:'Run Verification'},
-    RECONCILE_FUTURE:{label:'Reconcile Future Calendar',purpose:'Replace Calendar Rebuild. Reconcile only PMOS-managed Calendar work on or after the effective date while preserving earlier Calendar history.',supportsAuto:false,runLabel:'Apply Reconciliation'},
     CALENDAR_STATUS:{label:'Calendar Status',purpose:'Display the current Calendar synchronization state, progress, pending work, and most recent result.',supportsAuto:false,runLabel:'Refresh Status'},
-    CUSTOMER_SYNC:{label:'Customer Database Sync',purpose:'Generate missing customer IDs and propagate current customer information through route sheets and PMOS records.',supportsAuto:false,runLabel:'Run Customer Sync'},
-    MAP_EXPORT:{label:'Export Updated Map Layers',purpose:'Generate updated CSV map-layer files for route layers affected by pending PMOS changes and place them in a new Drive folder.',supportsAuto:false,runLabel:'Export Map Layers'}
+    VERIFY_CALENDAR:{label:'Verify Calendar',purpose:'Compare the verified PMOS route plan, Calendar Series Registry, and Google Calendar without intentionally changing the Calendar.',supportsAuto:false,runLabel:'Run Verification'},
+    CALENDAR_SYNC:{label:'Calendar Sync',purpose:'Create, update, and remove recurring Google Calendar series so the Calendar matches the verified PMOS route plan.',supportsAuto:true,runLabel:'Run One Batch'},
+    RECONCILE_FUTURE:{label:'Reconcile Future Calendar',purpose:'Replace Calendar Rebuild. Reconcile only PMOS-managed Calendar work on or after the effective date while preserving earlier Calendar history.',supportsAuto:false,runLabel:'Apply Reconciliation'},
+    CUSTOMER_SYNC:{label:'Customer Database Sync',purpose:'Fill missing Customer IDs and propagate current customer information through route sheets and PMOS records so Calendar, route, history, and map records consistently identify the same customer.',supportsAuto:false,runLabel:'Run Customer Sync'},
+    MAP_EXPORT:{label:'Export Updated Map Layers',purpose:'Generate updated CSV map-layer files for route layers affected by pending PMOS changes and place them in a new Drive folder.',supportsAuto:false,runLabel:'Export Map Layers'},
+    CALENDAR_REPAIR:{label:'Calendar Repair',purpose:'Choose a begin and end date, preview missing visits, then add, remove, reorder, or move customers between days before applying the temporary repair plan. The permanent route plan is not changed.',supportsAuto:false,runLabel:'Apply Previewed Repair'}
   };
   function byId(id){return document.getElementById(id)}function err(e){return e&&e.message?e.message:String(e||'Unknown error')}
   function fail(e){busy=false;byId('errorBox').style.display='block';byId('errorBox').textContent=err(e);updateButtons()}
