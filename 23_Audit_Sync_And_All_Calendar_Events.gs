@@ -8,10 +8,9 @@ function showPmosJobEngine(initialType) {
 
 function startCalendarSyncFromAudit() {
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
-  PropertiesService.getDocumentProperties().setProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE', today);
   let result;
   try {
-    result = startPmosJob('CALENDAR_SYNC', true, false);
+    result = startCalendarSyncFromDate(today, true);
   } finally {
     showIntegratedPmosJobEngine('CALENDAR_SYNC');
   }
@@ -31,10 +30,7 @@ function openPmosCalendarSync() {
 }
 
 function startCalendarSyncWithEffectiveDate(value, autoMode) {
-  const date = parseRepairDate_(value, 'Effective date');
-  const text = Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd');
-  PropertiesService.getDocumentProperties().setProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE', text);
-  return startPmosJob('CALENDAR_SYNC', Boolean(autoMode), false);
+  return startCalendarSyncFromDate(value, Boolean(autoMode));
 }
 
 function isRepairRelevantCalendarEvent_(event) {
