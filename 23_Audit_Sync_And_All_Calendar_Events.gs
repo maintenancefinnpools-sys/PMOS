@@ -2,8 +2,22 @@
  * Audit navigation and Calendar Repair inclusion fixes.
  */
 
-function showPmosJobEngine(initialType) {
-  return showIntegratedPmosJobEngine(initialType || 'CALENDAR_SYNC');
+/**
+ * Unique audit launcher. It opens Calendar Sync in the integrated Job Engine
+ * without starting the job or passing through legacy Job Engine aliases.
+ */
+function openIntegratedCalendarSyncFromAudit() {
+  const audit = runCalendarPlanAudit_();
+  if (!audit.canSync) {
+    throw new Error(`Calendar Plan Audit still has ${audit.errorCount} blocking error(s).`);
+  }
+  saveCalendarSyncEffectiveDate(Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd'));
+  showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  return {
+    opened: true,
+    selectedType: 'CALENDAR_SYNC',
+    summary: 'Calendar Sync opened in the PMOS Job Engine.'
+  };
 }
 
 function startCalendarSyncFromAudit() {
