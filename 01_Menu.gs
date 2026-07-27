@@ -4,11 +4,7 @@
  */
 
 function showNewMaintenanceClientNotice() {
-  SpreadsheetApp.getUi().alert(
-    'Schedule New Maintenance Client',
-    'This feature will be enabled after the Calendar Job Engine is verified.',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  return showAddMaintenanceClient();
 }
 
 function onOpen() {
@@ -20,10 +16,11 @@ function onOpen() {
   } else {
     menu
       .addItem('Open Route Manager', 'showRouteManagerLink')
+      .addItem('Add Maintenance Client', 'showAddMaintenanceClient')
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Schedule New Maintenance Client', 'showNewMaintenanceClientNotice')
+          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClient')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
