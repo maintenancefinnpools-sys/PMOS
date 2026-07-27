@@ -3,8 +3,8 @@
  */
 
 /**
- * Unique audit launcher. It opens Calendar Sync in the integrated Job Engine
- * without starting the job or passing through legacy Job Engine aliases.
+ * Unique audit launcher. It opens Calendar Sync through the canonical Job
+ * Engine entry without starting the job.
  */
 function openIntegratedCalendarSyncFromAudit() {
   const audit = runCalendarPlanAudit_();
@@ -12,7 +12,7 @@ function openIntegratedCalendarSyncFromAudit() {
     throw new Error(`Calendar Plan Audit still has ${audit.errorCount} blocking error(s).`);
   }
   saveCalendarSyncEffectiveDate(Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd'));
-  showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  openPmosJobEngine('CALENDAR_SYNC');
   return {
     opened: true,
     selectedType: 'CALENDAR_SYNC',
@@ -26,7 +26,7 @@ function startCalendarSyncFromAudit() {
   try {
     result = startCalendarSyncFromDate(today, true);
   } finally {
-    showIntegratedPmosJobEngine('CALENDAR_SYNC');
+    openPmosJobEngine('CALENDAR_SYNC');
   }
   return result;
 }
