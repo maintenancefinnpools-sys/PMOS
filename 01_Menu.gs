@@ -16,7 +16,6 @@ function onOpen() {
   } else {
     menu
       .addItem('Open Route Manager', 'showRouteManagerLink')
-      .addItem('Add Maintenance Client', 'showAddMaintenanceClient')
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
