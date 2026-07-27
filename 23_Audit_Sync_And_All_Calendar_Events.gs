@@ -6,16 +6,35 @@ function showPmosJobEngine(initialType) {
   return showIntegratedPmosJobEngine(initialType || 'CALENDAR_SYNC');
 }
 
+function startCalendarSyncFromAudit() {
+  const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
+  PropertiesService.getDocumentProperties().setProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE', today);
+  let result;
+  try {
+    result = startPmosJob('CALENDAR_SYNC', true, false);
+  } finally {
+    showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  }
+  return result;
+}
+
 function openCalendarSync() {
-  return showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  return startCalendarSyncFromAudit();
 }
 
 function showCalendarSync() {
-  return showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  return startCalendarSyncFromAudit();
 }
 
 function openPmosCalendarSync() {
-  return showIntegratedPmosJobEngine('CALENDAR_SYNC');
+  return startCalendarSyncFromAudit();
+}
+
+function startCalendarSyncWithEffectiveDate(value, autoMode) {
+  const date = parseRepairDate_(value, 'Effective date');
+  const text = Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd');
+  PropertiesService.getDocumentProperties().setProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE', text);
+  return startPmosJob('CALENDAR_SYNC', Boolean(autoMode), false);
 }
 
 function isRepairRelevantCalendarEvent_(event) {
