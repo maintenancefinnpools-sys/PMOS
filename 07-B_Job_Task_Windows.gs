@@ -10,21 +10,26 @@ function showMapExportTaskWindow() { showPmosTaskWindow_('MAP_EXPORT', 'Export U
 function showPmosTaskWindow_(taskType, taskTitle) {
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
-body{font-family:Arial,sans-serif;padding:18px;color:#1f2937}h2{margin:0 0 5px}.muted{font-size:13px;color:#6b7280}.stage{margin-top:16px;font-weight:700}.barShell{height:16px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:9px;position:relative}.bar{height:100%;width:35%;background:#2563eb;position:absolute;animation:move 1.25s infinite ease-in-out;border-radius:9px}@keyframes move{0%{left:-35%}100%{left:100%}}.elapsed{text-align:right;font-size:13px;margin-top:5px;color:#4b5563}.result{margin-top:14px;padding:12px;background:#f3f4f6;border-radius:9px;white-space:pre-wrap;max-height:330px;overflow:auto}.buttons{display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap}button{border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer}.primary{background:#2563eb;color:white}.secondary{background:#e5e7eb;color:#111827}.complete .bar,.failed .bar{width:100%;left:0;animation:none}
+body{font-family:Arial,sans-serif;padding:18px;color:#1f2937}h2{margin:0 0 5px}.muted{font-size:13px;color:#6b7280}.stage{margin-top:16px;font-weight:700}.barShell{height:16px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:9px;position:relative}.bar{height:100%;width:35%;background:#2563eb;position:absolute;animation:move 1.25s infinite ease-in-out;border-radius:9px}@keyframes move{0%{left:-35%}100%{left:100%}}.elapsed{text-align:right;font-size:13px;margin-top:5px;color:#4b5563}.result{margin-top:14px;padding:12px;background:#f3f4f6;border-radius:9px;white-space:pre-wrap;max-height:330px;overflow:auto}.buttons{display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap}button{border:2px solid #2563eb;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer;background:#dbeafe;color:#1e3a8a}button:hover{background:#bfdbfe}.secondary{background:#eff6ff;color:#1e3a8a}.complete .bar,.failed .bar{width:100%;left:0;animation:none}button:disabled{opacity:.55;cursor:default}
 </style></head><body id="body">
-<h2>${escapeHtml_(taskTitle)}</h2><div class="muted">This window remains active while PMOS completes the operation.</div><div id="stage" class="stage">Working…</div><div class="barShell"><div class="bar"></div></div><div id="elapsed" class="elapsed">Elapsed: 0s</div><div id="result" class="result">Starting ${escapeHtml_(taskTitle)}…</div><div class="buttons"><button id="syncButton" class="primary" style="display:none">Open Calendar Sync</button><button id="closeButton" class="secondary">Close</button></div>
+<h2>${escapeHtml_(taskTitle)}</h2><div class="muted">This window remains active while PMOS completes the operation.</div><div id="stage" class="stage">Working…</div><div class="barShell"><div class="bar"></div></div><div id="elapsed" class="elapsed">Elapsed: 0s</div><div id="result" class="result">Starting ${escapeHtml_(taskTitle)}…</div><div class="buttons"><button id="syncButton" style="display:none">Open Calendar Sync</button><button id="closeButton" class="secondary">Close</button></div>
 <script>
 (function(){
 var body=document.getElementById('body'),stage=document.getElementById('stage'),elapsed=document.getElementById('elapsed'),result=document.getElementById('result'),syncButton=document.getElementById('syncButton'),started=Date.now();
 var clock=setInterval(function(){elapsed.textContent='Elapsed: '+Math.floor((Date.now()-started)/1000)+'s';},1000);
-function fail(error){clearInterval(clock);body.className='failed';stage.textContent='Needs attention';result.textContent=error&&error.message?error.message:String(error);}
+function fail(error){clearInterval(clock);body.className='failed';stage.textContent='Needs attention';result.textContent=error&&error.message?error.message:String(error);syncButton.disabled=false;}
 function done(response){clearInterval(clock);body.className='complete';stage.textContent='Complete';elapsed.textContent='Duration: '+Math.max(1,Math.round((Date.now()-started)/1000))+'s';result.textContent=response&&response.summary?response.summary:'Task completed.';if('${taskType}'==='CALENDAR_AUDIT'&&response&&response.canSync)syncButton.style.display='inline-block';}
 google.script.run.withSuccessHandler(done).withFailureHandler(fail).runPmosTask('${taskType}');
-syncButton.onclick=function(){syncButton.disabled=true;google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openIntegratedCalendarSyncFromAudit();};
+syncButton.onclick=function(){syncButton.disabled=true;stage.textContent='Opening Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openCalendarSyncFromCompletedAudit();};
 document.getElementById('closeButton').onclick=function(){google.script.host.close();};
 })();
 </script></body></html>`).setWidth(610).setHeight(540);
   SpreadsheetApp.getUi().showModalDialog(html, taskTitle);
+}
+
+function openCalendarSyncFromCompletedAudit() {
+  showPmosJobEngine('CALENDAR_SYNC');
+  return true;
 }
 
 function runPmosTask_(taskType) {
