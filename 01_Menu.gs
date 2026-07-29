@@ -30,7 +30,7 @@ function onOpen() {
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('Calendar Job Engine', 'showPmosJobEngine')
+          .addItem('Calendar Job Engine', 'showRestoredPmosJobEngine')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
@@ -116,4 +116,3 @@ function showFeatureLab() {
 
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Feature Lab');
 }
-
