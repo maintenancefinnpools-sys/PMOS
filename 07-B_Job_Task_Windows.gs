@@ -39,7 +39,10 @@ function showPmosTaskWindow_(taskType, taskTitle) {
     .elapsed{text-align:right;font-size:13px;margin-top:5px;color:#4b5563}
     .result{margin-top:14px;padding:12px;background:#f3f4f6;border-radius:9px;white-space:pre-line;max-height:330px;overflow:auto}
     .buttons{display:flex;gap:8px;margin-top:14px}
-    button{border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer}.primary{background:#2563eb;color:white}.secondary{background:#e5e7eb}
+    button{border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer}
+    .primary{background:#2563eb;color:white}
+    .secondary{background:#e5e7eb;color:#111827}
+    .opening{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;cursor:default}
     .complete .bar{width:100%;left:0;animation:none}.failed .bar{width:100%;left:0;animation:none}
   </style>
 </head>
@@ -76,9 +79,18 @@ google.script.run
   .runPmosTask('${taskType}');
 function openCalendarSync(){
   syncButton.disabled=true;
+  syncButton.className='opening';
+  syncButton.textContent='Opening Calendar Sync…';
+  stage.textContent='Opening Calendar Sync';
   google.script.run
     .withSuccessHandler(function(){google.script.host.close();})
-    .withFailureHandler(function(error){syncButton.disabled=false;alert(error&&error.message?error.message:String(error));})
+    .withFailureHandler(function(error){
+      syncButton.disabled=false;
+      syncButton.className='primary';
+      syncButton.textContent='Open Calendar Sync';
+      stage.textContent='Complete';
+      alert(error&&error.message?error.message:String(error));
+    })
     .openCalendarSyncFromAudit();
 }
 </script>
@@ -198,4 +210,3 @@ function withSpreadsheetServiceRetry_(operation, operationName) {
 
   throw lastError;
 }
-
