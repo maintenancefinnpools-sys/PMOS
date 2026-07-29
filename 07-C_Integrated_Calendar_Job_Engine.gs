@@ -1,20 +1,14 @@
 /**
- * PMOS integrated Calendar Job Engine.
+ * PMOS integrated Calendar Job Center.
  * Restores Calendar Repair preview/edit controls and live job progress.
  */
 function showIntegratedPmosJobEngine(initialType) {
-  ensurePmosJobHistorySheet_();
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
-  const remembered = PropertiesService.getUserProperties()
-    .getProperty('PMOS_LAST_INTEGRATED_JOB_TYPE') || '';
+  const userProperties = PropertiesService.getUserProperties();
+  const remembered = userProperties.getProperty('PMOS_LAST_INTEGRATED_JOB_TYPE') || '';
   const selected = initialType || remembered || 'CALENDAR_STATUS';
-  const savedRepairPlan = readRepairPlan_();
-  const savedRepairStart = savedRepairPlan && savedRepairPlan.start
-    ? savedRepairPlan.start
-    : today;
-  const savedRepairEnd = savedRepairPlan && savedRepairPlan.end
-    ? savedRepairPlan.end
-    : today;
+  const savedRepairStart = userProperties.getProperty('PMOS_LAST_REPAIR_START') || today;
+  const savedRepairEnd = userProperties.getProperty('PMOS_LAST_REPAIR_END') || today;
 
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html>
@@ -24,8 +18,8 @@ function showIntegratedPmosJobEngine(initialType) {
   <style>
     *{box-sizing:border-box}body{margin:0;padding:18px;font-family:Arial,sans-serif;color:#1f2937;background:#fff}
     h2{margin:0 0 5px}.muted{color:#6b7280;font-size:13px}.layout{display:grid;grid-template-columns:250px 1fr;gap:14px;margin-top:15px}
-    .jobs{display:flex;flex-direction:column;gap:7px}.job{width:100%;padding:11px 12px;font:inherit;font-weight:700;color:#1f2937;text-align:left;background:#fff;border:2px solid #e5e7eb;border-radius:9px;cursor:pointer}
-    .job:hover{background:#f8fafc}.job.selected{color:#1d4ed8;background:#eff6ff;border-color:#2563eb}.panel{display:flex;min-height:500px;padding:14px;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:10px}
+    .jobs{display:flex;flex-direction:column;gap:7px}.job{width:100%;padding:11px 12px;font:inherit;font-weight:700;color:#1e3a8a;text-align:left;background:#dbeafe;border:2px solid #2563eb;border-radius:9px;cursor:pointer}
+    .job:hover{background:#bfdbfe}.job.selected{color:#1e3a8a;background:#bfdbfe;border-color:#1d4ed8}.panel{display:flex;min-height:500px;padding:14px;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:10px}
     .panel h3{margin:0 0 8px;font-size:15px}.purpose{min-height:62px;color:#374151;line-height:1.45}.fields{display:none;margin-top:10px;padding:11px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:9px}
     .field-row{display:flex;gap:12px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700}.field input{padding:7px;border:1px solid #cbd5e1;border-radius:7px;font:inherit}
     .auto-note{display:none;margin-top:9px;padding:8px 10px;color:#166534;font-size:12px;line-height:1.4;background:#dcfce7;border-radius:7px}.status{min-height:170px;margin-top:12px;padding:12px;background:#f3f4f6;border-radius:9px;white-space:pre-wrap;line-height:1.45;font-size:13px;overflow:auto}
@@ -35,7 +29,7 @@ function showIntegratedPmosJobEngine(initialType) {
   </style>
 </head>
 <body>
-  <h2>PMOS Job Engine</h2>
+  <h2>PMOS Job Center</h2>
   <div class="muted">Select an operation, review its purpose, then run it.</div>
   <div class="layout">
     <div class="jobs">
@@ -199,7 +193,7 @@ function showIntegratedPmosJobEngine(initialType) {
 </body>
 </html>`).setWidth(930).setHeight(760);
 
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Job Engine');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Job Center');
 }
 
 function rememberIntegratedPmosJobType(type) {
