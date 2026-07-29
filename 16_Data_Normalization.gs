@@ -29,38 +29,19 @@ const PMOS_CUSTOMER_FIELD_ALIASES = Object.freeze({
   serviceNotes: ['Service Notes', 'serviceNotes']
 });
 
-/**
- * Public canonical customer normalizer.
- * Accepts either a header-keyed object or a spreadsheet row plus headers.
- */
 function normalizePmosCustomer(source, headers) {
   const raw = pmosNormalizationToObject_(source, headers);
   const consumed = {};
-
   const customer = {
     modelVersion: PMOS_DATA_MODEL_VERSION,
     type: 'CUSTOMER',
-    id: normalizePmosCustomerId_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.id, consumed)
-    ),
-    calendarTitle: normalizePmosText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.calendarTitle, consumed)
-    ),
-    fullName: normalizePmosText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.fullName, consumed)
-    ),
-    address: normalizePmosAddress_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.address, consumed)
-    ),
-    phone: normalizePmosPhone_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.phone, consumed)
-    ),
-    email: normalizePmosEmail_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.email, consumed)
-    ),
-    frequency: normalizePmosFrequency_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.frequency, consumed)
-    ),
+    id: normalizePmosCustomerId_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.id, consumed)),
+    calendarTitle: normalizePmosText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.calendarTitle, consumed)),
+    fullName: normalizePmosText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.fullName, consumed)),
+    address: normalizePmosAddress_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.address, consumed)),
+    phone: normalizePmosPhone_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.phone, consumed)),
+    email: normalizePmosEmail_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.email, consumed)),
+    frequency: normalizePmosFrequency_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.frequency, consumed)),
     routeDays: normalizePmosStringList_(
       pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.routeDays, consumed),
       normalizePmosWeekday_
@@ -68,49 +49,25 @@ function normalizePmosCustomer(source, headers) {
     rotationWeeks: normalizePmosNumberList_(
       pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.rotationWeeks, consumed)
     ),
-    route: normalizePmosText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.route, consumed)
-    ),
-    stopOrder: normalizePmosNumber_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.stopOrder, consumed)
-    ),
-    entryInformation: normalizePmosMultilineText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.entryInformation, consumed)
-    ),
-    notes: normalizePmosMultilineText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.notes, consumed)
-    ),
-    status: normalizePmosUpperToken_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.status, consumed)
-    ),
-    active: normalizePmosBoolean_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.active, consumed)
-    ),
-    gateCode: normalizePmosText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.gateCode, consumed)
-    ),
-    waterSource: normalizePmosText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.waterSource, consumed)
-    ),
-    serviceNotes: normalizePmosMultilineText_(
-      pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.serviceNotes, consumed)
-    ),
+    route: normalizePmosText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.route, consumed)),
+    stopOrder: normalizePmosNumber_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.stopOrder, consumed)),
+    entryInformation: normalizePmosMultilineText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.entryInformation, consumed)),
+    notes: normalizePmosMultilineText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.notes, consumed)),
+    status: normalizePmosUpperToken_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.status, consumed)),
+    active: normalizePmosBoolean_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.active, consumed)),
+    gateCode: normalizePmosText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.gateCode, consumed)),
+    waterSource: normalizePmosText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.waterSource, consumed)),
+    serviceNotes: normalizePmosMultilineText_(pmosNormalizationReadAlias_(raw, PMOS_CUSTOMER_FIELD_ALIASES.serviceNotes, consumed)),
     metadata: freezePmosObject_(pmosNormalizationMetadata_(raw, consumed))
   };
-
   return freezePmosObject_(customer);
 }
 
-/**
- * Normalizes every non-empty customer row from a two-dimensional sheet array.
- */
 function normalizePmosCustomerRows(values) {
-  if (!Array.isArray(values) || !values.length) return [];
-
+  if (!Array.isArray(values) || !values.length) return Object.freeze([]);
   const headers = values[0].map(function (header) {
     return normalizePmosText_(header) || '';
   });
-
   return Object.freeze(values.slice(1)
     .filter(function (row) {
       return Array.isArray(row) && row.some(function (value) {
@@ -127,7 +84,6 @@ function pmosNormalizationToObject_(source, headers) {
     if (!Array.isArray(headers)) {
       throw new Error('Headers are required when normalizing a spreadsheet row.');
     }
-
     const result = {};
     headers.forEach(function (header, index) {
       const key = normalizePmosText_(header);
@@ -135,11 +91,9 @@ function pmosNormalizationToObject_(source, headers) {
     });
     return result;
   }
-
   if (source && typeof source === 'object' && !(source instanceof Date)) {
     return Object.assign({}, source);
   }
-
   throw new Error('Customer normalization requires an object or spreadsheet row.');
 }
 
@@ -166,9 +120,7 @@ function pmosNormalizationMetadata_(raw, consumed) {
 function normalizePmosMetadataValue_(value) {
   if (value == null || value === '') return null;
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value.toISOString();
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(normalizePmosMetadataValue_));
-  }
+  if (Array.isArray(value)) return Object.freeze(value.map(normalizePmosMetadataValue_));
   if (typeof value === 'object') {
     const copy = {};
     Object.keys(value).sort().forEach(function (key) {
@@ -207,23 +159,18 @@ function normalizePmosEmail_(value) {
 function normalizePmosPhone_(value) {
   const text = normalizePmosText_(value);
   if (!text) return null;
-
   const extensionMatch = text.match(/(?:ext\.?|x)\s*(\d+)$/i);
   const extension = extensionMatch ? extensionMatch[1] : null;
   const base = extensionMatch ? text.slice(0, extensionMatch.index) : text;
   const digits = base.replace(/\D/g, '');
-
   let formatted;
   if (digits.length === 10) {
-    formatted = '(' + digits.slice(0, 3) + ') ' +
-      digits.slice(3, 6) + '-' + digits.slice(6);
+    formatted = '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
   } else if (digits.length === 11 && digits.charAt(0) === '1') {
-    formatted = '+1 (' + digits.slice(1, 4) + ') ' +
-      digits.slice(4, 7) + '-' + digits.slice(7);
+    formatted = '+1 (' + digits.slice(1, 4) + ') ' + digits.slice(4, 7) + '-' + digits.slice(7);
   } else {
     formatted = text;
   }
-
   return extension ? formatted + ' ext. ' + extension : formatted;
 }
 
@@ -235,7 +182,6 @@ function normalizePmosCustomerId_(value) {
 function normalizePmosFrequency_(value) {
   const text = normalizePmosUpperToken_(value);
   if (!text) return null;
-
   const aliases = {
     WEEK: 'WEEKLY',
     WEEKLY: 'WEEKLY',
@@ -249,7 +195,6 @@ function normalizePmosFrequency_(value) {
     'ONE-TIME': 'ONCE',
     TEMPORARY: 'TEMPORARY'
   };
-
   return aliases[text] || text;
 }
 
@@ -262,7 +207,6 @@ function normalizePmosBoolean_(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value !== 0;
-
   const text = String(value).trim().toLowerCase();
   if (['true', 'yes', 'y', '1', 'active', 'enabled'].indexOf(text) >= 0) return true;
   if (['false', 'no', 'n', '0', 'inactive', 'disabled'].indexOf(text) >= 0) return false;
@@ -277,12 +221,9 @@ function normalizePmosNumber_(value) {
 
 function normalizePmosStringList_(value, itemNormalizer) {
   if (value == null || value === '') return Object.freeze([]);
-  const rawItems = Array.isArray(value)
-    ? value
-    : String(value).split(/[,;|\n]+/);
+  const rawItems = Array.isArray(value) ? value : String(value).split(/[,;|\n]+/);
   const seen = {};
   const items = [];
-
   rawItems.forEach(function (item) {
     const normalized = itemNormalizer ? itemNormalizer(item) : normalizePmosText_(item);
     if (normalized == null) return;
@@ -291,17 +232,18 @@ function normalizePmosStringList_(value, itemNormalizer) {
     seen[key] = true;
     items.push(normalized);
   });
-
   return Object.freeze(items);
 }
 
 function normalizePmosNumberList_(value) {
-  return normalizePmosStringList_(value, function (item) {
+  const items = Array.prototype.slice.call(normalizePmosStringList_(value, function (item) {
     const text = normalizePmosText_(item);
     if (!text) return null;
     const match = text.match(/\d+/);
     return match ? Number(match[0]) : null;
-  }).sort(function (left, right) { return left - right; });
+  }));
+  items.sort(function (left, right) { return left - right; });
+  return Object.freeze(items);
 }
 
 function normalizePmosWeekday_(value) {
@@ -309,13 +251,8 @@ function normalizePmosWeekday_(value) {
   if (!text) return null;
   const key = text.slice(0, 3).toLowerCase();
   const weekdays = {
-    mon: 'Monday',
-    tue: 'Tuesday',
-    wed: 'Wednesday',
-    thu: 'Thursday',
-    fri: 'Friday',
-    sat: 'Saturday',
-    sun: 'Sunday'
+    mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+    fri: 'Friday', sat: 'Saturday', sun: 'Sunday'
   };
   return weekdays[key] || null;
 }
