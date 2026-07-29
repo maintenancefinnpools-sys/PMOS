@@ -91,7 +91,7 @@ function openCalendarSync(){
       stage.textContent='Complete';
       alert(error&&error.message?error.message:String(error));
     })
-    .openRestoredCalendarSyncFromAudit();
+    .openOriginalCalendarSyncFromCompletedAudit();
 }
 </script>
 </body>
@@ -100,6 +100,11 @@ function openCalendarSync(){
     .setHeight(540);
 
   SpreadsheetApp.getUi().showModalDialog(html, taskTitle);
+}
+
+function openOriginalCalendarSyncFromCompletedAudit() {
+  showPmosJobEngine('CALENDAR_SYNC');
+  return true;
 }
 
 function runPmosTask_(taskType) {
