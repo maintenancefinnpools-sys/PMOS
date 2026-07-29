@@ -1,20 +1,18 @@
 /**
- * PMOS v1.9.0 — Persistent and resumable Calendar synchronization.
- * Move-only refactor: public names and operational behavior are preserved.
+ * PMOS persistent and resumable Calendar synchronization.
+ *
+ * Calendar work is controlled by execution time, not a fixed batch size. Each
+ * invocation runs until the safety deadline, saves progress, and schedules one
+ * continuation when more work remains.
  */
 
+const PMOS_CALENDAR_CONTINUATION_DELAY_MS = 2 * 1000;
+
 function getCalendarAutoSyncStatus() {
-  const props = PropertiesService.getDocumentProperties();
   const stored = readCalendarAutoJob_();
   const preview = previewCalendarChanges();
-  const remaining =
-    preview.creates +
-    preview.updates +
-    preview.deletes;
-
-
+  const remaining = preview.creates + preview.updates + preview.deletes;
   const state = stored || {};
-
 
   if (!remaining && state.status !== 'Running') {
     state.status = 'Complete';
@@ -23,14 +21,14 @@ function getCalendarAutoSyncStatus() {
     state.nextRunAt = '';
     writeCalendarAutoJob_(state);
     removeCalendarAutoTrigger_();
+    clearPmosRuntimeCheckpoint_('CALENDAR_SYNC');
   } else {
     state.remaining = remaining;
     state.originalTotal = Math.max(
       Number(state.originalTotal || 0),
-      remaining
+      Number(state.processedItems || 0) + remaining
     );
   }
-
 
   return {
     status: state.status || 'Paused',
@@ -49,11 +47,7 @@ function getCalendarAutoSyncStatus() {
 
 function startCalendarAutoContinue() {
   const preview = previewCalendarChanges();
-  const remaining =
-    preview.creates +
-    preview.updates +
-    preview.deletes;
-
+  const remaining = preview.creates + preview.updates + preview.deletes;
 
   if (!remaining) {
     const complete = {
@@ -61,6 +55,7 @@ function startCalendarAutoContinue() {
       autoEnabled: false,
       originalTotal: 0,
       remaining: 0,
+      processedItems: 0,
       lastCreated: 0,
       lastUpdated: 0,
       lastDeleted: 0,
@@ -71,28 +66,26 @@ function startCalendarAutoContinue() {
     };
     writeCalendarAutoJob_(complete);
     removeCalendarAutoTrigger_();
+    clearPmosRuntimeCheckpoint_('CALENDAR_SYNC');
     return complete;
   }
 
-
   const state = readCalendarAutoJob_() || {};
-  state.status = 'Waiting';
+  state.status = 'Running';
   state.autoEnabled = true;
+  state.pauseRequested = false;
+  state.operationId = state.operationId || Utilities.getUuid();
   state.originalTotal = Math.max(
     Number(state.originalTotal || 0),
-    remaining
+    Number(state.processedItems || 0) + remaining
   );
   state.remaining = remaining;
   state.lastError = '';
-  state.nextRunAt = new Date(
-    Date.now() + 60 * 1000
-  ).toISOString();
-
-
+  state.nextRunAt = '';
   writeCalendarAutoJob_(state);
-  ensureCalendarAutoTrigger_();
+  removeCalendarAutoTrigger_();
 
-
+  runCalendarSyncBatchNow();
   return getCalendarAutoSyncStatus();
 }
 
@@ -100,102 +93,118 @@ function pauseCalendarAutoContinue() {
   const state = readCalendarAutoJob_() || {};
   state.status = 'Paused';
   state.autoEnabled = false;
+  state.pauseRequested = true;
   state.nextRunAt = '';
   writeCalendarAutoJob_(state);
   removeCalendarAutoTrigger_();
   return getCalendarAutoSyncStatus();
 }
 
+/**
+ * Public compatibility entry point retained for existing menus and UI calls.
+ * The name is historical; execution is deadline-based and has no item batch.
+ */
 function runCalendarSyncBatchNow() {
   const state = readCalendarAutoJob_() || {};
+  const context = createPmosRuntimeContext_('CALENDAR_SYNC', {
+    operationId: state.operationId || Utilities.getUuid()
+  });
+  const lock = acquirePmosRuntimeLock_(context, 5000);
+
+  state.operationId = context.operationId;
   state.status = 'Running';
+  state.pauseRequested = false;
   state.lastError = '';
+  state.nextRunAt = '';
   writeCalendarAutoJob_(state);
 
+  try {
+    const result = applyCalendarChangesUntilDeadline_(context);
+    const latest = readCalendarAutoJob_() || state;
+    const successful =
+      Number(result.created || 0) +
+      Number(result.updated || 0) +
+      Number(result.deleted || 0);
 
-  const result = applyCalendarChanges();
-  const remaining = Number(result.remaining || 0);
+    latest.processedItems = Number(latest.processedItems || 0) + successful;
+    latest.lastCreated = Number(result.created || 0);
+    latest.lastUpdated = Number(result.updated || 0);
+    latest.lastDeleted = Number(result.deleted || 0);
+    latest.lastErrors = Number(result.errors || 0);
+    latest.lastError = String(result.firstError || '');
+    latest.lastRunAt = new Date().toISOString();
+    latest.remaining = Number(result.remaining || 0);
 
+    if (!latest.remaining) {
+      latest.status = 'Complete';
+      latest.autoEnabled = false;
+      latest.pauseRequested = false;
+      latest.nextRunAt = '';
+      latest.operationId = '';
+      removeCalendarAutoTrigger_();
+      clearPmosRuntimeCheckpoint_('CALENDAR_SYNC');
+    } else if (result.errors) {
+      latest.status = 'Paused on error';
+      latest.autoEnabled = false;
+      latest.nextRunAt = '';
+      removeCalendarAutoTrigger_();
+    } else if (latest.autoEnabled) {
+      latest.status = 'Waiting';
+      latest.nextRunAt = new Date(
+        Date.now() + PMOS_CALENDAR_CONTINUATION_DELAY_MS
+      ).toISOString();
+      scheduleCalendarAutoContinuation_(PMOS_CALENDAR_CONTINUATION_DELAY_MS);
+    } else {
+      latest.status = 'Paused';
+      latest.nextRunAt = '';
+      removeCalendarAutoTrigger_();
+    }
 
-  state.lastCreated = Number(result.created || 0);
-  state.lastUpdated = Number(result.updated || 0);
-  state.lastDeleted = Number(result.deleted || 0);
-  state.lastErrors = Number(result.errors || 0);
-  state.lastError = String(result.firstError || '');
-  state.lastRunAt = new Date().toISOString();
-  state.remaining = remaining;
-
-
-  if (!remaining) {
-    state.status = 'Complete';
-    state.autoEnabled = false;
-    state.nextRunAt = '';
+    writeCalendarAutoJob_(latest);
+    return result;
+  } catch (error) {
+    const failed = readCalendarAutoJob_() || state;
+    failed.status = 'Paused on error';
+    failed.autoEnabled = false;
+    failed.lastError = String(error && error.message ? error.message : error);
+    failed.lastRunAt = new Date().toISOString();
+    failed.nextRunAt = '';
+    writeCalendarAutoJob_(failed);
     removeCalendarAutoTrigger_();
-  } else if (result.errors) {
-    state.status = 'Paused on error';
-    state.autoEnabled = false;
-    state.nextRunAt = '';
-    removeCalendarAutoTrigger_();
-  } else if (state.autoEnabled) {
-    state.status = 'Waiting';
-    state.nextRunAt = new Date(
-      Date.now() + 60 * 1000
-    ).toISOString();
-  } else {
-    state.status = 'Paused';
-    state.nextRunAt = '';
+    throw error;
+  } finally {
+    abandonPmosRuntimeOperation_(lock, context);
   }
-
-
-  writeCalendarAutoJob_(state);
-  return result;
 }
 
 function runCalendarAutoContinueTrigger() {
-  const lock = LockService.getDocumentLock();
+  const state = readCalendarAutoJob_();
 
-
-  if (!lock.tryLock(1000)) return;
-
-
-  try {
-    const state = readCalendarAutoJob_();
-
-
-    if (!state || !state.autoEnabled) {
-      removeCalendarAutoTrigger_();
-      return;
-    }
-
-
-    runCalendarSyncBatchNow();
-  } finally {
-    lock.releaseLock();
+  if (!state || !state.autoEnabled || state.pauseRequested) {
+    removeCalendarAutoTrigger_();
+    return;
   }
+
+  runCalendarSyncBatchNow();
 }
 
-function ensureCalendarAutoTrigger_() {
-  const existing = ScriptApp.getProjectTriggers()
-    .filter(trigger =>
-      trigger.getHandlerFunction() ===
-      PMOS_CALENDAR_AUTO_HANDLER
-    );
-
-
-  if (existing.length) return;
-
-
+function scheduleCalendarAutoContinuation_(delayMs) {
+  removeCalendarAutoTrigger_();
   ScriptApp.newTrigger(PMOS_CALENDAR_AUTO_HANDLER)
     .timeBased()
-    .everyMinutes(1)
+    .after(Math.max(1000, Number(delayMs || 0)))
     .create();
+}
+
+/** Compatibility alias retained for older callers. */
+function ensureCalendarAutoTrigger_() {
+  scheduleCalendarAutoContinuation_(PMOS_CALENDAR_CONTINUATION_DELAY_MS);
 }
 
 function removeCalendarAutoTrigger_() {
   ScriptApp.getProjectTriggers()
     .filter(trigger =>
-      trigger.getHandlerFunction() ===
-      PMOS_CALENDAR_AUTO_HANDLER
+      trigger.getHandlerFunction() === PMOS_CALENDAR_AUTO_HANDLER
     )
     .forEach(trigger => ScriptApp.deleteTrigger(trigger));
 }
@@ -204,9 +213,7 @@ function readCalendarAutoJob_() {
   const raw = PropertiesService.getDocumentProperties()
     .getProperty(PMOS_CALENDAR_AUTO_JOB);
 
-
   if (!raw) return null;
-
 
   try {
     return JSON.parse(raw);
@@ -225,15 +232,8 @@ function writeCalendarAutoJob_(state) {
 
 function formatCalendarJobDate_(value) {
   if (!value) return '';
-
-
   const date = new Date(value);
-
-
-  if (!Number.isFinite(date.getTime())) {
-    return '';
-  }
-
+  if (!Number.isFinite(date.getTime())) return '';
 
   return Utilities.formatDate(
     date,
@@ -241,4 +241,3 @@ function formatCalendarJobDate_(value) {
     'yyyy-MM-dd h:mm:ss a'
   );
 }
-
