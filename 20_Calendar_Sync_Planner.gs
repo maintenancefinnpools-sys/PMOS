@@ -1,9 +1,6 @@
 /**
  * PMOS pure Calendar synchronization planner.
- *
- * Converts desired recurring-series records and current registry records into an
- * immutable PMOS plan. This module performs no Calendar, Spreadsheet, Drive,
- * PropertiesService, trigger, runtime, or executor work.
+ * Produces immutable operations only; performs no Google service calls.
  */
 
 const PMOS_CALENDAR_PLANNER_VERSION = 1;
@@ -12,54 +9,46 @@ const PMOS_CALENDAR_SERIES_ENTITY = 'CALENDAR_SERIES';
 const PMOS_CALENDAR_DESTINATION = 'CALENDAR';
 
 /**
- * Builds an immutable Calendar synchronization plan.
- *
- * desiredSeries: array from buildRecurringSeriesPlan_() or equivalent plain data
- * currentSeries: array or registry object keyed by seriesKey
- *
- * Options:
- *   id: explicit plan ID
- *   createdAt: explicit plan timestamp
- *   sourceVersion: source snapshot/version label
- *   calendarName: target Calendar name
- *   includeSkips: include unchanged series as SKIP operations (default false)
- *   allowDeletes: emit DELETE operations for stale managed series (default true)
+ * Builds an immutable plan from desired recurring series and current registry
+ * records. Registry input may be an array or an object keyed by seriesKey.
  */
 function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
   const settings = normalizePmosCalendarPlannerOptions_(options);
   const desired = normalizePmosCalendarSeriesCollection_(desiredSeries, 'DESIRED');
   const current = normalizePmosCalendarSeriesCollection_(currentSeries, 'CURRENT');
-  const desiredIndex = indexPmosCalendarSeries_(desired.records);
-  const currentIndex = indexPmosCalendarSeries_(current.records);
-  const operationInputs = [];
+  const desiredByKey = indexPmosCalendarSeries_(desired.records);
+  const currentByKey = indexPmosCalendarSeries_(current.records);
+  const operations = [];
 
-  appendPmosCalendarDuplicateOperations_(operationInputs, desired.duplicates, 'desired');
-  appendPmosCalendarDuplicateOperations_(operationInputs, current.duplicates, 'current');
+  appendPmosCalendarDuplicateOperations_(operations, desired.duplicates, 'desired');
+  appendPmosCalendarDuplicateOperations_(operations, current.duplicates, 'current');
 
-  Object.keys(desiredIndex).sort().forEach(function (seriesKey) {
-    const wanted = desiredIndex[seriesKey];
-    const existing = currentIndex[seriesKey] || null;
+  Object.keys(desiredByKey).sort().forEach(function (seriesKey) {
+    const wanted = desiredByKey[seriesKey];
+    const existing = currentByKey[seriesKey] || null;
 
     if (!existing) {
-      operationInputs.push(buildPmosCalendarOperationInput_(
+      operations.push(buildPmosCalendarOperationInput_(
         PMOS_OPERATION.CREATE,
         seriesKey,
         'Recurring Calendar series does not exist.',
         wanted,
         null,
-        settings
+        settings,
+        null
       ));
       return;
     }
 
-    const diff = diffPmosRecords(
-      calendarSeriesComparableRecord_(existing),
-      calendarSeriesComparableRecord_(wanted),
-      { ignoreMetadata: false, ignoreModelVersion: true, arrayMode: 'ORDERED' }
-    );
+    const comparison = buildPmosCalendarSeriesComparison_(existing, wanted);
+    const diff = diffPmosRecords(comparison.before, comparison.after, {
+      ignoreMetadata: false,
+      ignoreModelVersion: true,
+      arrayMode: 'ORDERED'
+    });
 
     if (diff.changed) {
-      operationInputs.push(buildPmosCalendarOperationInput_(
+      operations.push(buildPmosCalendarOperationInput_(
         PMOS_OPERATION.UPDATE,
         seriesKey,
         'Recurring Calendar series differs from the desired plan.',
@@ -69,7 +58,7 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
         diff
       ));
     } else if (settings.includeSkips) {
-      operationInputs.push(buildPmosCalendarOperationInput_(
+      operations.push(buildPmosCalendarOperationInput_(
         PMOS_OPERATION.SKIP,
         seriesKey,
         'Recurring Calendar series is already synchronized.',
@@ -81,29 +70,25 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
     }
   });
 
-  Object.keys(currentIndex).sort().forEach(function (seriesKey) {
-    if (desiredIndex[seriesKey]) return;
-    const existing = currentIndex[seriesKey];
+  Object.keys(currentByKey).sort().forEach(function (seriesKey) {
+    if (desiredByKey[seriesKey]) return;
+    const existing = currentByKey[seriesKey];
+    const action = settings.allowDeletes
+      ? PMOS_OPERATION.DELETE
+      : PMOS_OPERATION.WARNING;
+    const reason = settings.allowDeletes
+      ? 'Managed recurring Calendar series is no longer present in the desired plan.'
+      : 'Stale managed Calendar series was detected, but deletion is disabled.';
 
-    if (settings.allowDeletes) {
-      operationInputs.push(buildPmosCalendarOperationInput_(
-        PMOS_OPERATION.DELETE,
-        seriesKey,
-        'Managed recurring Calendar series is no longer present in the desired plan.',
-        null,
-        existing,
-        settings
-      ));
-    } else {
-      operationInputs.push(buildPmosCalendarOperationInput_(
-        PMOS_OPERATION.WARNING,
-        seriesKey,
-        'Stale managed Calendar series was detected, but deletion is disabled.',
-        null,
-        existing,
-        settings
-      ));
-    }
+    operations.push(buildPmosCalendarOperationInput_(
+      action,
+      seriesKey,
+      reason,
+      null,
+      existing,
+      settings,
+      null
+    ));
   });
 
   const planId = settings.id || buildPmosCalendarPlanId_(
@@ -118,56 +103,50 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
     planner: PMOS_CALENDAR_PLANNER_NAME,
     createdAt: settings.createdAt,
     sourceVersion: settings.sourceVersion,
-    operations: operationInputs,
+    operations: operations,
     metadata: {
       plannerVersion: PMOS_CALENDAR_PLANNER_VERSION,
       calendarName: settings.calendarName,
       desiredCount: desired.records.length,
       currentCount: current.records.length,
-      duplicateDesiredKeys: desired.duplicates.slice(),
-      duplicateCurrentKeys: current.duplicates.slice(),
+      duplicateDesiredKeys: desired.duplicates,
+      duplicateCurrentKeys: current.duplicates,
+      blockingPlannerErrors: desired.duplicates.length + current.duplicates.length,
       allowDeletes: settings.allowDeletes,
       includeSkips: settings.includeSkips
     }
   });
 }
 
-/** Normalizes one desired plan or registry record into a canonical series. */
+/** Converts a desired plan or registry row into canonical Calendar-series data. */
 function normalizePmosCalendarSeries(source, role) {
   const record = source || {};
-  const normalizedRole = String(role || record.role || 'DESIRED').trim().toUpperCase();
-  const start = normalizePmosCalendarDate_(record.start || record.startTime);
-  const end = normalizePmosCalendarDate_(record.end || record.endTime);
-  const until = normalizePmosCalendarDate_(record.until || record.untilTime);
-  const seriesKey = normalizePmosCalendarText_(
-    record.seriesKey || record['Series Key'] || record.key
-  );
-
-  const normalized = {
+  return freezePmosCalendarPlannerValue_({
     modelVersion: 1,
     type: PMOS_CALENDAR_SERIES_ENTITY,
-    role: normalizedRole,
-    seriesKey: seriesKey,
+    role: String(role || record.role || 'DESIRED').trim().toUpperCase(),
+    seriesKey: normalizePmosCalendarText_(
+      record.seriesKey || record['Series Key'] || record.key
+    ),
     seriesId: normalizePmosCalendarText_(record.seriesId || record['Series ID']),
     customerId: normalizePmosCalendarText_(record.customerId || record['Customer ID']),
     layer: normalizePmosCalendarText_(record.layer || record.Layer),
-    calendarName: normalizePmosCalendarText_(record.calendarName || record['Calendar Name']),
+    calendarName: normalizePmosCalendarText_(
+      record.calendarName || record['Calendar Name']
+    ),
     title: normalizePmosCalendarText_(record.title),
-    start: start,
-    end: end,
-    until: until,
+    start: normalizePmosCalendarDate_(record.start || record.startTime),
+    end: normalizePmosCalendarDate_(record.end || record.endTime),
+    until: normalizePmosCalendarDate_(record.until || record.untilTime),
     location: normalizePmosCalendarText_(record.location),
     description: normalizePmosCalendarMultilineText_(record.description),
     color: normalizePmosCalendarText_(record.color),
     signature: normalizePmosCalendarText_(record.signature || record.Signature),
     status: normalizePmosCalendarText_(record.status || record.Status),
     metadata: clonePmosCalendarPlannerValue_(record.metadata || {})
-  };
-
-  return freezePmosCalendarPlannerValue_(normalized);
+  });
 }
 
-/** Returns action counts and affected series for a Calendar plan. */
 function summarizePmosCalendarSyncPlan(plan) {
   const base = summarizePmosPlan(plan);
   const operations = plan && Array.isArray(plan.operations) ? plan.operations : [];
@@ -176,30 +155,27 @@ function summarizePmosCalendarSyncPlan(plan) {
     total: base.total,
     executable: base.executable,
     counts: base.counts,
-    affectedSeries: operations
-      .filter(function (operation) { return isPmosExecutableOperation(operation); })
-      .map(function (operation) { return operation.entityId; })
+    blockingPlannerErrors: operations.filter(function (operation) {
+      return operation.action === PMOS_OPERATION.ERROR;
+    }).length,
+    affectedSeries: operations.filter(isPmosExecutableOperation).map(function (operation) {
+      return operation.entityId;
+    })
   });
 }
 
-function buildPmosCalendarOperationInput_(
-  action,
-  seriesKey,
-  reason,
-  desired,
-  current,
-  settings,
-  diff
-) {
+function buildPmosCalendarOperationInput_(action, key, reason, desired, current, settings, diff) {
   return {
     planner: PMOS_CALENDAR_PLANNER_NAME,
     action: action,
     entity: PMOS_CALENDAR_SERIES_ENTITY,
-    entityId: seriesKey,
+    entityId: key,
     destination: PMOS_CALENDAR_DESTINATION,
-    priority: action === PMOS_OPERATION.DELETE
-      ? PMOS_OPERATION_PRIORITY.HIGH
-      : PMOS_OPERATION_PRIORITY.NORMAL,
+    priority: action === PMOS_OPERATION.ERROR
+      ? PMOS_OPERATION_PRIORITY.CRITICAL
+      : action === PMOS_OPERATION.DELETE
+        ? PMOS_OPERATION_PRIORITY.HIGH
+        : PMOS_OPERATION_PRIORITY.NORMAL,
     reason: reason,
     payload: {
       calendarName: settings.calendarName,
@@ -210,39 +186,34 @@ function buildPmosCalendarOperationInput_(
     },
     metadata: {
       plannerVersion: PMOS_CALENDAR_PLANNER_VERSION,
-      seriesKey: seriesKey
+      seriesKey: key,
+      blocking: action === PMOS_OPERATION.ERROR
     }
   };
 }
 
 function appendPmosCalendarDuplicateOperations_(operations, duplicates, sourceName) {
-  duplicates.forEach(function (seriesKey) {
-    operations.push({
-      planner: PMOS_CALENDAR_PLANNER_NAME,
-      action: PMOS_OPERATION.ERROR,
-      entity: PMOS_CALENDAR_SERIES_ENTITY,
-      entityId: seriesKey,
-      destination: PMOS_CALENDAR_DESTINATION,
-      priority: PMOS_OPERATION_PRIORITY.CRITICAL,
-      reason: 'Duplicate ' + sourceName + ' recurring-series key: ' + seriesKey + '.',
-      payload: { seriesKey: seriesKey, source: sourceName },
-      metadata: { blocking: true, plannerVersion: PMOS_CALENDAR_PLANNER_VERSION }
-    });
+  duplicates.forEach(function (key) {
+    operations.push(buildPmosCalendarOperationInput_(
+      PMOS_OPERATION.ERROR,
+      key,
+      'Duplicate ' + sourceName + ' recurring-series key: ' + key + '.',
+      null,
+      null,
+      { calendarName: null },
+      null
+    ));
   });
 }
 
 function normalizePmosCalendarSeriesCollection_(source, role) {
-  let values;
-  if (Array.isArray(source)) {
-    values = source;
-  } else if (source && typeof source === 'object') {
-    values = Object.keys(source).sort().map(function (key) {
-      const value = source[key] || {};
-      return Object.assign({ seriesKey: key }, value);
-    });
-  } else {
-    values = [];
-  }
+  const values = Array.isArray(source)
+    ? source
+    : source && typeof source === 'object'
+      ? Object.keys(source).sort().map(function (key) {
+          return Object.assign({ seriesKey: key }, source[key] || {});
+        })
+      : [];
 
   const records = values.map(function (record) {
     return normalizePmosCalendarSeries(record, role);
@@ -257,7 +228,9 @@ function normalizePmosCalendarSeriesCollection_(source, role) {
 
   return {
     records: records,
-    duplicates: Object.keys(counts).filter(function (key) { return counts[key] > 1; }).sort()
+    duplicates: Object.keys(counts).filter(function (key) {
+      return counts[key] > 1;
+    }).sort()
   };
 }
 
@@ -271,13 +244,23 @@ function indexPmosCalendarSeries_(records) {
   return index;
 }
 
+/** Registry signatures are authoritative when present on both records. */
+function buildPmosCalendarSeriesComparison_(current, desired) {
+  if (current && desired && current.signature && desired.signature) {
+    return {
+      before: { signature: current.signature },
+      after: { signature: desired.signature }
+    };
+  }
+  return {
+    before: calendarSeriesComparableRecord_(current),
+    after: calendarSeriesComparableRecord_(desired)
+  };
+}
+
 function calendarSeriesComparableRecord_(record) {
   if (!record) return null;
-
-  // A stored signature is the authoritative comparison when both sides have one.
-  // Otherwise compare the complete executor-relevant desired state.
   return {
-    signature: record.signature || null,
     title: record.title || null,
     start: record.start || null,
     end: record.end || null,
@@ -302,13 +285,12 @@ function normalizePmosCalendarPlannerOptions_(options) {
 }
 
 function buildPmosCalendarPlanId_(desired, current, settings) {
-  const fingerprint = JSON.stringify({
+  return 'CALENDAR_SYNC_PLAN_' + pmosCalendarHash_(JSON.stringify({
     sourceVersion: settings.sourceVersion,
     calendarName: settings.calendarName,
     desired: desired.map(calendarSeriesFingerprint_),
     current: current.map(calendarSeriesFingerprint_)
-  });
-  return 'CALENDAR_SYNC_PLAN_' + pmosCalendarHash_(fingerprint);
+  }));
 }
 
 function calendarSeriesFingerprint_(record) {
