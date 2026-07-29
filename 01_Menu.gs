@@ -8,7 +8,7 @@
  * The Add Maintenance Client workflow is now enabled.
  */
 function showNewMaintenanceClientNotice() {
-  return showAddMaintenanceClient();
+  return showAddMaintenanceClientV2();
 }
 
 function onOpen() {
@@ -26,7 +26,7 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClient')
+          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
