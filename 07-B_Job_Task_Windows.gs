@@ -20,7 +20,7 @@ var clock=setInterval(function(){elapsed.textContent='Elapsed: '+Math.floor((Dat
 function fail(error){clearInterval(clock);body.className='failed';stage.textContent='Needs attention';result.textContent=error&&error.message?error.message:String(error);syncButton.disabled=false;}
 function done(response){clearInterval(clock);body.className='complete';stage.textContent='Complete';elapsed.textContent='Duration: '+Math.max(1,Math.round((Date.now()-started)/1000))+'s';result.textContent=response&&response.summary?response.summary:'Task completed.';if('${taskType}'==='CALENDAR_AUDIT'&&response&&response.canSync)syncButton.style.display='inline-block';}
 google.script.run.withSuccessHandler(done).withFailureHandler(fail).runPmosTask('${taskType}');
-syncButton.onclick=function(){syncButton.disabled=true;stage.textContent='Opening Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openIntegratedCalendarSyncFromAuditV2();};
+syncButton.onclick=function(){syncButton.disabled=true;stage.textContent='Opening Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openCalendarSyncFromAudit();};
 document.getElementById('closeButton').onclick=function(){google.script.host.close();};
 })();
 </script></body></html>`).setWidth(610).setHeight(540);
