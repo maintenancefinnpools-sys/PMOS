@@ -3,12 +3,12 @@
  * Move-only refactor: public names and operational behavior are preserved.
  */
 
+/**
+ * Compatibility entry retained for older menu installations and callers.
+ * The Add Maintenance Client workflow is now enabled.
+ */
 function showNewMaintenanceClientNotice() {
-  SpreadsheetApp.getUi().alert(
-    'Schedule New Maintenance Client',
-    'This feature will be enabled after the Calendar Job Engine is verified.',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  return showAddMaintenanceClient();
 }
 
 function onOpen() {
@@ -26,7 +26,7 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Schedule New Maintenance Client', 'showNewMaintenanceClientNotice')
+          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClient')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
