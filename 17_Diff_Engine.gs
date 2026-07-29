@@ -90,9 +90,7 @@ function diffPmosRecords(before, after, options) {
   });
 }
 
-/**
- * Convenience wrapper for canonical customer records.
- */
+/** Convenience wrapper for canonical customer records. */
 function diffPmosCustomers(before, after, options) {
   if (before != null && before.type && before.type !== 'CUSTOMER') {
     throw new Error('Before record is not a canonical CUSTOMER.');
@@ -103,12 +101,10 @@ function diffPmosCustomers(before, after, options) {
   return diffPmosRecords(before, after, options);
 }
 
-/**
- * Returns true when two canonical values are equivalent under diff settings.
- */
+/** Returns true when two canonical values are equivalent. */
 function arePmosValuesEqual(left, right, options) {
   const settings = normalizePmosDiffOptions_(options);
-  return pmosDiffValuesEqual_(left, right, settings);
+  return pmosDiffValuesEqual_(left, right, settings, '');
 }
 
 function normalizePmosDiffOptions_(options) {
@@ -116,12 +112,8 @@ function normalizePmosDiffOptions_(options) {
   const includeFields = normalizePmosDiffPathList_(source.includeFields);
   const excludeFields = normalizePmosDiffPathList_(source.excludeFields);
 
-  if (source.ignoreModelVersion !== false) {
-    excludeFields.push('modelVersion');
-  }
-  if (source.ignoreMetadata === true) {
-    excludeFields.push('metadata');
-  }
+  if (source.ignoreModelVersion !== false) excludeFields.push('modelVersion');
+  if (source.ignoreMetadata === true) excludeFields.push('metadata');
 
   return {
     includeFields: includeFields,
@@ -141,28 +133,22 @@ function normalizePmosDiffPathList_(value) {
 }
 
 function validatePmosDiffRecord_(record, label) {
-  if (!record || typeof record !== 'object' || Array.isArray(record) || record instanceof Date) {
+  if (!isPmosDiffPlainObject_(record)) {
     throw new Error('The ' + label + ' PMOS diff record must be an object.');
   }
 }
 
 function collectPmosDiffChanges_(before, after, path, changes, settings) {
   if (path && !shouldComparePmosDiffPath_(path, settings)) return;
+  if (pmosDiffValuesEqual_(before, after, settings, path)) return;
 
-  if (pmosDiffValuesEqual_(before, after, settings)) return;
-
-  const beforeIsObject = isPmosDiffPlainObject_(before);
-  const afterIsObject = isPmosDiffPlainObject_(after);
-
-  if (beforeIsObject && afterIsObject) {
-    const keys = Array.from(new Set(
-      Object.keys(before).concat(Object.keys(after))
-    )).sort();
-
-    keys.forEach(function (key) {
-      const childPath = path ? path + '.' + key : key;
-      collectPmosDiffChanges_(before[key], after[key], childPath, changes, settings);
-    });
+  if (isPmosDiffPlainObject_(before) && isPmosDiffPlainObject_(after)) {
+    Array.from(new Set(Object.keys(before).concat(Object.keys(after))))
+      .sort()
+      .forEach(function (key) {
+        const childPath = path ? path + '.' + key : key;
+        collectPmosDiffChanges_(before[key], after[key], childPath, changes, settings);
+      });
     return;
   }
 
@@ -178,7 +164,6 @@ function shouldComparePmosDiffPath_(path, settings) {
     return path === candidate || path.indexOf(candidate + '.') === 0;
   });
   if (excluded) return false;
-
   if (!settings.includeFields.length) return true;
 
   return settings.includeFields.some(function (candidate) {
@@ -188,9 +173,10 @@ function shouldComparePmosDiffPath_(path, settings) {
   });
 }
 
-function pmosDiffValuesEqual_(left, right, settings) {
+function pmosDiffValuesEqual_(left, right, settings, path) {
   if (left === right) return true;
-  if (Number.isNaN(left) && Number.isNaN(right)) return true;
+  if (typeof left === 'number' && typeof right === 'number' &&
+      isNaN(left) && isNaN(right)) return true;
   if (left == null || right == null) return false;
 
   if (left instanceof Date || right instanceof Date) {
@@ -201,43 +187,43 @@ function pmosDiffValuesEqual_(left, right, settings) {
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!Array.isArray(left) || !Array.isArray(right)) return false;
     return settings.arrayMode === 'SET'
-      ? pmosDiffArraysEqualAsSets_(left, right, settings)
-      : pmosDiffArraysEqualOrdered_(left, right, settings);
+      ? pmosDiffArraysEqualAsSets_(left, right, settings, path)
+      : pmosDiffArraysEqualOrdered_(left, right, settings, path);
   }
 
   if (isPmosDiffPlainObject_(left) || isPmosDiffPlainObject_(right)) {
     if (!isPmosDiffPlainObject_(left) || !isPmosDiffPlainObject_(right)) return false;
-    const leftKeys = Object.keys(left).filter(function (key) {
-      return shouldComparePmosDiffPath_(key, settings);
-    }).sort();
-    const rightKeys = Object.keys(right).filter(function (key) {
-      return shouldComparePmosDiffPath_(key, settings);
-    }).sort();
 
-    if (!pmosDiffArraysEqualOrdered_(leftKeys, rightKeys, settings)) return false;
+    const keys = Array.from(new Set(Object.keys(left).concat(Object.keys(right))))
+      .sort()
+      .filter(function (key) {
+        const childPath = path ? path + '.' + key : key;
+        return shouldComparePmosDiffPath_(childPath, settings);
+      });
 
-    return leftKeys.every(function (key) {
-      return pmosDiffValuesEqual_(left[key], right[key], settings);
+    return keys.every(function (key) {
+      const childPath = path ? path + '.' + key : key;
+      return pmosDiffValuesEqual_(left[key], right[key], settings, childPath);
     });
   }
 
   return false;
 }
 
-function pmosDiffArraysEqualOrdered_(left, right, settings) {
+function pmosDiffArraysEqualOrdered_(left, right, settings, path) {
   if (left.length !== right.length) return false;
   return left.every(function (value, index) {
-    return pmosDiffValuesEqual_(value, right[index], settings);
+    return pmosDiffValuesEqual_(value, right[index], settings, path);
   });
 }
 
-function pmosDiffArraysEqualAsSets_(left, right, settings) {
+function pmosDiffArraysEqualAsSets_(left, right, settings, path) {
   if (left.length !== right.length) return false;
   const unmatched = right.slice();
 
   return left.every(function (leftValue) {
     const matchIndex = unmatched.findIndex(function (rightValue) {
-      return pmosDiffValuesEqual_(leftValue, rightValue, settings);
+      return pmosDiffValuesEqual_(leftValue, rightValue, settings, path);
     });
     if (matchIndex < 0) return false;
     unmatched.splice(matchIndex, 1);
@@ -254,9 +240,7 @@ function clonePmosDiffValue_(value) {
   if (value === undefined) return null;
   if (value == null || typeof value !== 'object') return value;
   if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) {
-    return value.map(clonePmosDiffValue_);
-  }
+  if (Array.isArray(value)) return value.map(clonePmosDiffValue_);
 
   const copy = {};
   Object.keys(value).sort().forEach(function (key) {
