@@ -30,7 +30,7 @@ function onOpen() {
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('PMOS Job Center', 'showIntegratedPmosJobEngine')
+          .addItem('PMOS Job Center', 'openIntegratedCalendarSyncFromAudit')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
