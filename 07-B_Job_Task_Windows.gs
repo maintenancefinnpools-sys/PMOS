@@ -91,14 +91,13 @@ function openCalendarSync(){
       stage.textContent='Complete';
       alert(error&&error.message?error.message:String(error));
     })
-    .openCalendarSyncFromAudit();
+    .openRestoredCalendarSyncFromAudit();
 }
 </script>
 </body>
 </html>`)
     .setWidth(610)
     .setHeight(540);
-
 
   SpreadsheetApp.getUi().showModalDialog(html, taskTitle);
 }
@@ -123,7 +122,6 @@ function runPmosTask_(taskType) {
           };
         }
 
-
         case 'CALENDAR_STATUS': {
           const preview = previewCalendarChanges();
           const registry = getSeriesRegistry_();
@@ -138,12 +136,10 @@ function runPmosTask_(taskType) {
           };
         }
 
-
         case 'VERIFY_CALENDAR': {
           const result = executeVerifyCalendarJob_();
           return { summary: `Verification complete.\n${result.summary}` };
         }
-
 
         case 'CUSTOMER_SYNC': {
           const result = synchronizeCustomerDatabase_(true);
@@ -157,7 +153,6 @@ function runPmosTask_(taskType) {
           };
         }
 
-
         case 'MAP_EXPORT': {
           const result = exportAffectedMapLayers();
           return {
@@ -168,7 +163,6 @@ function runPmosTask_(taskType) {
             ].join('\n')
           };
         }
-
 
         default:
           throw new Error(`Unknown PMOS task: ${taskType}`);
@@ -182,10 +176,8 @@ function withSpreadsheetServiceRetry_(operation, operationName) {
   const delays = [0, 600, 1500, 3000];
   let lastError = null;
 
-
   for (let attempt = 0; attempt < delays.length; attempt++) {
     if (delays[attempt]) Utilities.sleep(delays[attempt]);
-
 
     try {
       return operation();
@@ -198,7 +190,6 @@ function withSpreadsheetServiceRetry_(operation, operationName) {
         /timed out/i.test(message) ||
         /try again/i.test(message);
 
-
       if (!transient || attempt === delays.length - 1) {
         throw new Error(
           `${operationName || 'PMOS operation'} failed after ${attempt + 1} attempt(s): ${message}`
@@ -206,7 +197,6 @@ function withSpreadsheetServiceRetry_(operation, operationName) {
       }
     }
   }
-
 
   throw lastError;
 }
