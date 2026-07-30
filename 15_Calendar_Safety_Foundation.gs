@@ -2,21 +2,21 @@
  * PMOS Calendar safety and date-range repair workflow.
  */
 
-const PMOS_CALENDAR_EFFECTIVE_DATE_KEY = 'PMOS_CALENDAR_EFFECTIVE_DATE';
+const PMOS_CALENDAR_SAFETY_EFFECTIVE_DATE_KEY = 'PMOS_CALENDAR_EFFECTIVE_DATE';
 const PMOS_CALENDAR_RECONCILE_HORIZON_YEARS = 5;
 const PMOS_CALENDAR_REPAIR_PLAN_KEY = 'PMOS_CALENDAR_REPAIR_PLAN_V1';
 
 function saveCalendarEffectiveDate(value) {
   const date = parseCalendarEffectiveDate_(value);
   PropertiesService.getDocumentProperties().setProperty(
-    PMOS_CALENDAR_EFFECTIVE_DATE_KEY,
+    PMOS_CALENDAR_SAFETY_EFFECTIVE_DATE_KEY,
     Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd')
   );
   return {summary: `Effective date saved: ${Utilities.formatDate(date, PMOS.TIMEZONE, 'MMMM d, yyyy')}`};
 }
 
 function getCalendarEffectiveDate_() {
-  const stored = PropertiesService.getDocumentProperties().getProperty(PMOS_CALENDAR_EFFECTIVE_DATE_KEY);
+  const stored = PropertiesService.getDocumentProperties().getProperty(PMOS_CALENDAR_SAFETY_EFFECTIVE_DATE_KEY);
   return parseCalendarEffectiveDate_(stored || Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd'));
 }
 
@@ -86,7 +86,7 @@ function reconcileFutureCalendar(value, confirmed) {
     });
 
     PropertiesService.getDocumentProperties().setProperty(
-      PMOS_CALENDAR_EFFECTIVE_DATE_KEY,
+      PMOS_CALENDAR_SAFETY_EFFECTIVE_DATE_KEY,
       Utilities.formatDate(effectiveDate, PMOS.TIMEZONE, 'yyyy-MM-dd')
     );
 
