@@ -1,31 +1,12 @@
 /**
  * PMOS future Calendar reconciliation.
- *
- * Planning and execution are deliberately separate. The planner creates a
- * serializable list of future-only DELETE and CREATE operations. The executor
- * processes that immutable plan until the shared runtime deadline, saves one
- * checkpoint index, and resumes through a one-time continuation trigger.
+ * Planning and execution remain separate and resumable.
  */
 
-const PMOS_CALENDAR_RECONCILE_OPERATION = 'CALENDAR_RECONCILE';
-const PMOS_CALENDAR_RECONCILE_PLAN_KEY = 'PMOS_CALENDAR_RECONCILE_PLAN_V2';
-const PMOS_CALENDAR_RECONCILE_PLAN_PARTS_KEY =
-  'PMOS_CALENDAR_RECONCILE_PLAN_V2_PARTS';
-const PMOS_CALENDAR_RECONCILE_HORIZON_YEARS = 5;
-const PMOS_CALENDAR_RECONCILE_HANDLER =
-  'runFutureCalendarReconciliationContinuation';
-const PMOS_CALENDAR_RECONCILE_DELAY_MS = 2000;
-const PMOS_CALENDAR_RECONCILE_PROPERTY_CHUNK = 8000;
-
-/**
- * Public preview entry point retained for the existing PMOS interface.
- * This function performs no Calendar writes.
- */
 function previewReconcileFutureCalendar(value) {
   const effectiveDate = parseCalendarEffectiveDate_(value);
   const plan = buildCalendarReconciliationPlan_(effectiveDate);
   const counts = countCalendarReconciliationOperations_(plan.operations);
-
   return {
     effectiveDate: plan.effectiveDate,
     managedOccurrencesToRemove: counts.DELETE,
@@ -40,19 +21,14 @@ function previewReconcileFutureCalendar(value) {
   };
 }
 
-/**
- * Public apply entry point retained for the existing PMOS interface.
- */
 function reconcileFutureCalendar(value, confirmed) {
   if (confirmed !== true) {
     throw new Error('Reconciliation requires explicit confirmation.');
   }
-
   const effectiveDate = parseCalendarEffectiveDate_(value);
   const plan = buildCalendarReconciliationPlan_(effectiveDate);
-
   saveCalendarReconciliationPlan_(plan);
-  savePmosRuntimeCheckpoint_(PMOS_CALENDAR_RECONCILE_OPERATION, {
+  savePmosRuntimeCheckpoint_(PMOS_CALENDAR_CONFIG.RECONCILE.OPERATION, {
     index: 0,
     removed: 0,
     created: 0,
@@ -61,31 +37,22 @@ function reconcileFutureCalendar(value, confirmed) {
     effectiveDate: plan.effectiveDate,
     registryCleared: false
   });
-
   removeFutureCalendarReconciliationContinuation_();
   return runFutureCalendarReconciliation_();
 }
 
-/**
- * Trigger-compatible continuation entry point.
- */
 function runFutureCalendarReconciliationContinuation() {
   return runFutureCalendarReconciliation_();
 }
 
-/**
- * Pure planning boundary: reads current state and returns serializable work.
- * It does not delete, create, update, checkpoint, lock, or schedule anything.
- */
 function buildCalendarReconciliationPlan_(effectiveDate) {
   const calendar = getRecurringCalendar_();
   const horizon = new Date(effectiveDate);
   horizon.setFullYear(
-    horizon.getFullYear() + PMOS_CALENDAR_RECONCILE_HORIZON_YEARS
+    horizon.getFullYear() + PMOS_CALENDAR_CONFIG.RECONCILE.HORIZON_YEARS
   );
 
-  const deleteOperations = calendar
-    .getEvents(effectiveDate, horizon)
+  const deletes = calendar.getEvents(effectiveDate, horizon)
     .filter(isPmosManagedCalendarEvent_)
     .map(function (event) {
       return {
@@ -93,14 +60,12 @@ function buildCalendarReconciliationPlan_(effectiveDate) {
         title: String(event.getTitle() || ''),
         start: event.getStartTime().toISOString(),
         end: event.getEndTime().toISOString(),
-        descriptionKey: calendarReconcileDescriptionKey_(
-          event.getDescription()
-        )
+        descriptionKey: calendarReconcileDescriptionKey_(event.getDescription())
       };
     })
     .sort(compareCalendarReconciliationOperations_);
 
-  const createOperations = buildRecurringSeriesPlan_()
+  const creates = buildRecurringSeriesPlan_()
     .map(function (seriesPlan) {
       return shiftPlanToEffectiveDate_(seriesPlan, effectiveDate);
     })
@@ -128,7 +93,7 @@ function buildCalendarReconciliationPlan_(effectiveDate) {
       'yyyy-MM-dd'
     ),
     horizon: horizon.toISOString(),
-    operations: deleteOperations.concat(createOperations)
+    operations: deletes.concat(creates)
   };
 }
 
@@ -136,13 +101,11 @@ function shiftPlanToEffectiveDate_(plan, effectiveDate) {
   const shifted = Object.assign({}, plan);
   shifted.start = new Date(plan.start);
   shifted.end = new Date(plan.end);
-  shifted.until = plan.until ? new Date(plan.until) : plan.until;
-
+  shifted.until = plan.until ? new Date(plan.until) : null;
   while (shifted.start.getTime() < effectiveDate.getTime()) {
     shifted.start.setDate(shifted.start.getDate() + 28);
     shifted.end.setDate(shifted.end.getDate() + 28);
   }
-
   shifted.signature = recurringSeriesSignature_(shifted);
   return shifted;
 }
@@ -150,21 +113,16 @@ function shiftPlanToEffectiveDate_(plan, effectiveDate) {
 function runFutureCalendarReconciliation_() {
   const plan = readCalendarReconciliationPlan_();
   if (!plan || !Array.isArray(plan.operations)) {
-    throw new Error(
-      'No saved future Calendar reconciliation plan is available.'
-    );
+    throw new Error('No saved future Calendar reconciliation plan is available.');
   }
 
-  const context = createPmosRuntimeContext_(
-    PMOS_CALENDAR_RECONCILE_OPERATION
-  );
+  const operationName = PMOS_CALENDAR_CONFIG.RECONCILE.OPERATION;
+  const context = createPmosRuntimeContext_(operationName);
   const lock = acquirePmosRuntimeLock_(context, 5000);
 
   try {
     const calendar = getRecurringCalendar_();
-    const checkpoint = readPmosRuntimeCheckpoint_(
-      PMOS_CALENDAR_RECONCILE_OPERATION
-    ) || {
+    const checkpoint = readPmosRuntimeCheckpoint_(operationName) || {
       index: 0,
       removed: 0,
       created: 0,
@@ -179,14 +137,9 @@ function runFutureCalendarReconciliation_() {
       !pmosRuntimeShouldYield_(context)
     ) {
       const operation = plan.operations[checkpoint.index];
-
       try {
         if (operation.action === 'DELETE') {
-          executeCalendarReconciliationDelete_(
-            calendar,
-            operation,
-            checkpoint
-          );
+          executeCalendarReconciliationDelete_(calendar, operation, checkpoint);
         } else if (operation.action === 'CREATE') {
           if (!checkpoint.registryCleared) {
             clearRecurringSeriesRegistry_();
@@ -199,29 +152,23 @@ function runFutureCalendarReconciliation_() {
             plan.calendarName
           );
         } else {
-          throw new Error(
-            'Unsupported reconciliation action: ' + operation.action
-          );
+          throw new Error('Unsupported reconciliation action: ' + operation.action);
         }
       } catch (error) {
         checkpoint.errors.push(
-          operation.action + ' ' +
-          String(operation.title || '') + ': ' +
+          operation.action + ' ' + String(operation.title || '') + ': ' +
           String(error && error.message ? error.message : error)
         );
       }
 
       checkpoint.index++;
-      savePmosRuntimeCheckpoint_(
-        PMOS_CALENDAR_RECONCILE_OPERATION,
-        checkpoint
-      );
+      savePmosRuntimeCheckpoint_(operationName, checkpoint);
       heartbeatPmosRuntimeOperation_(context);
     }
 
     if (checkpoint.index < plan.operations.length) {
       scheduleFutureCalendarReconciliationContinuation_(
-        PMOS_CALENDAR_RECONCILE_DELAY_MS
+        PMOS_CALENDAR_CONFIG.RECONCILE.DELAY_MS
       );
       releasePmosRuntimeLock_(lock, context);
       return calendarReconciliationStatus_(checkpoint, plan, 'Waiting');
@@ -229,7 +176,7 @@ function runFutureCalendarReconciliation_() {
 
     removeFutureCalendarReconciliationContinuation_();
     PropertiesService.getDocumentProperties().setProperty(
-      PMOS_CALENDAR_EFFECTIVE_DATE_KEY,
+      PMOS_CALENDAR_CONFIG.EFFECTIVE_DATE_KEY,
       plan.effectiveDate
     );
 
@@ -237,19 +184,13 @@ function runFutureCalendarReconciliation_() {
     updateSyncStatus_(
       hasErrors ? 'Synchronization error' : 'Everything synchronized',
       hasErrors
-        ? checkpoint.errors.length +
-          ' future reconciliation error(s).'
+        ? checkpoint.errors.length + ' future reconciliation error(s).'
         : checkpoint.created +
           ' future recurring series created from the effective date.'
     );
 
     deleteCalendarReconciliationPlan_();
-    completePmosRuntimeOperation_(
-      PMOS_CALENDAR_RECONCILE_OPERATION,
-      lock,
-      context
-    );
-
+    completePmosRuntimeOperation_(operationName, lock, context);
     return calendarReconciliationStatus_(checkpoint, plan, 'Complete');
   } catch (error) {
     abandonPmosRuntimeOperation_(lock, context);
@@ -257,17 +198,11 @@ function runFutureCalendarReconciliation_() {
   }
 }
 
-function executeCalendarReconciliationDelete_(
-  calendar,
-  operation,
-  checkpoint
-) {
+function executeCalendarReconciliationDelete_(calendar, operation, checkpoint) {
   const start = new Date(operation.start);
   assertCalendarMutationIsSafe_(start, false);
-
-  const windowStart = new Date(start.getTime() - 1000);
-  const windowEnd = new Date(start.getTime() + 1000);
-  const candidates = calendar.getEvents(windowStart, windowEnd)
+  const candidates = calendar
+    .getEvents(new Date(start.getTime() - 1000), new Date(start.getTime() + 1000))
     .filter(isPmosManagedCalendarEvent_)
     .filter(function (event) {
       return event.getStartTime().getTime() === start.getTime() &&
@@ -275,30 +210,21 @@ function executeCalendarReconciliationDelete_(
         calendarReconcileDescriptionKey_(event.getDescription()) ===
           operation.descriptionKey;
     });
-
   if (!candidates.length) {
     checkpoint.skipped++;
     return;
   }
-
   candidates[0].deleteEvent();
   checkpoint.removed++;
 }
 
-function executeCalendarReconciliationCreate_(
-  calendar,
-  operation,
-  checkpoint,
-  calendarName
-) {
+function executeCalendarReconciliationCreate_(calendar, operation, checkpoint, calendarName) {
   const seriesPlan = reviveCalendarSeriesPlan_(operation.seriesPlan);
   assertCalendarMutationIsSafe_(seriesPlan.start, false);
-
   if (calendarReconciliationSeriesExists_(calendar, seriesPlan)) {
     checkpoint.skipped++;
     return;
   }
-
   const series = createRecurringSeries_(calendar, seriesPlan);
   upsertSeriesRegistry_(
     seriesPlan,
@@ -310,30 +236,27 @@ function executeCalendarReconciliationCreate_(
 }
 
 function calendarReconciliationSeriesExists_(calendar, seriesPlan) {
-  const windowStart = new Date(seriesPlan.start.getTime() - 1000);
-  const windowEnd = new Date(seriesPlan.start.getTime() + 1000);
-  const signature = String(
-    seriesPlan.signature || recurringSeriesSignature_(seriesPlan)
-  );
-
-  return calendar.getEvents(windowStart, windowEnd).some(function (event) {
-    if (!isPmosManagedCalendarEvent_(event)) return false;
-    const description = String(event.getDescription() || '');
-    return description.indexOf('PMOS_SERIES_KEY=' + signature) >= 0 ||
-      (
-        event.getStartTime().getTime() === seriesPlan.start.getTime() &&
-        normalize_(event.getTitle()) === normalize_(seriesPlan.title)
-      );
-  });
+  return calendar
+    .getEvents(
+      new Date(seriesPlan.start.getTime() - 1000),
+      new Date(seriesPlan.start.getTime() + 1000)
+    )
+    .some(function (event) {
+      if (!isPmosManagedCalendarEvent_(event)) return false;
+      const description = String(event.getDescription() || '');
+      return description.indexOf('PMOS_SERIES_KEY=' + seriesPlan.seriesKey) >= 0 ||
+        (
+          event.getStartTime().getTime() === seriesPlan.start.getTime() &&
+          normalize_(event.getTitle()) === normalize_(seriesPlan.title)
+        );
+    });
 }
 
 function serializeCalendarSeriesPlan_(seriesPlan) {
   const copy = Object.assign({}, seriesPlan);
   copy.start = new Date(seriesPlan.start).toISOString();
   copy.end = new Date(seriesPlan.end).toISOString();
-  copy.until = seriesPlan.until
-    ? new Date(seriesPlan.until).toISOString()
-    : null;
+  copy.until = seriesPlan.until ? new Date(seriesPlan.until).toISOString() : null;
   return copy;
 }
 
@@ -353,10 +276,9 @@ function calendarReconcileDescriptionKey_(description) {
     'PMOS_TEMP_VISIT=',
     'PMOS_HISTORY_REPAIR='
   ];
-
-  for (let i = 0; i < markers.length; i++) {
+  for (let index = 0; index < markers.length; index++) {
     const line = text.split('\n').find(function (candidate) {
-      return candidate.indexOf(markers[i]) === 0;
+      return candidate.indexOf(markers[index]) === 0;
     });
     if (line) return line;
   }
@@ -364,11 +286,8 @@ function calendarReconcileDescriptionKey_(description) {
 }
 
 function compareCalendarReconciliationOperations_(left, right) {
-  const leftTime = left.start ||
-    (left.seriesPlan && left.seriesPlan.start) || '';
-  const rightTime = right.start ||
-    (right.seriesPlan && right.seriesPlan.start) || '';
-
+  const leftTime = left.start || (left.seriesPlan && left.seriesPlan.start) || '';
+  const rightTime = right.start || (right.seriesPlan && right.seriesPlan.start) || '';
   if (leftTime < rightTime) return -1;
   if (leftTime > rightTime) return 1;
   return String(left.title || '').localeCompare(String(right.title || ''));
@@ -385,10 +304,7 @@ function countCalendarReconciliationOperations_(operations) {
 function calendarReconciliationStatus_(checkpoint, plan, status) {
   const total = plan.operations.length;
   const processed = Math.min(checkpoint.index, total);
-  const firstError = checkpoint.errors.length
-    ? checkpoint.errors[0]
-    : '';
-
+  const firstError = checkpoint.errors.length ? checkpoint.errors[0] : '';
   return {
     status: status,
     effectiveDate: plan.effectiveDate,
@@ -419,27 +335,19 @@ function saveCalendarReconciliationPlan_(plan) {
   deleteCalendarReconciliationPlan_();
   const props = PropertiesService.getDocumentProperties();
   const text = JSON.stringify(plan);
+  const chunkSize = PMOS_CALENDAR_CONFIG.RECONCILE.PROPERTY_CHUNK;
   const parts = [];
-
-  for (
-    let index = 0;
-    index < text.length;
-    index += PMOS_CALENDAR_RECONCILE_PROPERTY_CHUNK
-  ) {
-    parts.push(text.slice(
-      index,
-      index + PMOS_CALENDAR_RECONCILE_PROPERTY_CHUNK
-    ));
+  for (let index = 0; index < text.length; index += chunkSize) {
+    parts.push(text.slice(index, index + chunkSize));
   }
-
   parts.forEach(function (part, index) {
     props.setProperty(
-      PMOS_CALENDAR_RECONCILE_PLAN_KEY + '_' + index,
+      PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_KEY + '_' + index,
       part
     );
   });
   props.setProperty(
-    PMOS_CALENDAR_RECONCILE_PLAN_PARTS_KEY,
+    PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_PARTS_KEY,
     String(parts.length)
   );
   return plan;
@@ -448,19 +356,17 @@ function saveCalendarReconciliationPlan_(plan) {
 function readCalendarReconciliationPlan_() {
   const props = PropertiesService.getDocumentProperties();
   const count = Number(
-    props.getProperty(PMOS_CALENDAR_RECONCILE_PLAN_PARTS_KEY) || 0
+    props.getProperty(PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_PARTS_KEY) || 0
   );
   if (!count) return null;
-
   let text = '';
   for (let index = 0; index < count; index++) {
     const part = props.getProperty(
-      PMOS_CALENDAR_RECONCILE_PLAN_KEY + '_' + index
+      PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_KEY + '_' + index
     );
     if (part == null) return null;
     text += part;
   }
-
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -471,20 +377,17 @@ function readCalendarReconciliationPlan_() {
 function deleteCalendarReconciliationPlan_() {
   const props = PropertiesService.getDocumentProperties();
   const count = Number(
-    props.getProperty(PMOS_CALENDAR_RECONCILE_PLAN_PARTS_KEY) || 0
+    props.getProperty(PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_PARTS_KEY) || 0
   );
-
   for (let index = 0; index < count; index++) {
-    props.deleteProperty(
-      PMOS_CALENDAR_RECONCILE_PLAN_KEY + '_' + index
-    );
+    props.deleteProperty(PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_KEY + '_' + index);
   }
-  props.deleteProperty(PMOS_CALENDAR_RECONCILE_PLAN_PARTS_KEY);
+  props.deleteProperty(PMOS_CALENDAR_CONFIG.RECONCILE.PLAN_PARTS_KEY);
 }
 
 function scheduleFutureCalendarReconciliationContinuation_(delayMs) {
   removeFutureCalendarReconciliationContinuation_();
-  ScriptApp.newTrigger(PMOS_CALENDAR_RECONCILE_HANDLER)
+  ScriptApp.newTrigger(PMOS_CALENDAR_CONFIG.RECONCILE.HANDLER)
     .timeBased()
     .after(Math.max(1000, Number(delayMs || 0)))
     .create();
@@ -494,7 +397,7 @@ function removeFutureCalendarReconciliationContinuation_() {
   ScriptApp.getProjectTriggers()
     .filter(function (trigger) {
       return trigger.getHandlerFunction() ===
-        PMOS_CALENDAR_RECONCILE_HANDLER;
+        PMOS_CALENDAR_CONFIG.RECONCILE.HANDLER;
     })
     .forEach(function (trigger) {
       ScriptApp.deleteTrigger(trigger);
