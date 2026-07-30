@@ -28,13 +28,7 @@ function ensureRecurringSeriesRegistry_() {
   return sheet;
 }
 function getRecurringCalendar_() {
-  const settings = getRecurringCalendarSettings_();
-  const matches = CalendarApp.getCalendarsByName(settings.calendarName);
-  if (matches.length) return matches[0];
-  return CalendarApp.createCalendar(settings.calendarName, {
-    summary: 'PMOS four-week recurring maintenance routes',
-    timeZone: PMOS.TIMEZONE
-  });
+  return getOrCreateConfiguredPmosCalendar_();
 }
 
 function getRecurringCalendarSettings_() {
