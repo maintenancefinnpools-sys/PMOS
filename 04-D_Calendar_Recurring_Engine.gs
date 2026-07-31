@@ -96,13 +96,28 @@ function parseSettingDate_(value, fallback) {
   );
 }
 
-function buildRecurringSeriesPlan_() {
+/**
+ * Builds the desired recurring-series plan.
+ *
+ * A caller may provide a read-only route reader. Legacy callers continue using
+ * readRoutesInPhysicalOrder_() until they are migrated separately.
+ */
+function buildRecurringSeriesPlan_(routeReader) {
   const settings = getRecurringCalendarSettings_();
   validateRecurringCalendarSettings_(settings);
 
+  const readRoutes = typeof routeReader === 'function'
+    ? routeReader
+    : readRoutesInPhysicalOrder_;
+  const routeRows = readRoutes();
+
+  if (!Array.isArray(routeRows)) {
+    throw new Error('Calendar route source did not return an array.');
+  }
+
   const plans = [];
 
-  readRoutesInPhysicalOrder_().forEach(row => {
+  routeRows.forEach(row => {
     const parsed = parseLayer_(row.layer);
     const firstDate = firstOccurrenceForLayer_(
       parsed,
