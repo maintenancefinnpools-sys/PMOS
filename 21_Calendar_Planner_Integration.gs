@@ -3,13 +3,12 @@
  *
  * This orchestration layer reads the existing desired plan and registry, builds
  * the immutable Calendar Sync plan, validates it, and exposes a legacy-shaped
- * preview. It performs no Calendar writes.
+ * preview. It performs no Calendar or customer-data writes.
  */
 
 /** Builds and validates the current immutable Calendar Sync plan. */
 function buildValidatedPmosCalendarSyncPlan_() {
   ensureSupportSheets_();
-  synchronizeCustomerDatabase_(true);
   ensureRecurringSeriesRegistry_();
 
   const settings = getRecurringCalendarSettings_();
