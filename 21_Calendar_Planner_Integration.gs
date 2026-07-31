@@ -3,17 +3,14 @@
  *
  * This orchestration layer reads the existing desired plan and registry, builds
  * the immutable Calendar Sync plan, validates it, and exposes a legacy-shaped
- * preview. It performs no Calendar or customer-data writes.
+ * preview. It performs no Calendar, spreadsheet, property, or trigger writes.
  */
 
 /** Builds and validates the current immutable Calendar Sync plan. */
 function buildValidatedPmosCalendarSyncPlan_() {
-  ensureSupportSheets_();
-  ensureRecurringSeriesRegistry_();
-
   const settings = getRecurringCalendarSettings_();
   const desiredSeries = buildRecurringSeriesPlan_();
-  const currentRegistry = getSeriesRegistry_();
+  const currentRegistry = readExistingPmosCalendarRegistry_();
 
   const plan = buildPmosCalendarSyncPlan(desiredSeries, currentRegistry, {
     calendarName: settings.calendarName,
@@ -37,6 +34,79 @@ function buildValidatedPmosCalendarSyncPlan_() {
     canExecute: validation.executable && plannerErrors.length === 0,
     plannerErrorCount: plannerErrors.length
   });
+}
+
+/**
+ * Reads the active Calendar Series Registry without creating or repairing it.
+ * Initialization and repair belong to explicit maintenance workflows.
+ */
+function readExistingPmosCalendarRegistry_() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  const sheet = spreadsheet && spreadsheet.getSheetByName('Calendar Series Registry');
+
+  if (!sheet) {
+    throw new Error(
+      'Calendar Series Registry is missing. Run Initialize PMOS or Update PMOS before previewing Calendar Sync.'
+    );
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) {
+    throw new Error(
+      'Calendar Series Registry is empty. Run Update PMOS to repair its structure before previewing Calendar Sync.'
+    );
+  }
+
+  const expectedHeaders = [
+    'Series Key',
+    'Customer ID',
+    'Layer',
+    'Series ID',
+    'Calendar Name',
+    'Signature',
+    'Last Sync',
+    'Status',
+    'Error'
+  ];
+  const actualHeaders = values[0].map(function (value) {
+    return String(value || '').trim();
+  });
+  const missingHeaders = expectedHeaders.filter(function (header) {
+    return actualHeaders.indexOf(header) < 0;
+  });
+
+  if (missingHeaders.length) {
+    throw new Error(
+      'Calendar Series Registry is missing required columns: ' +
+      missingHeaders.join(', ') +
+      '. Run Update PMOS before previewing Calendar Sync.'
+    );
+  }
+
+  const column = {};
+  expectedHeaders.forEach(function (header) {
+    column[header] = actualHeaders.indexOf(header);
+  });
+
+  const registry = {};
+  values.slice(1).forEach(function (row, index) {
+    const seriesKey = String(row[column['Series Key']] || '').trim();
+    if (!seriesKey) return;
+
+    registry[seriesKey] = {
+      row: index + 2,
+      seriesKey: seriesKey,
+      customerId: String(row[column['Customer ID']] || ''),
+      layer: String(row[column.Layer] || ''),
+      seriesId: String(row[column['Series ID']] || ''),
+      calendarName: String(row[column['Calendar Name']] || ''),
+      signature: String(row[column.Signature] || ''),
+      status: String(row[column.Status] || ''),
+      error: String(row[column.Error] || '')
+    };
+  });
+
+  return registry;
 }
 
 /**
