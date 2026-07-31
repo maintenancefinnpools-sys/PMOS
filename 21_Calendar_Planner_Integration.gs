@@ -3,13 +3,13 @@
  *
  * This orchestration layer reads the existing desired plan and registry, builds
  * the immutable Calendar Sync plan, validates it, and exposes a legacy-shaped
- * preview. It performs no Calendar, spreadsheet, property, or trigger writes.
+ * preview. It performs no Calendar, customer-data, or support-structure writes.
  */
 
 /** Builds and validates the current immutable Calendar Sync plan. */
 function buildValidatedPmosCalendarSyncPlan_() {
   const settings = getRecurringCalendarSettings_();
-  const desiredSeries = buildRecurringSeriesPlan_();
+  const desiredSeries = buildRecurringSeriesPlan_(readExistingPmosCalendarRoutes_);
   const currentRegistry = readExistingPmosCalendarRegistry_();
 
   const plan = buildPmosCalendarSyncPlan(desiredSeries, currentRegistry, {
@@ -37,72 +37,180 @@ function buildValidatedPmosCalendarSyncPlan_() {
 }
 
 /**
- * Reads the active Calendar Series Registry without creating or repairing it.
- * Initialization and repair belong to explicit maintenance workflows.
+ * Reads the current route-template and customer data without assigning IDs,
+ * adding columns, normalizing rows, or synchronizing either source sheet.
  */
-function readExistingPmosCalendarRegistry_() {
+function readExistingPmosCalendarRoutes_() {
   const spreadsheet = SpreadsheetApp.getActive();
-  const sheet = spreadsheet && spreadsheet.getSheetByName('Calendar Series Registry');
+  const routeSheet = spreadsheet.getSheetByName(PMOS.ROUTES_SHEET);
+  const customerSheet = spreadsheet.getSheetByName(PMOS.CUSTOMERS_SHEET);
 
+  if (!routeSheet) {
+    throw new Error('Missing required route source sheet: ' + PMOS.ROUTES_SHEET + '.');
+  }
+  if (!customerSheet) {
+    throw new Error('Missing required customer source sheet: ' + PMOS.CUSTOMERS_SHEET + '.');
+  }
+
+  const routeValues = routeSheet.getDataRange().getValues();
+  const customerValues = customerSheet.getDataRange().getValues();
+
+  if (!routeValues.length || !routeValues[0].length) {
+    throw new Error(PMOS.ROUTES_SHEET + ' has no header row.');
+  }
+  if (!customerValues.length || !customerValues[0].length) {
+    throw new Error(PMOS.CUSTOMERS_SHEET + ' has no header row.');
+  }
+
+  const routeHeaders = routeValues[0].map(function (value) {
+    return String(value || '').trim();
+  });
+  const customerHeaders = customerValues[0].map(function (value) {
+    return String(value || '').trim();
+  });
+
+  const requiredRouteHeaders = [
+    'Layer',
+    'Stop Order',
+    'Calendar Title'
+  ];
+  const missingRouteHeaders = requiredRouteHeaders.filter(function (header) {
+    return routeHeaders.indexOf(header) < 0;
+  });
+
+  if (missingRouteHeaders.length) {
+    throw new Error(
+      PMOS.ROUTES_SHEET + ' is missing required column(s): ' +
+      missingRouteHeaders.join(', ') + '.'
+    );
+  }
+
+  const customerList = [];
+  const customersById = {};
+  const customersByTitle = {};
+
+  customerValues.slice(1).forEach(function (row) {
+    if (!row.some(function (value) { return value !== '' && value != null; })) return;
+
+    const customer = {};
+    customerHeaders.forEach(function (header, index) {
+      customer[header] = row[index];
+    });
+
+    const customerId = String(customer['Customer ID'] || '').trim();
+    const title = String(customer['Calendar Title'] || '').trim();
+    const fullName = String(customer['Full Name(s)'] || '').trim();
+
+    if (!title && !fullName) return;
+
+    customerList.push(customer);
+    if (customerId) customersById[customerId] = customer;
+    if (title) customersByTitle[normalize_(title)] = customer;
+  });
+
+  return routeValues.slice(1)
+    .filter(function (row) {
+      return row.some(function (value) { return value !== '' && value != null; });
+    })
+    .map(function (row) {
+      const route = {};
+      routeHeaders.forEach(function (header, index) {
+        route[header] = row[index];
+      });
+
+      const routeTitle = String(route['Calendar Title'] || '').trim();
+      const routeId = String(route['Customer ID'] || '').trim();
+      const customer = customersById[routeId] ||
+        customersByTitle[normalize_(routeTitle)] ||
+        {};
+
+      const customerId = String(customer['Customer ID'] || routeId).trim();
+      const title = String(customer['Calendar Title'] || routeTitle).trim();
+
+      return {
+        key: customerId || title,
+        customerId: customerId,
+        layer: String(route['Layer'] || '').trim(),
+        order: Number(route['Stop Order'] || 0),
+        title: title,
+        fullName: String(customer['Full Name(s)'] || route['Full Name(s)'] || title),
+        address: String(customer['Full Address'] || route['Full Address'] || ''),
+        frequency: String(customer['Frequency'] || route['Frequency'] || ''),
+        entry: buildCustomerEntryInformation_(customer) ||
+          String(route['Entry Information'] || ''),
+        notes: String(customer['Customer Notes'] || route['Customer Notes'] || ''),
+        phone: String(customer['Primary Phone'] || ''),
+        secondaryPhone: String(customer['Secondary Phone'] || ''),
+        email: String(customer['Email'] || ''),
+        sanitization: String(customer['Sanitization Type(s)'] || ''),
+        automation: String(customer['Automation'] || ''),
+        yearRound: normalize_(customer['Year Round'] || customer['Season'] || '').includes('year round') ||
+          normalize_(customer['Year Round'] || '') === 'yes'
+      };
+    })
+    .filter(function (row) {
+      return row.layer && row.title;
+    });
+}
+
+/** Reads the existing Calendar Series Registry without creating or repairing it. */
+function readExistingPmosCalendarRegistry_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName('Calendar Series Registry');
   if (!sheet) {
     throw new Error(
-      'Calendar Series Registry is missing. Run Initialize PMOS or Update PMOS before previewing Calendar Sync.'
+      'Missing Calendar Series Registry. Run Initialize PMOS or Update PMOS before previewing Calendar Sync.'
     );
   }
 
   const values = sheet.getDataRange().getValues();
   if (!values.length) {
     throw new Error(
-      'Calendar Series Registry is empty. Run Update PMOS to repair its structure before previewing Calendar Sync.'
+      'Calendar Series Registry has no header row. Run Update PMOS to repair support structures.'
     );
   }
 
-  const expectedHeaders = [
+  const headers = values[0].map(function (value) {
+    return String(value || '').trim();
+  });
+  const requiredHeaders = [
     'Series Key',
     'Customer ID',
     'Layer',
     'Series ID',
     'Calendar Name',
     'Signature',
-    'Last Sync',
-    'Status',
-    'Error'
+    'Status'
   ];
-  const actualHeaders = values[0].map(function (value) {
-    return String(value || '').trim();
-  });
-  const missingHeaders = expectedHeaders.filter(function (header) {
-    return actualHeaders.indexOf(header) < 0;
+  const missingHeaders = requiredHeaders.filter(function (header) {
+    return headers.indexOf(header) < 0;
   });
 
   if (missingHeaders.length) {
     throw new Error(
-      'Calendar Series Registry is missing required columns: ' +
-      missingHeaders.join(', ') +
-      '. Run Update PMOS before previewing Calendar Sync.'
+      'Calendar Series Registry is missing required column(s): ' +
+      missingHeaders.join(', ') + '. Run Update PMOS to repair support structures.'
     );
   }
 
-  const column = {};
-  expectedHeaders.forEach(function (header) {
-    column[header] = actualHeaders.indexOf(header);
+  const indexes = {};
+  headers.forEach(function (header, index) {
+    indexes[header] = index;
   });
 
   const registry = {};
   values.slice(1).forEach(function (row, index) {
-    const seriesKey = String(row[column['Series Key']] || '').trim();
+    const seriesKey = String(row[indexes['Series Key']] || '').trim();
     if (!seriesKey) return;
 
     registry[seriesKey] = {
       row: index + 2,
       seriesKey: seriesKey,
-      customerId: String(row[column['Customer ID']] || ''),
-      layer: String(row[column.Layer] || ''),
-      seriesId: String(row[column['Series ID']] || ''),
-      calendarName: String(row[column['Calendar Name']] || ''),
-      signature: String(row[column.Signature] || ''),
-      status: String(row[column.Status] || ''),
-      error: String(row[column.Error] || '')
+      customerId: String(row[indexes['Customer ID']] || ''),
+      layer: String(row[indexes.Layer] || ''),
+      seriesId: String(row[indexes['Series ID']] || ''),
+      calendarName: String(row[indexes['Calendar Name']] || ''),
+      signature: String(row[indexes.Signature] || ''),
+      status: String(row[indexes.Status] || '')
     };
   });
 
