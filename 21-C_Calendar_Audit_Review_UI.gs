@@ -2,8 +2,8 @@
  * Calendar Plan Audit review UI.
  *
  * The audit remains read-only. These windows open only after the audit and let
- * the user inspect findings. Deletion decisions are saved only after an
- * explicit approval of the selected items.
+ * the user inspect findings. Writes occur only through explicit correction or
+ * deletion-approval actions.
  */
 
 const PMOS_CALENDAR_REVIEW_SHEET = 'Calendar Review Decisions';
@@ -12,27 +12,143 @@ const PMOS_CALENDAR_REVIEW_HEADERS = [
   'Calendar Event ID', 'Title', 'Details', 'Updated At'
 ];
 
+function showCalendarAuditErrorsReview() {
+  return showPmosCalendarAuditIssueReview_('ERROR');
+}
+
+function showCalendarAuditWarningsReview() {
+  return showPmosCalendarAuditIssueReview_('WARNING');
+}
+
+/** Compatibility entry retained for older callers. */
 function showCalendarAuditIssuesReview() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  const items = audit.issues || [];
+  return audit.errorCount
+    ? showPmosCalendarAuditIssueReview_('ERROR')
+    : showPmosCalendarAuditIssueReview_('WARNING');
+}
+
+function showPmosCalendarAuditIssueReview_(severity) {
+  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  const normalized = String(severity || '').toUpperCase();
+  const items = normalized === 'ERROR' ? (audit.errors || []) : (audit.warnings || []);
+  const title = normalized === 'ERROR' ? 'Calendar Audit Errors' : 'Calendar Audit Warnings';
+  const emptyText = normalized === 'ERROR'
+    ? 'No blocking Calendar audit errors require attention.'
+    : 'No Calendar audit warnings require review.';
+
   const body = items.length
-    ? items.map(function (item) {
-        return '<div class="item ' + escapePmosAuditReviewHtml_(item.severity.toLowerCase()) + '">' +
-          '<div class="heading">' + escapePmosAuditReviewHtml_(item.severity + ' — ' + item.title) + '</div>' +
+    ? items.map(function (item, index) {
+        const resolution = item.resolution || {};
+        const deletion = item.reviewType === 'DELETION_CANDIDATE';
+        const actions = [];
+        if (resolution.type && resolution.type !== 'NONE') {
+          actions.push(
+            '<button class="guided" data-label="' + escapePmosAuditReviewHtml_(resolution.label) + '" ' +
+            'onclick="runResolution(this,' + index + ')">' +
+            escapePmosAuditReviewHtml_(resolution.label) + '</button>'
+          );
+        }
+        if (deletion) {
+          actions.push(
+            '<button class="delete" data-label="Approve This Deletion" ' +
+            'onclick="approveDeletion(this,' + index + ')">Approve This Deletion</button>'
+          );
+        }
+
+        return '<div class="item ' + escapePmosAuditReviewHtml_(normalized.toLowerCase()) + '">' +
+          '<div class="heading">' + escapePmosAuditReviewHtml_(item.title) + '</div>' +
           '<div class="details">' + escapePmosAuditReviewHtml_(item.details) + '</div>' +
           (item.layer ? '<div class="meta">Route: ' + escapePmosAuditReviewHtml_(item.layer) + '</div>' : '') +
           (item.seriesKey ? '<div class="meta">Series: ' + escapePmosAuditReviewHtml_(item.seriesKey) + '</div>' : '') +
+          (resolution.explanation ? '<div class="recommendation">' + escapePmosAuditReviewHtml_(resolution.explanation) + '</div>' : '') +
+          (actions.length ? '<div class="row-actions">' + actions.join('') + '</div>' : '') +
+          '<div class="action-status" id="action-status-' + index + '"></div>' +
           '</div>';
       }).join('')
-    : '<div class="empty">No errors or warnings require review.</div>';
+    : '<div class="empty">' + escapePmosAuditReviewHtml_(emptyText) + '</div>';
+
+  const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
+  const script = '<script>' +
+    'var issues=' + itemJson + ';' +
+    'function status(i,text){document.getElementById("action-status-"+i).textContent=text||"";}' +
+    'function startButton(button,text){button.disabled=true;button.classList.add("opening");button.textContent=text;}' +
+    'function resetButton(button){button.disabled=false;button.classList.remove("opening");button.textContent=button.getAttribute("data-label");}' +
+    'function runResolution(button,i){var issue=issues[i],resolution=issue.resolution||{};startButton(button,"Opening "+(resolution.label||"action")+"…");status(i,"Opening…");' +
+      'google.script.run.withSuccessHandler(function(result){button.textContent="Opened";status(i,result&&result.message?result.message:"Opened successfully.");setTimeout(function(){resetButton(button);},800);})' +
+      '.withFailureHandler(function(e){resetButton(button);status(i,e&&e.message?e.message:String(e));})' +
+      '.performPmosCalendarAuditResolution(resolution.type,issue);}' +
+    'function approveDeletion(button,i){var issue=issues[i];if(!confirm("Approve deletion of this recurring Calendar series?"))return;startButton(button,"Approving…");status(i,"Saving deletion approval…");' +
+      'google.script.run.withSuccessHandler(function(){button.textContent="Approved";status(i,"Deletion approved. Run Calendar Plan Audit again before syncing.");})' +
+      '.withFailureHandler(function(e){resetButton(button);status(i,e&&e.message?e.message:String(e));})' +
+      '.approveSinglePmosCalendarDeletion(' + JSON.stringify(audit.planId) + ',issue);}' +
+    '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Calendar Audit Findings', body,
-    '<button onclick="google.script.host.close()">Close</button>'
-  )).setWidth(760).setHeight(650);
+    title,
+    body,
+    '<button onclick="google.script.host.close()">Close</button>',
+    script
+  )).setWidth(800).setHeight(690);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'Calendar Audit Findings');
-  return { count: items.length, planId: audit.planId };
+  SpreadsheetApp.getUi().showModalDialog(html, title);
+  return { count: items.length, planId: audit.planId, severity: normalized };
+}
+
+function performPmosCalendarAuditResolution(resolutionType, issue) {
+  const type = String(resolutionType || '').toUpperCase();
+  if (type === 'DELETIONS') {
+    showCalendarDeletionReview();
+    return { opened: true, message: 'Suggested Deletions opened.' };
+  }
+  if (type === 'CUSTOMER_SYNC') {
+    openPmosJobEngine('CUSTOMER_SYNC');
+    return { opened: true, message: 'Customer Database Sync opened.' };
+  }
+  if (type === 'UPDATE_PMOS') {
+    showUpdateCenter();
+    return { opened: true, message: 'Update PMOS opened.' };
+  }
+  if (type === 'TRANSACTION_RECOVERY') {
+    showCalendarTransactionRecoveryReview();
+    return { opened: true, message: 'Transaction Recovery Review opened.' };
+  }
+  if (type === 'ROUTES_SHEET') {
+    return activatePmosAuditSourceSheet_(PMOS.ROUTES_SHEET, issue);
+  }
+  if (type === 'SETTINGS_SHEET') {
+    return activatePmosAuditSourceSheet_(PMOS.SETTINGS_SHEET, issue);
+  }
+  throw new Error('No guided correction action is available for this issue.');
+}
+
+function activatePmosAuditSourceSheet_(sheetName, issue) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(String(sheetName || ''));
+  if (!sheet) throw new Error('Required sheet was not found: ' + sheetName + '.');
+  sheet.activate();
+  return {
+    opened: true,
+    message: String(sheetName) + ' selected. Close this review window to edit it.',
+    issueId: String(issue && issue.id || '')
+  };
+}
+
+function approveSinglePmosCalendarDeletion(planId, item) {
+  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  if (String(planId || '') !== String(audit.planId || '')) {
+    throw new Error('Calendar data changed. Run Calendar Plan Audit again before approving deletions.');
+  }
+  const key = String(item && item.seriesKey || '');
+  const candidate = (audit.deletionCandidates || []).find(function (entry) {
+    return String(entry.seriesKey || '') === key;
+  });
+  if (!candidate) throw new Error('This series is not a current deletion candidate.');
+  return savePmosCalendarReviewDecision(
+    audit.planId,
+    'DELETION_CANDIDATE',
+    'DELETE',
+    candidate
+  );
 }
 
 function showCalendarDeletionReview() {
@@ -66,27 +182,31 @@ function showCalendarDeletionReview() {
 
   const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<span id="selectionCount">0 selected</span>' +
-      '<button class="delete" onclick="approveSelected()">Approve selected deletions</button>' +
+    ? '<button class="secondary" onclick="selectAll(true)">Select all</button>' +
+      '<button class="secondary" onclick="selectAll(false)">Clear all</button>' +
+      '<span id="selectionCount">0 selected</span>' +
+      '<button id="approveButton" class="delete" onclick="approveSelected(this)">Approve selected deletions</button>' +
       '<button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
     'var candidates=' + itemJson + ';' +
-    'function selectedIndexes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check:checked")).map(function(x){return Number(x.getAttribute("data-index"));});}' +
+    'function boxes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check"));}' +
+    'function selectedIndexes(){return boxes().filter(function(x){return x.checked;}).map(function(x){return Number(x.getAttribute("data-index"));});}' +
     'function updateCount(){var n=selectedIndexes().length;document.getElementById("selectionCount").textContent=n+" selected";}' +
-    'Array.prototype.forEach.call(document.querySelectorAll(".delete-check"),function(x){x.addEventListener("change",updateCount);});updateCount();' +
-    'function approveSelected(){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
+    'function selectAll(value){boxes().forEach(function(x){x.checked=value;});updateCount();}' +
+    'boxes().forEach(function(x){x.addEventListener("change",updateCount);});updateCount();' +
+    'function approveSelected(button){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
       'if(!confirm("Approve deletion of "+indexes.length+" selected recurring Calendar series?"))return;' +
-      'var button=event.target;button.disabled=true;button.textContent="Saving…";' +
-      'var items=indexes.map(function(i){return candidates[i];});' +
-      'google.script.run.withSuccessHandler(function(){button.textContent="Approved";setTimeout(function(){google.script.host.close();},500);})' +
-      '.withFailureHandler(function(e){button.disabled=false;button.textContent="Approve selected deletions";alert(e&&e.message?e.message:String(e));})' +
-      '.saveSelectedPmosCalendarDeletions(' + JSON.stringify(audit.planId) + ',items);}' +
+      'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
+      'var selectedItems=indexes.map(function(i){return candidates[i];});' +
+      'google.script.run.withSuccessHandler(function(result){button.textContent="Approved "+String(result.approvedCount||0);setTimeout(function(){google.script.host.close();},700);})' +
+      '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve selected deletions";alert(e&&e.message?e.message:String(e));})' +
+      '.saveSelectedPmosCalendarDeletions(' + JSON.stringify(audit.planId) + ',selectedItems);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
     'Suggested Calendar Deletions', body, footer, script
-  )).setWidth(780).setHeight(680);
+  )).setWidth(800).setHeight(700);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Calendar Deletions');
   return { count: items.length, planId: audit.planId };
@@ -106,7 +226,9 @@ function saveSelectedPmosCalendarDeletions(planId, selectedItems) {
   const selectedKeys = {};
   (selectedItems || []).forEach(function (item) {
     const key = String(item && item.seriesKey || '');
-    if (!key || !candidates[key]) throw new Error('A selected deletion is not part of the current audited plan.');
+    if (!key || !candidates[key]) {
+      throw new Error('A selected deletion is not part of the current audited plan.');
+    }
     selectedKeys[key] = true;
   });
 
@@ -142,7 +264,10 @@ function savePmosCalendarReviewDecision(planId, reviewType, decision, item) {
   const values = sheet.getDataRange().getValues();
   let rowNumber = 0;
   for (let index = 1; index < values.length; index++) {
-    if (String(values[index][0] || '') === reviewKey) { rowNumber = index + 1; break; }
+    if (String(values[index][0] || '') === reviewKey) {
+      rowNumber = index + 1;
+      break;
+    }
   }
 
   const row = [
@@ -199,11 +324,14 @@ function buildPmosAuditReviewHtml_(title, body, footer, extraScript) {
     'body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;background:#f8fafc}' +
     'h2{margin:0 0 14px}.instructions{padding:10px 12px;background:#dbeafe;color:#1e3a8a;border-radius:8px;margin-bottom:12px}' +
     '.item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}' +
-    '.selectable{display:grid;grid-template-columns:24px 1fr;gap:10px;cursor:pointer}.selectable input{margin-top:3px}' +
-    '.selectable span{display:block}.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
+    '.selectable{display:grid;grid-template-columns:24px 1fr;gap:10px;cursor:pointer}.selectable input{margin-top:3px}.selectable span{display:block}' +
+    '.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
     '.heading{font-weight:700}.details{margin-top:6px;white-space:pre-wrap}.meta{margin-top:5px;color:#64748b;font-size:12px}' +
-    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.delete{background:#fee2e2;color:#991b1b}' +
-    '.footer{position:sticky;bottom:0;background:#f8fafc;padding-top:12px;display:flex;gap:8px;align-items:center}.footer span{margin-right:auto}.empty{padding:16px;background:#fff;border-radius:10px}' +
+    '.recommendation{margin-top:9px;padding:8px 10px;background:#eff6ff;color:#1e3a8a;border-radius:7px;font-size:13px}' +
+    '.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.action-status{margin-top:7px;font-size:12px;font-weight:700;color:#475569}' +
+    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.guided{background:#dbeafe;color:#1e3a8a}.secondary{background:#e2e8f0;color:#1f2937}.delete{background:#fee2e2;color:#991b1b}.opening{background:#1d4ed8!important;color:#fff!important}' +
+    '.footer{position:sticky;bottom:0;background:#f8fafc;padding-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.footer span{margin-right:auto}.empty{padding:16px;background:#fff;border-radius:10px}' +
+    'button:disabled{opacity:.7;cursor:default}' +
     '</style></head><body><h2>' + escapePmosAuditReviewHtml_(title) + '</h2>' + body +
     '<div class="footer">' + footer + '</div>' + (extraScript || '') + '</body></html>';
 }
