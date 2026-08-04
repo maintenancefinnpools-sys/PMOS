@@ -1,12 +1,20 @@
 /**
  * Safe Calendar Sync Job Center entry.
  *
- * Initializes the existing shared runtime Job Engine only after the verified,
- * read-only Calendar Plan Audit succeeds. This deliberately bypasses the older
- * Calendar-specific auto-continue engine.
+ * Initializes the existing shared runtime Job Engine only after incomplete
+ * Calendar transactions are reconciled and the verified, read-only Calendar
+ * Plan Audit succeeds. This deliberately bypasses the older Calendar-specific
+ * auto-continue engine.
  */
 function startVerifiedCalendarSyncJob(autoMode, options) {
   const calendarOptions = normalizeVerifiedCalendarSyncOptions_(options);
+
+  // Resolve any interrupted prior operation before accepting a new audit.
+  // Deterministic completions may repair registry bookkeeping. Operations that
+  // were never applied remain safe to retry through the idempotent queue.
+  const recovery = recoverPmosCalendarRegistryTransactions_();
+  assertNoAmbiguousPmosCalendarRecovery_(recovery);
+
   const audit = runPmosCalendarPlanAuditReadOnly_(calendarOptions);
 
   if (!audit.canSync) {
@@ -54,6 +62,9 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
   state.calendarOptions = calendarOptions;
   state.auditedPlanId = requestedPlanId;
   state.auditedAt = audit.auditedAt || new Date().toISOString();
+  state.recoveryInspected = Number(recovery.inspected || 0);
+  state.recoveryFinalized = Number(recovery.finalized || 0);
+  state.recoveryRetryRequired = Number(recovery.retryRequired || 0);
   state.autoEnabled = Boolean(autoMode);
   state.pauseRequested = false;
   state.status = 'Ready';
