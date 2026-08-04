@@ -122,37 +122,36 @@ function executeCalendarSyncOperation_(state, operation) {
 
   if (action === PMOS_OPERATION.CREATE) {
     const plan = deserializeCanonicalCalendarSeries_(payload.desired);
-    const series = createRecurringSeries_(calendar, plan);
+    const recovered = findExistingPmosRecurringSeries_(calendar, plan, record);
+    const series = recovered || createRecurringSeries_(calendar, plan);
+
+    if (recovered) updateRecurringSeries_(series, plan);
+
     upsertSeriesRegistry_(
       plan,
       series.getId(),
       calendar.getName(),
       'Active'
     );
-    return { processed: 1, action: 'CREATE', title: plan.title };
+
+    return {
+      processed: 1,
+      action: recovered ? 'RECOVER' : 'CREATE',
+      title: plan.title
+    };
   }
 
   if (action === PMOS_OPERATION.UPDATE) {
     const plan = deserializeCanonicalCalendarSeries_(payload.desired);
-    let series = null;
-
-    if (record && record.seriesId) {
-      try {
-        series = calendar.getEventSeriesById(record.seriesId);
-      } catch (error) {
-        console.warn(
-          'Could not reload recurring series ' + record.seriesId + ': ' + error
-        );
-      }
-    }
-
+    const series = findExistingPmosRecurringSeries_(calendar, plan, record);
     const performedAction = series ? 'UPDATE' : 'CREATE';
+    const finalSeries = series || createRecurringSeries_(calendar, plan);
+
     if (series) updateRecurringSeries_(series, plan);
-    else series = createRecurringSeries_(calendar, plan);
 
     upsertSeriesRegistry_(
       plan,
-      series.getId(),
+      finalSeries.getId(),
       calendar.getName(),
       'Active'
     );
@@ -175,18 +174,74 @@ function executeCalendarSyncOperation_(state, operation) {
       throw new Error('Approved Calendar deletion is missing its verified series ID.');
     }
 
-    const series = calendar.getEventSeriesById(approvedSeriesId);
+    let series = null;
+    try {
+      series = calendar.getEventSeriesById(approvedSeriesId);
+    } catch (error) {
+      series = null;
+    }
+
     if (series) series.deleteEventSeries();
     deleteSeriesRegistryRow_(seriesKey);
 
     return {
       processed: 1,
-      action: 'DELETE',
+      action: series ? 'DELETE' : 'DELETE_ALREADY_APPLIED',
       title: String(current.title || seriesKey)
     };
   }
 
   throw new Error('Unsupported Calendar Sync operation: ' + (action || '(blank)') + '.');
+}
+
+function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
+  const fromRegistry = readPmosRecurringSeriesById_(
+    calendar,
+    registryRecord && registryRecord.seriesId
+  );
+  if (fromRegistry) return fromRegistry;
+
+  const searchStart = new Date(plan.start.getTime());
+  searchStart.setDate(searchStart.getDate() - 1);
+  searchStart.setHours(0, 0, 0, 0);
+
+  const searchEnd = new Date(plan.start.getTime());
+  searchEnd.setDate(searchEnd.getDate() + 35);
+  searchEnd.setHours(23, 59, 59, 999);
+
+  const matchesBySeriesId = {};
+  calendar.getEvents(searchStart, searchEnd).forEach(function (event) {
+    if (!event.isRecurringEvent()) return;
+
+    const metadata = parsePmosCalendarMetadata_(event.getDescription());
+    if (String(metadata.PMOS_SERIES_KEY || '') !== String(plan.seriesKey || '')) return;
+
+    const seriesId = readPmosCalendarEventSeriesId_(event);
+    if (!seriesId) return;
+    matchesBySeriesId[seriesId] = true;
+  });
+
+  const seriesIds = Object.keys(matchesBySeriesId);
+  if (seriesIds.length > 1) {
+    throw new Error(
+      'More than one recurring Calendar series has PMOS series key ' +
+      plan.seriesKey + '. Resolve the duplicate before Calendar Sync continues.'
+    );
+  }
+  if (!seriesIds.length) return null;
+
+  return readPmosRecurringSeriesById_(calendar, seriesIds[0]);
+}
+
+function readPmosRecurringSeriesById_(calendar, seriesId) {
+  const id = String(seriesId || '').trim();
+  if (!id) return null;
+
+  try {
+    return calendar.getEventSeriesById(id) || null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function summarizeCalendarSyncOperation_(state, operation, result, remaining) {
