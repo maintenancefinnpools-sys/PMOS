@@ -22,15 +22,6 @@ const PMOS_JOB_QUEUE_HEADERS = [
   'Last Error'
 ];
 
-/**
- * Dispatches exactly one operation for the current job.
- *
- * Provider contract:
- *   initialize(state): optional; creates durable queue rows once
- *   execute(state, operation): required; executes one safe operation
- *   summarize(state, operation, result): optional
- *   finalize(state): optional; runs once after the queue is exhausted
- */
 function executeNextJobOperation_(state) {
   state = state || readPmosJobState_();
   if (!state || !state.type) throw new Error('No active PMOS job.');
@@ -43,9 +34,7 @@ function executeNextJobOperation_(state) {
   ensurePmosJobOperationQueueSheet_();
 
   if (!state.operationQueueInitialized) {
-    if (typeof provider.initialize === 'function') {
-      provider.initialize(state);
-    }
+    if (typeof provider.initialize === 'function') provider.initialize(state);
     state.operationQueueInitialized = true;
     state.operationQueueInitializedAt = new Date().toISOString();
     writePmosJobState_(state);
@@ -53,16 +42,7 @@ function executeNextJobOperation_(state) {
 
   const operation = claimNextPmosJobOperation_(state.id, state.type);
   if (!operation) {
-    const failed = readFailedPmosJobOperations_(state.id, state.type);
-    if (failed.length) {
-      const first = failed[0];
-      throw new Error(
-        failed.length + ' job operation(s) failed after ' +
-        PMOS_JOB_OPERATION_MAX_ATTEMPTS + ' attempts. First failed operation: ' +
-        String(first.operationType || 'operation') + ' at queue row ' +
-        first.rowNumber + '. Review the Job Operation Queue and resolve the error before retrying.'
-      );
-    }
+    assertNoFailedPmosJobOperations_(state.id, state.type);
 
     if (!state.operationProviderFinalized && typeof provider.finalize === 'function') {
       provider.finalize(state);
@@ -88,6 +68,8 @@ function executeNextJobOperation_(state) {
   }
 
   const remaining = countPendingPmosJobOperations_(state.id, state.type);
+  if (remaining === 0) assertNoFailedPmosJobOperations_(state.id, state.type);
+
   const summary = typeof provider.summarize === 'function'
     ? provider.summarize(state, operation, result, remaining)
     : String(result.summary || operation.operationType + ' complete.');
@@ -101,28 +83,33 @@ function executeNextJobOperation_(state) {
   };
 }
 
-/**
- * Provider registry. Calendar-specific providers are added separately so this
- * core file remains independent of Calendar implementation details.
- */
+function assertNoFailedPmosJobOperations_(jobId, jobType) {
+  const failed = readFailedPmosJobOperations_(jobId, jobType);
+  if (!failed.length) return;
+
+  const first = failed[0];
+  throw new Error(
+    failed.length + ' job operation(s) failed after ' +
+    PMOS_JOB_OPERATION_MAX_ATTEMPTS + ' attempts. First failed operation: ' +
+    String(first.operationType || 'operation') + ' at queue row ' +
+    first.rowNumber + '. Review the Job Operation Queue and resolve the error before retrying.'
+  );
+}
+
 function getPmosJobOperationProvider_(type) {
   const providers = {};
-
   if (typeof getCalendarSyncOperationProvider_ === 'function') {
     providers.CALENDAR_SYNC = getCalendarSyncOperationProvider_();
   }
-
   if (typeof getReconcileCalendarOperationProvider_ === 'function') {
     providers.RECONCILE_FUTURE = getReconcileCalendarOperationProvider_();
   }
-
   return providers[String(type || '')] || null;
 }
 
 function ensurePmosJobOperationQueueSheet_() {
   const ss = SpreadsheetApp.getActive();
   let sheet = ss.getSheetByName(PMOS_JOB_QUEUE_SHEET);
-
   if (!sheet) {
     sheet = ss.insertSheet(PMOS_JOB_QUEUE_SHEET);
     sheet.getRange(1, 1, 1, PMOS_JOB_QUEUE_HEADERS.length)
@@ -135,14 +122,10 @@ function ensurePmosJobOperationQueueSheet_() {
   const current = sheet.getRange(1, 1, 1, PMOS_JOB_QUEUE_HEADERS.length)
     .getValues()[0]
     .map(function (value) { return String(value || '').trim(); });
-
   const valid = PMOS_JOB_QUEUE_HEADERS.every(function (header, index) {
     return current[index] === header;
   });
-  if (!valid) {
-    throw new Error(PMOS_JOB_QUEUE_SHEET + ' has an unexpected schema.');
-  }
-
+  if (!valid) throw new Error(PMOS_JOB_QUEUE_SHEET + ' has an unexpected schema.');
   if (!sheet.isSheetHidden()) sheet.hideSheet();
   return sheet;
 }
@@ -150,30 +133,20 @@ function ensurePmosJobOperationQueueSheet_() {
 function replacePmosJobOperationQueue_(jobId, jobType, operations) {
   const sheet = ensurePmosJobOperationQueueSheet_();
   deletePmosJobOperationQueue_(jobId);
-
   const now = new Date();
   const rows = (operations || []).map(function (operation, index) {
     const payload = operation.payload == null ? operation : operation.payload;
     const durablePayload = Object.assign({}, payload || {}, { __attempts: 0 });
     return [
-      String(jobId || ''),
-      index + 1,
-      String(jobType || ''),
-      String(operation.type || operation.operationType || ''),
-      'Pending',
-      JSON.stringify(durablePayload),
-      now,
-      '',
-      '',
-      ''
+      String(jobId || ''), index + 1, String(jobType || ''),
+      String(operation.type || operation.operationType || ''), 'Pending',
+      JSON.stringify(durablePayload), now, '', '', ''
     ];
   });
-
   if (rows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PMOS_JOB_QUEUE_HEADERS.length)
       .setValues(rows);
   }
-
   return rows.length;
 }
 
@@ -188,24 +161,15 @@ function appendPmosJobOperations_(jobId, jobType, operations) {
     const payload = operation.payload == null ? operation : operation.payload;
     const durablePayload = Object.assign({}, payload || {}, { __attempts: 0 });
     return [
-      String(jobId || ''),
-      startSequence + index + 1,
-      String(jobType || ''),
-      String(operation.type || operation.operationType || ''),
-      'Pending',
-      JSON.stringify(durablePayload),
-      now,
-      '',
-      '',
-      ''
+      String(jobId || ''), startSequence + index + 1, String(jobType || ''),
+      String(operation.type || operation.operationType || ''), 'Pending',
+      JSON.stringify(durablePayload), now, '', '', ''
     ];
   });
-
   if (rows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PMOS_JOB_QUEUE_HEADERS.length)
       .setValues(rows);
   }
-
   return rows.length;
 }
 
@@ -222,7 +186,6 @@ function claimNextPmosJobOperation_(jobId, jobType) {
       .sort(function (a, b) {
         return Number(a.values[1] || 0) - Number(b.values[1] || 0);
       });
-
     if (!rows.length) return null;
 
     const next = rows[0];
@@ -240,10 +203,7 @@ function claimNextPmosJobOperation_(jobId, jobType) {
     }
 
     sheet.getRange(next.rowNumber, 5, 1, 4).setValues([[
-      'Running',
-      next.values[5],
-      next.values[6],
-      new Date()
+      'Running', next.values[5], next.values[6], new Date()
     ]]);
 
     return {
@@ -270,7 +230,10 @@ function failPmosJobOperation_(rowNumber, operation, error) {
   const sheet = ensurePmosJobOperationQueueSheet_();
   const message = String(error && error.message ? error.message : error || 'Unknown error');
   const payload = Object.assign({}, operation && operation.payload || {});
-  const attempts = Math.max(0, Number(operation && operation.attempts || payload.__attempts || 0)) + 1;
+  const attempts = Math.max(
+    0,
+    Number(operation && operation.attempts || payload.__attempts || 0)
+  ) + 1;
   payload.__attempts = attempts;
 
   sheet.getRange(Number(rowNumber), 5).setValue(
@@ -315,19 +278,12 @@ function deletePmosJobOperationQueue_(jobId) {
 
 function readPmosJobQueueRows_(sheet, jobId, jobType) {
   if (sheet.getLastRow() < 2) return [];
-
   const values = sheet.getRange(
-    2,
-    1,
-    sheet.getLastRow() - 1,
-    PMOS_JOB_QUEUE_HEADERS.length
+    2, 1, sheet.getLastRow() - 1, PMOS_JOB_QUEUE_HEADERS.length
   ).getValues();
 
   return values.map(function (row, index) {
-    return {
-      rowNumber: index + 2,
-      values: row
-    };
+    return { rowNumber: index + 2, values: row };
   }).filter(function (record) {
     const matchesJob = String(record.values[0] || '') === String(jobId || '');
     const matchesType = !jobType || String(record.values[2] || '') === String(jobType);
