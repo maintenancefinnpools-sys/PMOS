@@ -74,6 +74,7 @@ function showPmosCalendarAuditIssueReview_(severity) {
     'function status(i,text){document.getElementById("action-status-"+i).textContent=text||"";}' +
     'function startButton(button,text){button.disabled=true;button.classList.add("opening");button.textContent=text;}' +
     'function resetButton(button){button.disabled=false;button.classList.remove("opening");button.textContent=button.getAttribute("data-label");}' +
+    'function returnToAudit(){google.script.run.withFailureHandler(function(e){alert(e&&e.message?e.message:String(e));}).showCalendarAuditTaskWindow();}' +
     'function runResolution(button,i){var issue=issues[i],resolution=issue.resolution||{};startButton(button,"Opening "+(resolution.label||"action")+"…");status(i,"Opening…");' +
       'google.script.run.withSuccessHandler(function(result){button.textContent="Opened";status(i,result&&result.message?result.message:"Opened successfully.");setTimeout(function(){resetButton(button);},800);})' +
       '.withFailureHandler(function(e){resetButton(button);status(i,e&&e.message?e.message:String(e));})' +
@@ -87,7 +88,7 @@ function showPmosCalendarAuditIssueReview_(severity) {
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
     title,
     body,
-    '<button onclick="google.script.host.close()">Close</button>',
+    '<button onclick="returnToAudit()">Close</button>',
     script
   )).setWidth(800).setHeight(690);
 
@@ -168,11 +169,8 @@ function showCalendarDeletionReview() {
 
   const body = items.length
     ? '<div class="instructions">All events are kept by default. Select only the recurring series that should be deleted.</div>' +
-      '<div class="selection-toolbar">' +
-        '<label class="selection-toggle" for="allDeletionsToggle">' +
-          '<input type="checkbox" id="allDeletionsToggle">' +
-          '<span id="allDeletionsLabel">Select all</span>' +
-        '</label>' +
+      '<div class="bulk-toolbar">' +
+        '<label class="bulk-toggle"><input type="checkbox" id="toggleAll"><span id="toggleAllLabel">Select all</span></label>' +
         '<span id="selectionCount">0 selected</span>' +
       '</div>' +
       items.map(function (item, index) {
@@ -190,22 +188,23 @@ function showCalendarDeletionReview() {
   const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
     ? '<button id="approveButton" class="delete" onclick="approveSelected(this)">Approve selected deletions</button>' +
-      '<button onclick="google.script.host.close()">Close</button>'
-    : '<button onclick="google.script.host.close()">Close</button>';
+      '<button onclick="returnToAudit()">Close</button>'
+    : '<button onclick="returnToAudit()">Close</button>';
   const script = '<script>' +
     'var candidates=' + itemJson + ';' +
     'function boxes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check"));}' +
     'function selectedIndexes(){return boxes().filter(function(x){return x.checked;}).map(function(x){return Number(x.getAttribute("data-index"));});}' +
-    'function updateSelectionToolbar(){var all=boxes(),n=selectedIndexes().length,total=all.length,toggle=document.getElementById("allDeletionsToggle"),label=document.getElementById("allDeletionsLabel"),count=document.getElementById("selectionCount");' +
-      'count.textContent=n+" selected";toggle.checked=total>0&&n===total;toggle.indeterminate=n>0&&n<total;label.textContent=toggle.checked?"Clear all":"Select all";}' +
-    'function toggleAll(){var toggle=document.getElementById("allDeletionsToggle"),shouldSelect=!toggle.checked||toggle.indeterminate;boxes().forEach(function(x){x.checked=shouldSelect;});updateSelectionToolbar();}' +
-    'boxes().forEach(function(x){x.addEventListener("change",updateSelectionToolbar);});' +
-    'document.getElementById("allDeletionsToggle").addEventListener("click",function(event){event.preventDefault();toggleAll();});updateSelectionToolbar();' +
+    'function allSelected(){var list=boxes();return list.length>0&&list.every(function(x){return x.checked;});}' +
+    'function updateBulkControl(){var list=boxes(),selected=selectedIndexes().length,control=document.getElementById("toggleAll"),label=document.getElementById("toggleAllLabel");if(!control||!label)return;var all=selected===list.length&&list.length>0;control.checked=all;control.indeterminate=selected>0&&!all;label.textContent=all?"Clear all":"Select all";document.getElementById("selectionCount").textContent=selected+" selected";}' +
+    'function toggleAll(event){event.preventDefault();var shouldSelect=!allSelected();boxes().forEach(function(x){x.checked=shouldSelect;});updateBulkControl();}' +
+    'function returnToAudit(){google.script.run.withFailureHandler(function(e){alert(e&&e.message?e.message:String(e));}).showCalendarAuditTaskWindow();}' +
+    'boxes().forEach(function(x){x.addEventListener("change",updateBulkControl);});' +
+    'var bulk=document.getElementById("toggleAll");if(bulk)bulk.addEventListener("click",toggleAll);updateBulkControl();' +
     'function approveSelected(button){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
       'if(!confirm("Approve deletion of "+indexes.length+" selected recurring Calendar series?"))return;' +
       'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
       'var selectedItems=indexes.map(function(i){return candidates[i];});' +
-      'google.script.run.withSuccessHandler(function(result){button.textContent="Approved "+String(result.approvedCount||0);setTimeout(function(){google.script.host.close();},700);})' +
+      'google.script.run.withSuccessHandler(function(result){button.textContent="Approved "+String(result.approvedCount||0);setTimeout(function(){returnToAudit();},700);})' +
       '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve selected deletions";alert(e&&e.message?e.message:String(e));})' +
       '.saveSelectedPmosCalendarDeletions(' + JSON.stringify(audit.planId) + ',selectedItems);}' +
     '</script>';
@@ -329,15 +328,15 @@ function buildPmosAuditReviewHtml_(title, body, footer, extraScript) {
   return '<!DOCTYPE html><html><head><base target="_top"><style>' +
     'body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;background:#f8fafc}' +
     'h2{margin:0 0 14px}.instructions{padding:10px 12px;background:#dbeafe;color:#1e3a8a;border-radius:8px;margin-bottom:12px}' +
-    '.selection-toolbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:10px 12px;margin:0 0 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;box-shadow:0 2px 5px rgba(15,23,42,.08)}' +
-    '.selection-toggle{display:flex;align-items:center;gap:7px;font-weight:700;cursor:pointer}.selection-toggle input{width:16px;height:16px;margin:0}.selection-toolbar #selectionCount{margin-left:auto;color:#475569;font-size:13px;font-weight:700}' +
+    '.bulk-toolbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 12px;margin:0 0 10px;background:#fff7d6;border:1px solid #e5b748;border-radius:9px;box-shadow:0 2px 6px rgba(15,23,42,.08)}' +
+    '.bulk-toggle{display:flex;align-items:center;gap:7px;font-weight:700;cursor:pointer}.bulk-toggle input{width:16px;height:16px}.bulk-toolbar #selectionCount{margin-left:auto;font-weight:700;color:#7c2d12}' +
     '.item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}' +
     '.selectable{display:grid;grid-template-columns:24px 1fr;gap:10px;cursor:pointer}.selectable input{margin-top:3px}.selectable span{display:block}' +
     '.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
     '.heading{font-weight:700}.details{margin-top:6px;white-space:pre-wrap}.meta{margin-top:5px;color:#64748b;font-size:12px}' +
     '.recommendation{margin-top:9px;padding:8px 10px;background:#eff6ff;color:#1e3a8a;border-radius:7px;font-size:13px}' +
     '.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.action-status{margin-top:7px;font-size:12px;font-weight:700;color:#475569}' +
-    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.guided{background:#dbeafe;color:#1e3a8a}.secondary{background:#e2e8f0;color:#1f2937}.delete{background:#fee2e2;color:#991b1b}.opening{background:#1d4ed8!important;color:#fff!important}' +
+    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.guided{background:#dbeafe;color:#1e3a8a}.secondary{background:#e2e8f0;color:#1f2937}.delete{background:#fee2e2;color:#991b1b}.opening{background:#b45309!important;color:#fff!important}' +
     '.footer{position:sticky;bottom:0;background:#f8fafc;padding-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.footer span{margin-right:auto}.empty{padding:16px;background:#fff;border-radius:10px}' +
     'button:disabled{opacity:.7;cursor:default}' +
     '</style></head><body><h2>' + escapePmosAuditReviewHtml_(title) + '</h2>' + body +
