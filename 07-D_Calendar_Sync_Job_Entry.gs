@@ -13,7 +13,14 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
   // Deterministic completions may repair registry bookkeeping. Operations that
   // were never applied remain safe to retry through the idempotent queue.
   const recovery = recoverPmosCalendarRegistryTransactions_();
-  assertNoAmbiguousPmosCalendarRecovery_(recovery);
+  try {
+    assertNoAmbiguousPmosCalendarRecovery_(recovery);
+  } catch (error) {
+    throw new Error(
+      String(error && error.message ? error.message : error) +
+      ' Open PMOS → Calendar → Transaction Recovery Review for details.'
+    );
+  }
 
   const audit = runPmosCalendarPlanAuditReadOnly_(calendarOptions);
 
