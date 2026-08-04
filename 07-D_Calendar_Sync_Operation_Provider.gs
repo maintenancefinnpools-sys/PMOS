@@ -28,6 +28,20 @@ function initializeCalendarSyncOperationQueue_(state) {
   }
 
   const plan = result.plan;
+  const auditedPlanId = String(state && state.auditedPlanId || '');
+  if (!auditedPlanId) {
+    throw new Error(
+      'Calendar Sync has no audited plan ID. Run Calendar Plan Audit again before starting.'
+    );
+  }
+  if (plan.id !== auditedPlanId) {
+    throw new Error(
+      'Calendar data changed after the Plan Audit. Expected plan ' +
+      auditedPlanId + ', but the current plan is ' + plan.id +
+      '. Run Calendar Plan Audit again before starting Calendar Sync.'
+    );
+  }
+
   const executable = plan.operations.filter(isPmosExecutableOperation);
 
   executable.forEach(function (operation) {
