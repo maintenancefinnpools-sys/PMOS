@@ -3,23 +3,17 @@
  */
 
 /**
- * Unique audit launcher. It opens Calendar Sync through the canonical Job
- * Engine entry without starting the job.
+ * Opens Calendar Sync through the authoritative verified audit without
+ * starting, approving, or queuing synchronization work.
  */
 function openIntegratedCalendarSyncFromAudit() {
-  const audit = runCalendarPlanAudit_();
-  if (!audit.canSync) {
-    throw new Error(`Calendar Plan Audit still has ${audit.errorCount} blocking error(s).`);
-  }
-  saveCalendarSyncEffectiveDate(Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd'));
-  openPmosJobEngine('CALENDAR_SYNC');
-  return {
-    opened: true,
-    selectedType: 'CALENDAR_SYNC',
-    summary: 'Calendar Sync opened in the PMOS Job Engine.'
-  };
+  return openVerifiedCalendarSyncFromAudit();
 }
 
+/**
+ * Explicit start entry retained for callers that deliberately request work.
+ * This must not be used by functions named open... or show....
+ */
 function startCalendarSyncFromAudit() {
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
   let result;
@@ -32,15 +26,15 @@ function startCalendarSyncFromAudit() {
 }
 
 function openCalendarSync() {
-  return startCalendarSyncFromAudit();
+  return openVerifiedCalendarSyncFromAudit();
 }
 
 function showCalendarSync() {
-  return startCalendarSyncFromAudit();
+  return openVerifiedCalendarSyncFromAudit();
 }
 
 function openPmosCalendarSync() {
-  return startCalendarSyncFromAudit();
+  return openVerifiedCalendarSyncFromAudit();
 }
 
 function startCalendarSyncWithEffectiveDate(value, autoMode) {
