@@ -1,12 +1,11 @@
 /**
  * PMOS Calendar planner integration.
  *
- * This orchestration layer reads the existing desired plan and registry, builds
- * the immutable Calendar Sync plan, validates it, and exposes a legacy-shaped
- * preview. It performs no Calendar, customer-data, or support-structure writes.
+ * Reads existing PMOS source data, builds an immutable Calendar Sync plan, and
+ * validates it. Preview performs no Calendar, customer-data, registry, support-
+ * structure, trigger, or job-state writes.
  */
 
-/** Builds and validates the current immutable Calendar Sync plan. */
 function buildValidatedPmosCalendarSyncPlan_() {
   const settings = getRecurringCalendarSettings_();
   const desiredSeries = buildRecurringSeriesPlan_(readExistingPmosCalendarRoutes_);
@@ -19,9 +18,14 @@ function buildValidatedPmosCalendarSyncPlan_() {
     includeSkips: false
   });
 
-  const validation = validatePmosPlan(plan, {
+  const genericValidation = validatePmosPlan(plan, {
     validateCustomers: false
   });
+  const calendarValidation = validatePmosCalendarPlanSafety_(plan);
+  const validation = combinePmosCalendarValidationReports_(
+    genericValidation,
+    calendarValidation
+  );
 
   const plannerErrors = plan.operations.filter(function (operation) {
     return operation.action === PMOS_OPERATION.ERROR ||
@@ -36,10 +40,7 @@ function buildValidatedPmosCalendarSyncPlan_() {
   });
 }
 
-/**
- * Reads the current route-template and customer data without assigning IDs,
- * adding columns, normalizing rows, or synchronizing either source sheet.
- */
+/** Reads route and customer sources without repairing or modifying either. */
 function readExistingPmosCalendarRoutes_() {
   const spreadsheet = SpreadsheetApp.getActive();
   const routeSheet = spreadsheet.getSheetByName(PMOS.ROUTES_SHEET);
@@ -54,7 +55,6 @@ function readExistingPmosCalendarRoutes_() {
 
   const routeValues = routeSheet.getDataRange().getValues();
   const customerValues = customerSheet.getDataRange().getValues();
-
   if (!routeValues.length || !routeValues[0].length) {
     throw new Error(PMOS.ROUTES_SHEET + ' has no header row.');
   }
@@ -62,22 +62,12 @@ function readExistingPmosCalendarRoutes_() {
     throw new Error(PMOS.CUSTOMERS_SHEET + ' has no header row.');
   }
 
-  const routeHeaders = routeValues[0].map(function (value) {
-    return String(value || '').trim();
-  });
-  const customerHeaders = customerValues[0].map(function (value) {
-    return String(value || '').trim();
-  });
-
-  const requiredRouteHeaders = [
-    'Layer',
-    'Stop Order',
-    'Calendar Title'
-  ];
+  const routeHeaders = routeValues[0].map(pmosCalendarHeader_);
+  const customerHeaders = customerValues[0].map(pmosCalendarHeader_);
+  const requiredRouteHeaders = ['Layer', 'Stop Order', 'Calendar Title'];
   const missingRouteHeaders = requiredRouteHeaders.filter(function (header) {
     return routeHeaders.indexOf(header) < 0;
   });
-
   if (missingRouteHeaders.length) {
     throw new Error(
       PMOS.ROUTES_SHEET + ' is missing required column(s): ' +
@@ -85,66 +75,49 @@ function readExistingPmosCalendarRoutes_() {
     );
   }
 
-  const customerList = [];
   const customersById = {};
   const customersByTitle = {};
-
   customerValues.slice(1).forEach(function (row) {
-    if (!row.some(function (value) { return value !== '' && value != null; })) return;
-
-    const customer = {};
-    customerHeaders.forEach(function (header, index) {
-      customer[header] = row[index];
-    });
-
+    if (!pmosCalendarRowHasData_(row)) return;
+    const customer = pmosCalendarRowObject_(customerHeaders, row);
     const customerId = String(customer['Customer ID'] || '').trim();
     const title = String(customer['Calendar Title'] || '').trim();
     const fullName = String(customer['Full Name(s)'] || '').trim();
-
     if (!title && !fullName) return;
-
-    customerList.push(customer);
     if (customerId) customersById[customerId] = customer;
     if (title) customersByTitle[normalize_(title)] = customer;
   });
 
   return routeValues.slice(1)
-    .filter(function (row) {
-      return row.some(function (value) { return value !== '' && value != null; });
-    })
+    .filter(pmosCalendarRowHasData_)
     .map(function (row) {
-      const route = {};
-      routeHeaders.forEach(function (header, index) {
-        route[header] = row[index];
-      });
-
+      const route = pmosCalendarRowObject_(routeHeaders, row);
       const routeTitle = String(route['Calendar Title'] || '').trim();
       const routeId = String(route['Customer ID'] || '').trim();
       const customer = customersById[routeId] ||
-        customersByTitle[normalize_(routeTitle)] ||
-        {};
-
+        customersByTitle[normalize_(routeTitle)] || {};
       const customerId = String(customer['Customer ID'] || routeId).trim();
       const title = String(customer['Calendar Title'] || routeTitle).trim();
+      const yearRoundText = customer['Year Round'] || customer.Season || '';
 
       return {
         key: customerId || title,
         customerId: customerId,
-        layer: String(route['Layer'] || '').trim(),
+        layer: String(route.Layer || '').trim(),
         order: Number(route['Stop Order'] || 0),
         title: title,
         fullName: String(customer['Full Name(s)'] || route['Full Name(s)'] || title),
         address: String(customer['Full Address'] || route['Full Address'] || ''),
-        frequency: String(customer['Frequency'] || route['Frequency'] || ''),
+        frequency: String(customer.Frequency || route.Frequency || ''),
         entry: buildCustomerEntryInformation_(customer) ||
           String(route['Entry Information'] || ''),
         notes: String(customer['Customer Notes'] || route['Customer Notes'] || ''),
         phone: String(customer['Primary Phone'] || ''),
         secondaryPhone: String(customer['Secondary Phone'] || ''),
-        email: String(customer['Email'] || ''),
+        email: String(customer.Email || ''),
         sanitization: String(customer['Sanitization Type(s)'] || ''),
-        automation: String(customer['Automation'] || ''),
-        yearRound: normalize_(customer['Year Round'] || customer['Season'] || '').includes('year round') ||
+        automation: String(customer.Automation || ''),
+        yearRound: normalize_(yearRoundText).indexOf('year round') >= 0 ||
           normalize_(customer['Year Round'] || '') === 'yes'
       };
     })
@@ -153,7 +126,7 @@ function readExistingPmosCalendarRoutes_() {
     });
 }
 
-/** Reads the existing Calendar Series Registry without creating or repairing it. */
+/** Reads the Calendar Series Registry without creating or repairing it. */
 function readExistingPmosCalendarRegistry_() {
   const sheet = SpreadsheetApp.getActive().getSheetByName('Calendar Series Registry');
   if (!sheet) {
@@ -169,22 +142,14 @@ function readExistingPmosCalendarRegistry_() {
     );
   }
 
-  const headers = values[0].map(function (value) {
-    return String(value || '').trim();
-  });
+  const headers = values[0].map(pmosCalendarHeader_);
   const requiredHeaders = [
-    'Series Key',
-    'Customer ID',
-    'Layer',
-    'Series ID',
-    'Calendar Name',
-    'Signature',
-    'Status'
+    'Series Key', 'Customer ID', 'Layer', 'Series ID',
+    'Calendar Name', 'Signature', 'Status'
   ];
   const missingHeaders = requiredHeaders.filter(function (header) {
     return headers.indexOf(header) < 0;
   });
-
   if (missingHeaders.length) {
     throw new Error(
       'Calendar Series Registry is missing required column(s): ' +
@@ -193,15 +158,12 @@ function readExistingPmosCalendarRegistry_() {
   }
 
   const indexes = {};
-  headers.forEach(function (header, index) {
-    indexes[header] = index;
-  });
-
+  headers.forEach(function (header, index) { indexes[header] = index; });
   const registry = {};
+
   values.slice(1).forEach(function (row, index) {
     const seriesKey = String(row[indexes['Series Key']] || '').trim();
     if (!seriesKey) return;
-
     registry[seriesKey] = {
       row: index + 2,
       seriesKey: seriesKey,
@@ -217,11 +179,6 @@ function readExistingPmosCalendarRegistry_() {
   return registry;
 }
 
-/**
- * Public preview for the new immutable Calendar planning pipeline.
- * The existing previewCalendarChanges() remains untouched until executor
- * migration, allowing safe side-by-side verification.
- */
 function previewPmosCalendarSyncPlan() {
   const result = buildValidatedPmosCalendarSyncPlan_();
   const plan = result.plan;
@@ -249,7 +206,6 @@ function previewPmosCalendarSyncPlan() {
   });
 }
 
-/** Returns a compact preview matching the existing Calendar UI contract. */
 function previewPmosCalendarChangesLegacyShape_() {
   const preview = previewPmosCalendarSyncPlan();
   return {
@@ -301,13 +257,11 @@ function buildPmosCalendarSourceVersion_(desiredSeries, currentRegistry) {
   const desiredSignatures = (desiredSeries || []).map(function (series) {
     return String(series.seriesKey || '') + ':' + String(series.signature || '');
   }).sort();
-
   const registryValues = Array.isArray(currentRegistry)
     ? currentRegistry
     : Object.keys(currentRegistry || {}).sort().map(function (key) {
         return Object.assign({ seriesKey: key }, currentRegistry[key] || {});
       });
-
   const currentSignatures = registryValues.map(function (series) {
     return String(series.seriesKey || series['Series Key'] || '') + ':' +
       String(series.signature || series.Signature || '');
@@ -317,4 +271,18 @@ function buildPmosCalendarSourceVersion_(desiredSeries, currentRegistry) {
     desired: desiredSignatures,
     current: currentSignatures
   }));
+}
+
+function pmosCalendarHeader_(value) {
+  return String(value || '').trim();
+}
+
+function pmosCalendarRowHasData_(row) {
+  return row.some(function (value) { return value !== '' && value != null; });
+}
+
+function pmosCalendarRowObject_(headers, row) {
+  const object = {};
+  headers.forEach(function (header, index) { object[header] = row[index]; });
+  return object;
 }
