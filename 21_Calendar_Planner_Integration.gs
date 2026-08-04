@@ -1,22 +1,43 @@
 /**
  * PMOS Calendar planner integration.
  *
- * Reads existing PMOS source data, builds an immutable Calendar Sync plan, and
- * validates it. Preview performs no Calendar, customer-data, registry, support-
- * structure, trigger, or job-state writes.
+ * Reads existing PMOS source data and actual Calendar state, builds an immutable
+ * Calendar Sync plan, and validates it. Preview performs no writes.
  */
 
-function buildValidatedPmosCalendarSyncPlan_() {
+function buildValidatedPmosCalendarSyncPlan_(options) {
   const settings = getRecurringCalendarSettings_();
   const desiredSeries = buildRecurringSeriesPlan_(readExistingPmosCalendarRoutes_);
   const currentRegistry = readExistingPmosCalendarRegistry_();
+  const currentState = readPmosCalendarCurrentState_(
+    settings,
+    currentRegistry,
+    options || {}
+  );
+  const verifiedState = buildVerifiedPmosCalendarSeriesState_(
+    currentState,
+    currentRegistry
+  );
 
-  const plan = buildPmosCalendarSyncPlan(desiredSeries, currentRegistry, {
-    calendarName: settings.calendarName,
-    sourceVersion: buildPmosCalendarSourceVersion_(desiredSeries, currentRegistry),
-    allowDeletes: true,
-    includeSkips: false
-  });
+  const basePlan = buildPmosCalendarSyncPlan(
+    desiredSeries,
+    verifiedState.records,
+    {
+      calendarName: settings.calendarName,
+      sourceVersion: buildPmosCalendarVerifiedSourceVersion_(
+        desiredSeries,
+        verifiedState,
+        currentState
+      ),
+      allowDeletes: true,
+      includeSkips: false
+    }
+  );
+  const plan = appendPmosCalendarStateReviewPlan_(
+    basePlan,
+    currentState,
+    verifiedState
+  );
 
   const genericValidation = validatePmosPlan(plan, {
     validateCustomers: false
@@ -35,6 +56,8 @@ function buildValidatedPmosCalendarSyncPlan_() {
   return Object.freeze({
     plan: plan,
     validation: validation,
+    currentState: currentState,
+    verifiedState: verifiedState,
     canExecute: validation.executable && plannerErrors.length === 0,
     plannerErrorCount: plannerErrors.length
   });
@@ -179,8 +202,8 @@ function readExistingPmosCalendarRegistry_() {
   return registry;
 }
 
-function previewPmosCalendarSyncPlan() {
-  const result = buildValidatedPmosCalendarSyncPlan_();
+function previewPmosCalendarSyncPlan(options) {
+  const result = buildValidatedPmosCalendarSyncPlan_(options || {});
   const plan = result.plan;
   const summary = summarizePmosCalendarSyncPlan(plan);
   const executable = plan.operations.filter(isPmosExecutableOperation);
@@ -200,6 +223,14 @@ function previewPmosCalendarSyncPlan() {
     canExecute: result.canExecute,
     affectedRoutes: countPmosCalendarAffectedRoutes_(executable),
     affectedEvents: executable.length,
+    registeredPresent: Number(result.currentState.registeredPresentCount || 0),
+    registeredMissing: Number(result.currentState.registeredMissingCount || 0),
+    temporaryVisits: Number(result.currentState.temporaryVisitCount || 0),
+    repairVisits: Number(result.currentState.repairVisitCount || 0),
+    unclassifiedEvents: Number(result.currentState.unclassifiedCount || 0),
+    includeStartedToday: Boolean(result.currentState.range.includeStartedToday),
+    syncStart: result.currentState.range.start,
+    syncEnd: result.currentState.range.end,
     details: plan.operations.slice(0, 30).map(formatPmosCalendarPreviewOperation_),
     validation: result.validation,
     plan: plan
@@ -253,6 +284,7 @@ function countPmosCalendarAffectedRoutes_(operations) {
   return Object.keys(routes).length;
 }
 
+/** Retained for older callers; new planning uses verified Calendar source state. */
 function buildPmosCalendarSourceVersion_(desiredSeries, currentRegistry) {
   const desiredSignatures = (desiredSeries || []).map(function (series) {
     return String(series.seriesKey || '') + ':' + String(series.signature || '');
