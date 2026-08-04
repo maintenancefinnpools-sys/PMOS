@@ -3,29 +3,7 @@
  * Move-only refactor: public names and operational behavior are preserved.
  */
 function ensureRecurringSeriesRegistry_() {
-  const ss = SpreadsheetApp.getActive();
-
-  const sheet =
-    ss.getSheetByName('Calendar Series Registry') ||
-    ss.insertSheet('Calendar Series Registry');
-
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow([
-      'Series Key',
-      'Customer ID',
-      'Layer',
-      'Series ID',
-      'Calendar Name',
-      'Signature',
-      'Last Sync',
-      'Status',
-      'Error'
-    ]);
-
-    sheet.hideSheet();
-  }
-
-  return sheet;
+  return ensureVersionedRecurringSeriesRegistry_();
 }
 function getRecurringCalendar_() {
   return getOrCreateConfiguredPmosCalendar_();
@@ -58,14 +36,9 @@ function getRecurringCalendarSettings_() {
   return {
     calendarName,
     calendarYear: year,
-
-    // Deliberately use the new active rotation anchor rather than the old
-    // April season anchor. Monday July 13 is Week 1, which makes
-    // Thursday July 16 the first future Week 1 service day.
     rotationWeek1Start: new Date(
       PMOS_RECURRING_WEEK1_MONDAY.getTime()
     ),
-
     seasonStart: parseSettingDateForYear_(
       map['Season Start'],
       year,
@@ -125,8 +98,6 @@ function buildRecurringSeriesPlan_(routeReader) {
       row.yearRound
     );
 
-    // Seasonal customers whose next aligned occurrence is beyond season end
-    // have no remaining visit this season and should not create a series.
     if (
       !row.yearRound &&
       firstDate.getTime() > endOfDay_(settings.seasonEnd).getTime()
