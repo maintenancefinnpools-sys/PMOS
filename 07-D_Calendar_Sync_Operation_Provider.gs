@@ -1,14 +1,13 @@
 /**
  * Operation-level provider for CALENDAR_SYNC.
  *
- * Calendar Sync builds one verified immutable plan during queue initialization,
- * records its identity in durable job state, and executes only those queued
- * operations. It does not synchronize or repair source data while planning.
+ * Calendar Sync queues one verified immutable plan and executes each operation
+ * through an append-only registry transaction.
  */
 function getCalendarSyncOperationProvider_() {
   return {
     initialize: initializeCalendarSyncOperationQueue_,
-    execute: executeCalendarSyncOperation_,
+    execute: executeTransactionalCalendarSyncOperation_,
     summarize: summarizeCalendarSyncOperation_,
     finalize: finalizeCalendarSyncOperations_
   };
@@ -18,7 +17,6 @@ function initializeCalendarSyncOperationQueue_(state) {
   const result = buildValidatedPmosCalendarSyncPlan_(
     state && state.calendarOptions ? state.calendarOptions : {}
   );
-
   if (!result.canExecute) {
     throw new Error(
       'Calendar Plan Audit failed with ' +
@@ -30,28 +28,23 @@ function initializeCalendarSyncOperationQueue_(state) {
   const plan = result.plan;
   const auditedPlanId = String(state && state.auditedPlanId || '');
   if (!auditedPlanId) {
-    throw new Error(
-      'Calendar Sync has no audited plan ID. Run Calendar Plan Audit again before starting.'
-    );
+    throw new Error('Calendar Sync has no audited plan ID. Run Calendar Plan Audit again before starting.');
   }
   if (plan.id !== auditedPlanId) {
     throw new Error(
-      'Calendar data changed after the Plan Audit. Expected plan ' +
-      auditedPlanId + ', but the current plan is ' + plan.id +
+      'Calendar data changed after the Plan Audit. Expected plan ' + auditedPlanId +
+      ', but the current plan is ' + plan.id +
       '. Run Calendar Plan Audit again before starting Calendar Sync.'
     );
   }
 
   const executable = plan.operations.filter(isPmosExecutableOperation);
-
   executable.forEach(function (operation) {
     if (
       operation.action === PMOS_OPERATION.DELETE &&
       !(operation.metadata && operation.metadata.deletionApproved === true)
     ) {
-      throw new Error(
-        'Calendar plan contains an unapproved deletion: ' + operation.entityId + '.'
-      );
+      throw new Error('Calendar plan contains an unapproved deletion: ' + operation.entityId + '.');
     }
   });
 
@@ -77,12 +70,7 @@ function initializeCalendarSyncOperationQueue_(state) {
     };
   });
 
-  const total = replacePmosJobOperationQueue_(
-    state.id,
-    state.type,
-    operations
-  );
-
+  const total = replacePmosJobOperationQueue_(state.id, state.type, operations);
   state.planId = plan.id;
   state.planSourceVersion = plan.sourceVersion || '';
   state.planCreatedAt = plan.createdAt || '';
@@ -103,7 +91,46 @@ function initializeCalendarSyncOperationQueue_(state) {
   );
 }
 
-function executeCalendarSyncOperation_(state, operation) {
+function executeTransactionalCalendarSyncOperation_(state, operation) {
+  const payload = operation.payload || {};
+  const transaction = beginPmosCalendarRegistryTransaction_(
+    state,
+    operation,
+    payload.current || null,
+    payload.desired || null
+  );
+
+  try {
+    const result = executeCalendarSyncMutation_(state, operation);
+    const verification = verifyAppliedCalendarSyncOperation_(operation, result);
+
+    markPmosCalendarTransactionApplied_(
+      transaction.transactionId,
+      verification.seriesId
+    );
+    markPmosCalendarTransactionRegistryApplied_(
+      transaction.transactionId,
+      verification.seriesId
+    );
+    completePmosCalendarRegistryTransaction_(
+      transaction.transactionId,
+      verification.seriesId
+    );
+
+    result.transactionId = transaction.transactionId;
+    result.verified = true;
+    return result;
+  } catch (error) {
+    try {
+      failPmosCalendarRegistryTransaction_(transaction.transactionId, error);
+    } catch (historyError) {
+      console.error('Could not record Calendar transaction failure: ' + historyError);
+    }
+    throw error;
+  }
+}
+
+function executeCalendarSyncMutation_(state, operation) {
   const payload = operation.payload || {};
   const action = String(operation.operationType || payload.action || '').toUpperCase();
   const seriesKey = String(payload.seriesKey || '');
@@ -124,20 +151,13 @@ function executeCalendarSyncOperation_(state, operation) {
     const plan = deserializeCanonicalCalendarSeries_(payload.desired);
     const recovered = findExistingPmosRecurringSeries_(calendar, plan, record);
     const series = recovered || createRecurringSeries_(calendar, plan);
-
     if (recovered) updateRecurringSeries_(series, plan);
-
-    upsertSeriesRegistry_(
-      plan,
-      series.getId(),
-      calendar.getName(),
-      'Active'
-    );
-
+    upsertSeriesRegistry_(plan, series.getId(), calendar.getName(), 'Active');
     return {
       processed: 1,
       action: recovered ? 'RECOVER' : 'CREATE',
-      title: plan.title
+      title: plan.title,
+      seriesId: String(series.getId() || '')
     };
   }
 
@@ -146,20 +166,13 @@ function executeCalendarSyncOperation_(state, operation) {
     const series = findExistingPmosRecurringSeries_(calendar, plan, record);
     const performedAction = series ? 'UPDATE' : 'CREATE';
     const finalSeries = series || createRecurringSeries_(calendar, plan);
-
     if (series) updateRecurringSeries_(series, plan);
-
-    upsertSeriesRegistry_(
-      plan,
-      finalSeries.getId(),
-      calendar.getName(),
-      'Active'
-    );
-
+    upsertSeriesRegistry_(plan, finalSeries.getId(), calendar.getName(), 'Active');
     return {
       processed: 1,
       action: performedAction,
-      title: plan.title
+      title: plan.title,
+      seriesId: String(finalSeries.getId() || '')
     };
   }
 
@@ -167,7 +180,6 @@ function executeCalendarSyncOperation_(state, operation) {
     if (payload.deletionApproved !== true) {
       throw new Error('Calendar deletion is not explicitly approved: ' + seriesKey + '.');
     }
-
     const current = payload.current || {};
     const approvedSeriesId = String(current.seriesId || '');
     if (!approvedSeriesId) {
@@ -175,23 +187,56 @@ function executeCalendarSyncOperation_(state, operation) {
     }
 
     let series = null;
-    try {
-      series = calendar.getEventSeriesById(approvedSeriesId);
-    } catch (error) {
-      series = null;
-    }
-
+    try { series = calendar.getEventSeriesById(approvedSeriesId); }
+    catch (error) { series = null; }
     if (series) series.deleteEventSeries();
     deleteSeriesRegistryRow_(seriesKey);
-
     return {
       processed: 1,
       action: series ? 'DELETE' : 'DELETE_ALREADY_APPLIED',
-      title: String(current.title || seriesKey)
+      title: String(current.title || seriesKey),
+      seriesId: ''
     };
   }
 
   throw new Error('Unsupported Calendar Sync operation: ' + (action || '(blank)') + '.');
+}
+
+function verifyAppliedCalendarSyncOperation_(operation, result) {
+  const payload = operation.payload || {};
+  const action = String(operation.operationType || payload.action || '').toUpperCase();
+  const seriesKey = String(payload.seriesKey || '');
+  const settings = getRecurringCalendarSettings_();
+  const calendar = getExistingConfiguredPmosCalendar_(settings.calendarName);
+  const registry = readExistingPmosCalendarRegistry_();
+  const record = registry[seriesKey] || null;
+
+  if (action === PMOS_OPERATION.DELETE) {
+    const approvedSeriesId = String(payload.current && payload.current.seriesId || '');
+    const remainingSeries = readPmosRecurringSeriesById_(calendar, approvedSeriesId);
+    if (remainingSeries || record) {
+      throw new Error('Calendar deletion could not be verified for ' + seriesKey + '.');
+    }
+    return { verified: true, seriesId: '' };
+  }
+
+  if (!record || !record.seriesId) {
+    throw new Error('Calendar registry update could not be verified for ' + seriesKey + '.');
+  }
+  const series = readPmosRecurringSeriesById_(calendar, record.seriesId);
+  if (!series) {
+    throw new Error('Calendar series could not be reloaded after synchronization: ' + seriesKey + '.');
+  }
+
+  const desired = payload.desired || {};
+  if (desired.signature && String(record.signature || '') !== String(desired.signature)) {
+    throw new Error('Calendar registry signature does not match the applied plan for ' + seriesKey + '.');
+  }
+  if (result.seriesId && String(result.seriesId) !== String(record.seriesId)) {
+    throw new Error('Calendar operation and registry disagree on the resulting series ID for ' + seriesKey + '.');
+  }
+
+  return { verified: true, seriesId: String(record.seriesId || '') };
 }
 
 function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
@@ -204,7 +249,6 @@ function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
   const searchStart = new Date(plan.start.getTime());
   searchStart.setDate(searchStart.getDate() - 1);
   searchStart.setHours(0, 0, 0, 0);
-
   const searchEnd = new Date(plan.start.getTime());
   searchEnd.setDate(searchEnd.getDate() + 35);
   searchEnd.setHours(23, 59, 59, 999);
@@ -212,13 +256,10 @@ function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
   const matchesBySeriesId = {};
   calendar.getEvents(searchStart, searchEnd).forEach(function (event) {
     if (!event.isRecurringEvent()) return;
-
     const metadata = parsePmosCalendarMetadata_(event.getDescription());
     if (String(metadata.PMOS_SERIES_KEY || '') !== String(plan.seriesKey || '')) return;
-
     const seriesId = readPmosCalendarEventSeriesId_(event);
-    if (!seriesId) return;
-    matchesBySeriesId[seriesId] = true;
+    if (seriesId) matchesBySeriesId[seriesId] = true;
   });
 
   const seriesIds = Object.keys(matchesBySeriesId);
@@ -228,20 +269,14 @@ function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
       plan.seriesKey + '. Resolve the duplicate before Calendar Sync continues.'
     );
   }
-  if (!seriesIds.length) return null;
-
-  return readPmosRecurringSeriesById_(calendar, seriesIds[0]);
+  return seriesIds.length ? readPmosRecurringSeriesById_(calendar, seriesIds[0]) : null;
 }
 
 function readPmosRecurringSeriesById_(calendar, seriesId) {
   const id = String(seriesId || '').trim();
   if (!id) return null;
-
-  try {
-    return calendar.getEventSeriesById(id) || null;
-  } catch (error) {
-    return null;
-  }
+  try { return calendar.getEventSeriesById(id) || null; }
+  catch (error) { return null; }
 }
 
 function summarizeCalendarSyncOperation_(state, operation, result, remaining) {
@@ -260,9 +295,7 @@ function finalizeCalendarSyncOperations_(state) {
   const verification = buildValidatedPmosCalendarSyncPlan_(
     state && state.calendarOptions ? state.calendarOptions : {}
   );
-  const remainingExecutable = verification.plan.operations
-    .filter(isPmosExecutableOperation);
-
+  const remainingExecutable = verification.plan.operations.filter(isPmosExecutableOperation);
   if (remainingExecutable.length) {
     throw new Error(
       'Calendar Sync execution finished, but verification still finds ' +
@@ -270,16 +303,26 @@ function finalizeCalendarSyncOperations_(state) {
     );
   }
 
+  const incompleteTransactions = readRecoverablePmosCalendarTransactions_()
+    .filter(function (transaction) {
+      return transaction.jobId === String(state && state.id || '') &&
+        transaction.status !== 'VERIFIED';
+    });
+  if (incompleteTransactions.length) {
+    throw new Error(
+      'Calendar Sync cannot finalize because ' + incompleteTransactions.length +
+      ' registry transaction(s) still require recovery.'
+    );
+  }
+
   clearPendingChanges_();
   storeRouteSignatures_();
-
   const total = Number(state.originalTotal || state.processedItems || 0);
   updateSyncStatus_(
     'Everything synchronized',
     total + ' verified Calendar change(s) completed from plan ' +
       String(state.planId || '') + '.'
   );
-
   state.lastSummary = total
     ? 'Calendar Sync completed and verified ' + total + ' operation(s).'
     : 'Calendar was already synchronized and verified.';
@@ -288,53 +331,32 @@ function finalizeCalendarSyncOperations_(state) {
 function serializeCanonicalCalendarSeries_(record) {
   if (!record) return null;
   return {
-    seriesKey: String(record.seriesKey || ''),
-    customerId: String(record.customerId || ''),
-    layer: String(record.layer || ''),
-    title: String(record.title || ''),
-    startIso: String(record.start || ''),
-    endIso: String(record.end || ''),
-    untilIso: String(record.until || ''),
-    location: String(record.location || ''),
-    description: String(record.description || ''),
-    color: String(record.color || ''),
+    seriesKey: String(record.seriesKey || ''), customerId: String(record.customerId || ''),
+    layer: String(record.layer || ''), title: String(record.title || ''),
+    startIso: String(record.start || ''), endIso: String(record.end || ''),
+    untilIso: String(record.until || ''), location: String(record.location || ''),
+    description: String(record.description || ''), color: String(record.color || ''),
     signature: String(record.signature || '')
   };
 }
 
 function deserializeCanonicalCalendarSeries_(payload) {
   if (!payload) throw new Error('Calendar operation is missing its desired series.');
-
   const start = new Date(payload.startIso);
   const end = new Date(payload.endIso);
   const until = payload.untilIso ? new Date(payload.untilIso) : null;
-
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
-    throw new Error(
-      'Invalid Calendar series dates for ' +
-      String(payload.seriesKey || payload.title || 'unknown series') + '.'
-    );
+    throw new Error('Invalid Calendar series dates for ' + String(payload.seriesKey || payload.title || 'unknown series') + '.');
   }
   if (until && !Number.isFinite(until.getTime())) {
-    throw new Error(
-      'Invalid recurrence end date for ' +
-      String(payload.seriesKey || payload.title || 'unknown series') + '.'
-    );
+    throw new Error('Invalid recurrence end date for ' + String(payload.seriesKey || payload.title || 'unknown series') + '.');
   }
-
   return {
-    seriesKey: String(payload.seriesKey || ''),
-    customerId: String(payload.customerId || ''),
-    layer: String(payload.layer || ''),
-    title: String(payload.title || ''),
-    start: start,
-    end: end,
-    until: until,
-    location: String(payload.location || ''),
-    description: String(payload.description || ''),
-    color: String(payload.color || ''),
-    signature: String(payload.signature || ''),
-    row: {}
+    seriesKey: String(payload.seriesKey || ''), customerId: String(payload.customerId || ''),
+    layer: String(payload.layer || ''), title: String(payload.title || ''),
+    start: start, end: end, until: until,
+    location: String(payload.location || ''), description: String(payload.description || ''),
+    color: String(payload.color || ''), signature: String(payload.signature || ''), row: {}
   };
 }
 
