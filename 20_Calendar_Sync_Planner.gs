@@ -77,8 +77,8 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
       ? PMOS_OPERATION.DELETE
       : PMOS_OPERATION.WARNING;
     const reason = settings.allowDeletes
-      ? 'Managed recurring Calendar series is no longer present in the desired plan.'
-      : 'Stale managed Calendar series was detected, but deletion is disabled.';
+      ? 'Managed recurring Calendar series is no longer present in the desired plan and its deletion was explicitly approved.'
+      : 'Managed recurring Calendar series is absent from the desired plan. User review is required before deletion.';
 
     operations.push(buildPmosCalendarOperationInput_(
       action,
@@ -113,6 +113,7 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
       duplicateCurrentKeys: current.duplicates,
       blockingPlannerErrors: desired.duplicates.length + current.duplicates.length,
       allowDeletes: settings.allowDeletes,
+      deletionApprovalRequired: true,
       includeSkips: settings.includeSkips
     }
   });
@@ -187,7 +188,8 @@ function buildPmosCalendarOperationInput_(action, key, reason, desired, current,
     metadata: {
       plannerVersion: PMOS_CALENDAR_PLANNER_VERSION,
       seriesKey: key,
-      blocking: action === PMOS_OPERATION.ERROR
+      blocking: action === PMOS_OPERATION.ERROR,
+      deletionApproved: action === PMOS_OPERATION.DELETE && settings.allowDeletes
     }
   };
 }
@@ -200,7 +202,7 @@ function appendPmosCalendarDuplicateOperations_(operations, duplicates, sourceNa
       'Duplicate ' + sourceName + ' recurring-series key: ' + key + '.',
       null,
       null,
-      { calendarName: null },
+      { calendarName: null, allowDeletes: false },
       null
     ));
   });
@@ -280,7 +282,7 @@ function normalizePmosCalendarPlannerOptions_(options) {
     sourceVersion: normalizePmosCalendarText_(source.sourceVersion),
     calendarName: normalizePmosCalendarText_(source.calendarName),
     includeSkips: source.includeSkips === true,
-    allowDeletes: source.allowDeletes !== false
+    allowDeletes: source.allowDeletes === true && source.deletionsApproved === true
   };
 }
 
@@ -288,6 +290,7 @@ function buildPmosCalendarPlanId_(desired, current, settings) {
   return 'CALENDAR_SYNC_PLAN_' + pmosCalendarHash_(JSON.stringify({
     sourceVersion: settings.sourceVersion,
     calendarName: settings.calendarName,
+    allowDeletes: settings.allowDeletes,
     desired: desired.map(calendarSeriesFingerprint_),
     current: current.map(calendarSeriesFingerprint_)
   }));
