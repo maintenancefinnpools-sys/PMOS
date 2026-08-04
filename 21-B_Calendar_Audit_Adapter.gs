@@ -22,10 +22,16 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
       !(operation.payload && operation.payload.desired);
   });
 
-  const errorCount = Number(preview.validationErrors || 0) +
-    Number(preview.plannerErrors || 0);
-  const warningCount = Number(preview.validationWarnings || 0) +
-    Number(preview.warnings || 0);
+  const issues = buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations);
+  const errors = issues.filter(function (item) {
+    return String(item.severity || '').toUpperCase() === 'ERROR';
+  });
+  const warnings = issues.filter(function (item) {
+    return String(item.severity || '').toUpperCase() !== 'ERROR';
+  });
+
+  const errorCount = errors.length;
+  const warningCount = warnings.length;
 
   const lines = [
     'Calendar: ' + String(preview.calendarName || ''),
@@ -51,9 +57,13 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     errorCount: errorCount,
     warningCount: warningCount,
     deletionCandidateCount: deletionCandidates.length,
+    hasErrors: errorCount > 0,
+    hasWarnings: warningCount > 0,
     hasReviewItems: warningCount > 0 || errorCount > 0,
     summary: lines.join('\n'),
-    issues: buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations),
+    issues: issues,
+    errors: errors,
+    warnings: warnings,
     deletionCandidates: deletionCandidates.map(formatPmosCalendarDeletionCandidate_),
     preview: preview
   };
@@ -63,22 +73,24 @@ function buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations)
   const items = [];
 
   (validationIssues || []).forEach(function (issue, index) {
-    items.push({
+    const item = {
       id: String(issue.operationId || issue.code || 'VALIDATION_' + index),
-      severity: String(issue.severity || 'INFO'),
+      severity: String(issue.severity || 'INFO').toUpperCase(),
       code: String(issue.code || ''),
       title: String(issue.code || 'Validation issue').replace(/_/g, ' '),
       details: String(issue.message || 'Calendar validation issue.'),
       operationId: String(issue.operationId || ''),
       path: String(issue.path || ''),
       reviewType: 'VALIDATION'
-    });
+    };
+    item.resolution = recommendPmosCalendarAuditResolution_(item);
+    items.push(item);
   });
 
   (warningOperations || []).forEach(function (operation) {
     const current = operation.payload && operation.payload.current || {};
     const desired = operation.payload && operation.payload.desired || {};
-    items.push({
+    const item = {
       id: String(operation.id || operation.entityId || ''),
       severity: 'WARNING',
       code: 'CALENDAR_REVIEW',
@@ -88,10 +100,66 @@ function buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations)
       seriesKey: String(operation.entityId || ''),
       layer: String(desired.layer || current.layer || ''),
       reviewType: current && !desired ? 'DELETION_CANDIDATE' : 'WARNING'
-    });
+    };
+    item.resolution = recommendPmosCalendarAuditResolution_(item);
+    items.push(item);
   });
 
   return items;
+}
+
+function recommendPmosCalendarAuditResolution_(item) {
+  const text = [item.code, item.title, item.details, item.path]
+    .join(' ').toLowerCase();
+
+  if (item.reviewType === 'DELETION_CANDIDATE' || /delet|absent from the desired|source of truth/.test(text)) {
+    return {
+      type: 'DELETIONS',
+      label: 'Suggested Deletions',
+      explanation: 'Review the unmatched Calendar series and select only those that should be deleted.'
+    };
+  }
+  if (/customer id|customer database|customer record|customer match/.test(text)) {
+    return {
+      type: 'CUSTOMER_SYNC',
+      label: 'Open Customer Database Sync',
+      explanation: 'Synchronize customer IDs and route records, then run Calendar Plan Audit again.'
+    };
+  }
+  if (/registry|support sheet|schema|missing required column|initialize pmos|update pmos/.test(text)) {
+    return {
+      type: 'UPDATE_PMOS',
+      label: 'Open Update PMOS',
+      explanation: 'Repair or migrate the required PMOS support structures, then rerun the audit.'
+    };
+  }
+  if (/transaction|recovery|interrupted|ambiguous/.test(text)) {
+    return {
+      type: 'TRANSACTION_RECOVERY',
+      label: 'Open Transaction Recovery',
+      explanation: 'Review the interrupted Calendar operation before synchronization continues.'
+    };
+  }
+  if (/route template|stop order|layer|route row/.test(text)) {
+    return {
+      type: 'ROUTES_SHEET',
+      label: 'Open 4-Week Route Template',
+      explanation: 'Open the affected source sheet and correct the referenced route information.'
+    };
+  }
+  if (/calendar name|season start|season end|app settings|effective date/.test(text)) {
+    return {
+      type: 'SETTINGS_SHEET',
+      label: 'Open App Settings',
+      explanation: 'Open App Settings and correct the referenced Calendar configuration.'
+    };
+  }
+
+  return {
+    type: 'NONE',
+    label: '',
+    explanation: 'Review the details shown here. A guided correction action is not yet available for this issue type.'
+  };
 }
 
 function formatPmosCalendarDeletionCandidate_(operation) {
