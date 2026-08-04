@@ -31,7 +31,6 @@ function firstOccurrenceForLayer_(parsed, settings, yearRound) {
     dayOffsets[parsed.day]
   );
 
-  // A route whose start time has already passed advances by one full cycle.
   const now = new Date();
   const routeStart = parseFlexibleRouteTime_(settings.routeStart);
   date.setHours(routeStart.hours, routeStart.minutes, 0, 0);
@@ -40,7 +39,6 @@ function firstOccurrenceForLayer_(parsed, settings, yearRound) {
     date.setDate(date.getDate() + 28);
   }
 
-  // routeTimeForOrder_ applies the exact staggered time for each stop.
   date.setHours(12, 0, 0, 0);
   return date;
 }
@@ -71,28 +69,65 @@ function createRecurringSeries_(calendar, plan) {
     plan.end,
     buildFourWeekRecurrence_(plan),
     {
-      description: plan.description,
+      description: buildPmosManagedRecurringDescription_(plan),
       location: plan.location
     }
   );
-  series.setTag('PMOS_SERIES_KEY', plan.seriesKey);
-  series.setTag('PMOS_CUSTOMER_ID', plan.customerId || '');
+  applyPmosRecurringSeriesIdentity_(series, plan);
   if (plan.color) series.setColor(plan.color);
   return series;
 }
 
 function updateRecurringSeries_(series, plan) {
   series.setTitle(plan.title);
-  series.setDescription(plan.description);
+  series.setDescription(buildPmosManagedRecurringDescription_(plan));
   series.setLocation(plan.location);
   series.setRecurrence(
     buildFourWeekRecurrence_(plan),
     plan.start,
     plan.end
   );
+  applyPmosRecurringSeriesIdentity_(series, plan);
+  if (plan.color) series.setColor(plan.color);
+}
+
+function applyPmosRecurringSeriesIdentity_(series, plan) {
+  series.setTag('PMOS_MANAGED', 'true');
+  series.setTag('PMOS_EVENT_TYPE', 'RECURRING_ROUTE');
   series.setTag('PMOS_SERIES_KEY', plan.seriesKey);
   series.setTag('PMOS_CUSTOMER_ID', plan.customerId || '');
-  if (plan.color) series.setColor(plan.color);
+}
+
+function buildPmosManagedRecurringDescription_(plan) {
+  const metadataKeys = {
+    PMOS_MANAGED: true,
+    PMOS_EVENT_TYPE: true,
+    PMOS_SERIES_KEY: true,
+    PMOS_CUSTOMER_ID: true
+  };
+  const userLines = String(plan.description || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter(function (line) {
+      const match = String(line || '').match(/^\s*(PMOS_[A-Z0-9_]+)\s*=/);
+      return !match || !metadataKeys[match[1]];
+    });
+
+  while (userLines.length && !String(userLines[0] || '').trim()) userLines.shift();
+  while (userLines.length && !String(userLines[userLines.length - 1] || '').trim()) {
+    userLines.pop();
+  }
+
+  const metadata = [
+    'PMOS_MANAGED=true',
+    'PMOS_EVENT_TYPE=RECURRING_ROUTE',
+    'PMOS_SERIES_KEY=' + String(plan.seriesKey || ''),
+    'PMOS_CUSTOMER_ID=' + String(plan.customerId || '')
+  ];
+
+  return userLines.length
+    ? userLines.join('\n') + '\n\n' + metadata.join('\n')
+    : metadata.join('\n');
 }
 
 function calendarColorForFrequency_(frequency) {
@@ -101,15 +136,15 @@ function calendarColorForFrequency_(frequency) {
     normalized.indexOf('monthly') >= 0 ||
     normalized.indexOf('4 week') >= 0
   ) {
-    return '3'; // Grape
+    return '3';
   }
   if (
     normalized.indexOf('biweekly') >= 0 ||
     normalized.indexOf('bi weekly') >= 0
   ) {
-    return '9'; // Blueberry
+    return '9';
   }
-  return '7'; // Peacock / weekly
+  return '7';
 }
 
 function recurringSeriesSignature_(plan) {
