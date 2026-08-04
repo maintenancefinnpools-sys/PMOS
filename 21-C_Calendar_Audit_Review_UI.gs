@@ -168,6 +168,13 @@ function showCalendarDeletionReview() {
 
   const body = items.length
     ? '<div class="instructions">All events are kept by default. Select only the recurring series that should be deleted.</div>' +
+      '<div class="selection-toolbar">' +
+        '<label class="selection-toggle" for="allDeletionsToggle">' +
+          '<input type="checkbox" id="allDeletionsToggle">' +
+          '<span id="allDeletionsLabel">Select all</span>' +
+        '</label>' +
+        '<span id="selectionCount">0 selected</span>' +
+      '</div>' +
       items.map(function (item, index) {
         const checked = selected[item.seriesKey] ? ' checked' : '';
         return '<label class="item warning selectable" for="delete-' + index + '">' +
@@ -182,19 +189,18 @@ function showCalendarDeletionReview() {
 
   const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<button class="secondary" onclick="selectAll(true)">Select all</button>' +
-      '<button class="secondary" onclick="selectAll(false)">Clear all</button>' +
-      '<span id="selectionCount">0 selected</span>' +
-      '<button id="approveButton" class="delete" onclick="approveSelected(this)">Approve selected deletions</button>' +
+    ? '<button id="approveButton" class="delete" onclick="approveSelected(this)">Approve selected deletions</button>' +
       '<button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
     'var candidates=' + itemJson + ';' +
     'function boxes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check"));}' +
     'function selectedIndexes(){return boxes().filter(function(x){return x.checked;}).map(function(x){return Number(x.getAttribute("data-index"));});}' +
-    'function updateCount(){var n=selectedIndexes().length;document.getElementById("selectionCount").textContent=n+" selected";}' +
-    'function selectAll(value){boxes().forEach(function(x){x.checked=value;});updateCount();}' +
-    'boxes().forEach(function(x){x.addEventListener("change",updateCount);});updateCount();' +
+    'function updateSelectionToolbar(){var all=boxes(),n=selectedIndexes().length,total=all.length,toggle=document.getElementById("allDeletionsToggle"),label=document.getElementById("allDeletionsLabel"),count=document.getElementById("selectionCount");' +
+      'count.textContent=n+" selected";toggle.checked=total>0&&n===total;toggle.indeterminate=n>0&&n<total;label.textContent=toggle.checked?"Clear all":"Select all";}' +
+    'function toggleAll(){var toggle=document.getElementById("allDeletionsToggle"),shouldSelect=!toggle.checked||toggle.indeterminate;boxes().forEach(function(x){x.checked=shouldSelect;});updateSelectionToolbar();}' +
+    'boxes().forEach(function(x){x.addEventListener("change",updateSelectionToolbar);});' +
+    'document.getElementById("allDeletionsToggle").addEventListener("click",function(event){event.preventDefault();toggleAll();});updateSelectionToolbar();' +
     'function approveSelected(button){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
       'if(!confirm("Approve deletion of "+indexes.length+" selected recurring Calendar series?"))return;' +
       'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
@@ -323,6 +329,8 @@ function buildPmosAuditReviewHtml_(title, body, footer, extraScript) {
   return '<!DOCTYPE html><html><head><base target="_top"><style>' +
     'body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;background:#f8fafc}' +
     'h2{margin:0 0 14px}.instructions{padding:10px 12px;background:#dbeafe;color:#1e3a8a;border-radius:8px;margin-bottom:12px}' +
+    '.selection-toolbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:10px 12px;margin:0 0 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:9px;box-shadow:0 2px 5px rgba(15,23,42,.08)}' +
+    '.selection-toggle{display:flex;align-items:center;gap:7px;font-weight:700;cursor:pointer}.selection-toggle input{width:16px;height:16px;margin:0}.selection-toolbar #selectionCount{margin-left:auto;color:#475569;font-size:13px;font-weight:700}' +
     '.item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}' +
     '.selectable{display:grid;grid-template-columns:24px 1fr;gap:10px;cursor:pointer}.selectable input{margin-top:3px}.selectable span{display:block}' +
     '.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
