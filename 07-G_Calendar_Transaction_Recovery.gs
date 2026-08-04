@@ -21,7 +21,6 @@ function recoverPmosCalendarRegistryTransactions_() {
 
   const settings = getRecurringCalendarSettings_();
   const calendar = getExistingConfiguredPmosCalendar_(settings.calendarName);
-  const registry = readExistingPmosCalendarRegistry_();
   const result = {
     inspected: transactions.length,
     finalized: 0,
@@ -31,6 +30,9 @@ function recoverPmosCalendarRegistryTransactions_() {
   };
 
   transactions.forEach(function (transaction) {
+    // Re-read the registry after every resolution because an earlier recovery
+    // may have repaired or removed a row.
+    const registry = readExistingPmosCalendarRegistry_();
     const resolution = resolvePmosCalendarTransaction_(
       transaction,
       calendar,
@@ -101,15 +103,10 @@ function resolvePmosCalendarUpsertTransaction_(transaction, calendar, registry) 
   }
 
   if (!series) {
-    // Calendar did not receive the intended change. The normal idempotent queue
-    // may safely execute this operation again.
-    return {
-      status: 'RETRY_REQUIRED',
-      transactionId: transaction.transactionId,
-      operationId: transaction.operationId,
-      seriesKey: transaction.seriesKey,
-      reason: 'No matching Calendar series exists; retry the queued operation.'
-    };
+    return retryPmosCalendarRecovery_(
+      transaction,
+      'No matching Calendar series exists; retry the queued operation.'
+    );
   }
 
   const seriesId = String(series.getId() || '');
@@ -120,8 +117,27 @@ function resolvePmosCalendarUpsertTransaction_(transaction, calendar, registry) 
     );
   }
 
-  // Calendar proves that the series exists. Rebuild or correct the registry
-  // row from the immutable intended state, then verify both sides.
+  const action = String(transaction.action || '').toUpperCase();
+  const intendedSignature = String(desired.signature || transaction.resultSignature || '');
+  const registryHasIntendedState = Boolean(
+    registryRecord &&
+    String(registryRecord.seriesId || '') === seriesId &&
+    String(registryRecord.signature || '') === intendedSignature
+  );
+
+  // For UPDATE, the pre-existing series can be found even when the Calendar
+  // mutation never happened. Only the intended registry signature proves that
+  // the update reached the registry stage; otherwise the idempotent update must
+  // run again.
+  if ((action === PMOS_OPERATION.UPDATE || action === 'UPDATE') && !registryHasIntendedState) {
+    return retryPmosCalendarRecovery_(
+      transaction,
+      'Existing series does not yet carry the intended registry signature; retry the idempotent update.'
+    );
+  }
+
+  // CREATE recovery may legitimately find a newly created Calendar series with
+  // no registry row because the execution stopped immediately after creation.
   upsertSeriesRegistry_(
     desired,
     seriesId,
@@ -136,7 +152,7 @@ function resolvePmosCalendarUpsertTransaction_(transaction, calendar, registry) 
   if (
     !refreshed ||
     String(refreshed.seriesId || '') !== seriesId ||
-    String(refreshed.signature || '') !== String(desired.signature || '')
+    String(refreshed.signature || '') !== intendedSignature
   ) {
     return manualPmosCalendarRecovery_(
       transaction,
@@ -151,7 +167,7 @@ function resolvePmosCalendarUpsertTransaction_(transaction, calendar, registry) 
     operationId: transaction.operationId,
     seriesKey: transaction.seriesKey,
     seriesId: seriesId,
-    reason: 'Existing Calendar series and rebuilt registry row were verified.'
+    reason: 'Existing Calendar series and registry row were verified.'
   };
 }
 
@@ -167,13 +183,10 @@ function resolvePmosCalendarDeleteTransaction_(transaction, calendar, registry) 
   if (seriesId) series = readPmosRecurringSeriesById_(calendar, seriesId);
 
   if (series) {
-    return {
-      status: 'RETRY_REQUIRED',
-      transactionId: transaction.transactionId,
-      operationId: transaction.operationId,
-      seriesKey: transaction.seriesKey,
-      reason: 'Approved Calendar series still exists; retry the idempotent deletion.'
-    };
+    return retryPmosCalendarRecovery_(
+      transaction,
+      'Approved Calendar series still exists; retry the idempotent deletion.'
+    );
   }
 
   if (registry[transaction.seriesKey]) {
@@ -199,6 +212,16 @@ function resolvePmosCalendarDeleteTransaction_(transaction, calendar, registry) 
     seriesKey: transaction.seriesKey,
     seriesId: seriesId,
     reason: 'Calendar deletion and registry removal were verified.'
+  };
+}
+
+function retryPmosCalendarRecovery_(transaction, reason) {
+  return {
+    status: 'RETRY_REQUIRED',
+    transactionId: transaction.transactionId,
+    operationId: transaction.operationId,
+    seriesKey: transaction.seriesKey,
+    reason: String(reason || 'Retry the idempotent Calendar operation.')
   };
 }
 
