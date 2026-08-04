@@ -3,20 +3,13 @@
  *
  * The audit remains read-only. These windows open only after the audit and let
  * the user inspect findings. Deletion decisions are saved only after an
- * explicit button press.
+ * explicit approval of the selected items.
  */
 
 const PMOS_CALENDAR_REVIEW_SHEET = 'Calendar Review Decisions';
 const PMOS_CALENDAR_REVIEW_HEADERS = [
-  'Review Key',
-  'Plan ID',
-  'Review Type',
-  'Decision',
-  'Series Key',
-  'Calendar Event ID',
-  'Title',
-  'Details',
-  'Updated At'
+  'Review Key', 'Plan ID', 'Review Type', 'Decision', 'Series Key',
+  'Calendar Event ID', 'Title', 'Details', 'Updated At'
 ];
 
 function showCalendarAuditIssuesReview() {
@@ -34,8 +27,7 @@ function showCalendarAuditIssuesReview() {
     : '<div class="empty">No errors or warnings require review.</div>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Calendar Audit Findings',
-    body,
+    'Calendar Audit Findings', body,
     '<button onclick="google.script.host.close()">Close</button>'
   )).setWidth(760).setHeight(650);
 
@@ -46,42 +38,93 @@ function showCalendarAuditIssuesReview() {
 function showCalendarDeletionReview() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   const items = audit.deletionCandidates || [];
+  const decisions = readPmosCalendarReviewDecisions_();
+  const selected = {};
+
+  items.forEach(function (item) {
+    const key = 'DELETION_CANDIDATE::' + String(item.seriesKey || '');
+    selected[item.seriesKey] = Boolean(
+      decisions[key] &&
+      decisions[key].planId === audit.planId &&
+      decisions[key].decision === 'DELETE'
+    );
+  });
+
   const body = items.length
-    ? items.map(function (item, index) {
-        return '<div class="item warning" id="candidate-' + index + '">' +
-          '<div class="heading">' + escapePmosAuditReviewHtml_(item.title || item.seriesKey) + '</div>' +
-          '<div class="details">' + escapePmosAuditReviewHtml_(item.reason) + '</div>' +
-          (item.layer ? '<div class="meta">Route: ' + escapePmosAuditReviewHtml_(item.layer) + '</div>' : '') +
-          '<div class="meta">Series: ' + escapePmosAuditReviewHtml_(item.seriesKey) + '</div>' +
-          '<div class="row-actions">' +
-            '<button class="keep" onclick="decide(' + index + ',\'KEEP\')">Keep</button>' +
-            '<button class="delete" onclick="confirmDelete(' + index + ')">Approve deletion</button>' +
-          '</div>' +
-          '<div class="decision" id="decision-' + index + '"></div>' +
-          '</div>';
+    ? '<div class="instructions">All events are kept by default. Select only the recurring series that should be deleted.</div>' +
+      items.map(function (item, index) {
+        const checked = selected[item.seriesKey] ? ' checked' : '';
+        return '<label class="item warning selectable" for="delete-' + index + '">' +
+          '<input class="delete-check" type="checkbox" id="delete-' + index + '" data-index="' + index + '"' + checked + '>' +
+          '<span><span class="heading">' + escapePmosAuditReviewHtml_(item.title || item.seriesKey) + '</span>' +
+          '<span class="details">' + escapePmosAuditReviewHtml_(item.reason) + '</span>' +
+          (item.layer ? '<span class="meta">Route: ' + escapePmosAuditReviewHtml_(item.layer) + '</span>' : '') +
+          '<span class="meta">Series: ' + escapePmosAuditReviewHtml_(item.seriesKey) + '</span></span>' +
+          '</label>';
       }).join('')
     : '<div class="empty">No Calendar series are currently suggested for deletion.</div>';
 
   const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
-  const footer = '<button onclick="google.script.host.close()">Close</button>';
+  const footer = items.length
+    ? '<span id="selectionCount">0 selected</span>' +
+      '<button class="delete" onclick="approveSelected()">Approve selected deletions</button>' +
+      '<button onclick="google.script.host.close()">Close</button>'
+    : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
     'var candidates=' + itemJson + ';' +
-    'function confirmDelete(i){if(confirm("Approve deletion of this recurring Calendar series?"))decide(i,"DELETE");}' +
-    'function decide(i,decision){var item=candidates[i];var output=document.getElementById("decision-"+i);output.textContent="Saving…";' +
-      'google.script.run.withSuccessHandler(function(){output.textContent=decision==="DELETE"?"Deletion approved":"Keep decision saved";})' +
-      '.withFailureHandler(function(e){output.textContent=e&&e.message?e.message:String(e);})' +
-      '.savePmosCalendarReviewDecision(' + JSON.stringify(audit.planId) + ',"DELETION_CANDIDATE",decision,item);}' +
+    'function selectedIndexes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check:checked")).map(function(x){return Number(x.getAttribute("data-index"));});}' +
+    'function updateCount(){var n=selectedIndexes().length;document.getElementById("selectionCount").textContent=n+" selected";}' +
+    'Array.prototype.forEach.call(document.querySelectorAll(".delete-check"),function(x){x.addEventListener("change",updateCount);});updateCount();' +
+    'function approveSelected(){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
+      'if(!confirm("Approve deletion of "+indexes.length+" selected recurring Calendar series?"))return;' +
+      'var button=event.target;button.disabled=true;button.textContent="Saving…";' +
+      'var items=indexes.map(function(i){return candidates[i];});' +
+      'google.script.run.withSuccessHandler(function(){button.textContent="Approved";setTimeout(function(){google.script.host.close();},500);})' +
+      '.withFailureHandler(function(e){button.disabled=false;button.textContent="Approve selected deletions";alert(e&&e.message?e.message:String(e));})' +
+      '.saveSelectedPmosCalendarDeletions(' + JSON.stringify(audit.planId) + ',items);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Suggested Calendar Deletions',
-    body,
-    footer,
-    script
+    'Suggested Calendar Deletions', body, footer, script
   )).setWidth(780).setHeight(680);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Calendar Deletions');
   return { count: items.length, planId: audit.planId };
+}
+
+function saveSelectedPmosCalendarDeletions(planId, selectedItems) {
+  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  if (String(planId || '') !== String(audit.planId || '')) {
+    throw new Error('Calendar data changed. Run the Plan Audit again before approving deletions.');
+  }
+
+  const candidates = {};
+  (audit.deletionCandidates || []).forEach(function (item) {
+    candidates[String(item.seriesKey || '')] = item;
+  });
+
+  const selectedKeys = {};
+  (selectedItems || []).forEach(function (item) {
+    const key = String(item && item.seriesKey || '');
+    if (!key || !candidates[key]) throw new Error('A selected deletion is not part of the current audited plan.');
+    selectedKeys[key] = true;
+  });
+
+  Object.keys(candidates).forEach(function (seriesKey) {
+    savePmosCalendarReviewDecision(
+      audit.planId,
+      'DELETION_CANDIDATE',
+      selectedKeys[seriesKey] ? 'DELETE' : 'KEEP',
+      candidates[seriesKey]
+    );
+  });
+
+  return {
+    saved: true,
+    approvedCount: Object.keys(selectedKeys).length,
+    keptCount: Object.keys(candidates).length - Object.keys(selectedKeys).length,
+    planId: audit.planId
+  };
 }
 
 function savePmosCalendarReviewDecision(planId, reviewType, decision, item) {
@@ -98,29 +141,17 @@ function savePmosCalendarReviewDecision(planId, reviewType, decision, item) {
   const reviewKey = String(reviewType || 'REVIEW') + '::' + seriesKey;
   const values = sheet.getDataRange().getValues();
   let rowNumber = 0;
-
   for (let index = 1; index < values.length; index++) {
-    if (String(values[index][0] || '') === reviewKey) {
-      rowNumber = index + 1;
-      break;
-    }
+    if (String(values[index][0] || '') === reviewKey) { rowNumber = index + 1; break; }
   }
 
   const row = [
-    reviewKey,
-    String(planId || ''),
-    String(reviewType || ''),
-    normalizedDecision,
-    seriesKey,
-    String(record.eventId || record.seriesId || ''),
-    String(record.title || ''),
-    String(record.reason || record.details || ''),
-    new Date()
+    reviewKey, String(planId || ''), String(reviewType || ''), normalizedDecision,
+    seriesKey, String(record.eventId || record.seriesId || ''),
+    String(record.title || ''), String(record.reason || record.details || ''), new Date()
   ];
-
   if (rowNumber) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
-
   return { saved: true, reviewKey: reviewKey, decision: normalizedDecision };
 }
 
@@ -133,13 +164,9 @@ function readPmosCalendarReviewDecisions_() {
     const key = String(row[0] || '');
     if (!key) return;
     result[key] = {
-      reviewKey: key,
-      planId: String(row[1] || ''),
-      reviewType: String(row[2] || ''),
-      decision: String(row[3] || ''),
-      seriesKey: String(row[4] || ''),
-      calendarEventId: String(row[5] || ''),
-      title: String(row[6] || ''),
+      reviewKey: key, planId: String(row[1] || ''), reviewType: String(row[2] || ''),
+      decision: String(row[3] || ''), seriesKey: String(row[4] || ''),
+      calendarEventId: String(row[5] || ''), title: String(row[6] || ''),
       details: String(row[7] || ''),
       updatedAt: row[8] instanceof Date ? row[8].toISOString() : String(row[8] || '')
     };
@@ -158,7 +185,6 @@ function ensurePmosCalendarReviewSheet_() {
     sheet.hideSheet();
     return sheet;
   }
-
   const headers = sheet.getRange(1, 1, 1, PMOS_CALENDAR_REVIEW_HEADERS.length)
     .getValues()[0].map(function (value) { return String(value || '').trim(); });
   const valid = PMOS_CALENDAR_REVIEW_HEADERS.every(function (header, index) {
@@ -171,20 +197,19 @@ function ensurePmosCalendarReviewSheet_() {
 function buildPmosAuditReviewHtml_(title, body, footer, extraScript) {
   return '<!DOCTYPE html><html><head><base target="_top"><style>' +
     'body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;background:#f8fafc}' +
-    'h2{margin:0 0 14px}.item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}' +
-    '.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
+    'h2{margin:0 0 14px}.instructions{padding:10px 12px;background:#dbeafe;color:#1e3a8a;border-radius:8px;margin-bottom:12px}' +
+    '.item{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:10px 0}' +
+    '.selectable{display:grid;grid-template-columns:24px 1fr;gap:10px;cursor:pointer}.selectable input{margin-top:3px}' +
+    '.selectable span{display:block}.error{border-left:5px solid #dc2626}.warning{border-left:5px solid #d97706}.info{border-left:5px solid #2563eb}' +
     '.heading{font-weight:700}.details{margin-top:6px;white-space:pre-wrap}.meta{margin-top:5px;color:#64748b;font-size:12px}' +
-    '.row-actions{display:flex;gap:8px;margin-top:10px}.decision{margin-top:7px;font-size:12px;font-weight:700}' +
-    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.keep{background:#e2e8f0}.delete{background:#fee2e2;color:#991b1b}' +
-    '.footer{position:sticky;bottom:0;background:#f8fafc;padding-top:12px}.empty{padding:16px;background:#fff;border-radius:10px}' +
+    'button{border:0;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.delete{background:#fee2e2;color:#991b1b}' +
+    '.footer{position:sticky;bottom:0;background:#f8fafc;padding-top:12px;display:flex;gap:8px;align-items:center}.footer span{margin-right:auto}.empty{padding:16px;background:#fff;border-radius:10px}' +
     '</style></head><body><h2>' + escapePmosAuditReviewHtml_(title) + '</h2>' + body +
     '<div class="footer">' + footer + '</div>' + (extraScript || '') + '</body></html>';
 }
 
 function escapePmosAuditReviewHtml_(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
-    return {
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[character];
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character];
   });
 }
