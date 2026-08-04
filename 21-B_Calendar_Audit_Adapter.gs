@@ -27,7 +27,8 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     return String(item.severity || '').toUpperCase() === 'ERROR';
   });
   const warnings = issues.filter(function (item) {
-    return String(item.severity || '').toUpperCase() !== 'ERROR';
+    return String(item.severity || '').toUpperCase() !== 'ERROR' &&
+      item.reviewType !== 'DELETION_CANDIDATE';
   });
 
   const errorCount = errors.length;
@@ -41,7 +42,7 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     'Updates proposed: ' + Number(preview.updates || 0),
     'Blocking errors: ' + errorCount,
     'Warnings requiring review: ' + warningCount,
-    'Deletion candidates requiring review: ' + deletionCandidates.length,
+    'Suggested deletions: ' + deletionCandidates.length,
     'Registered series missing: ' + Number(preview.registeredMissing || 0),
     'Unclassified events requiring review: ' + Number(preview.unclassifiedEvents || 0)
   ];
@@ -59,7 +60,7 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     deletionCandidateCount: deletionCandidates.length,
     hasErrors: errorCount > 0,
     hasWarnings: warningCount > 0,
-    hasReviewItems: warningCount > 0 || errorCount > 0,
+    hasReviewItems: warningCount > 0 || errorCount > 0 || deletionCandidates.length > 0,
     summary: lines.join('\n'),
     issues: issues,
     errors: errors,
