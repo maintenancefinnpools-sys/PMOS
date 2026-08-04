@@ -20,7 +20,7 @@ var clock=setInterval(function(){elapsed.textContent='Elapsed: '+Math.floor((Dat
 function fail(error){clearInterval(clock);body.className='failed';stage.textContent='Needs attention';result.textContent=error&&error.message?error.message:String(error);syncButton.disabled=false;}
 function done(response){clearInterval(clock);body.className='complete';stage.textContent='Complete';elapsed.textContent='Duration: '+Math.max(1,Math.round((Date.now()-started)/1000))+'s';result.textContent=response&&response.summary?response.summary:'Task completed.';if('${taskType}'==='CALENDAR_AUDIT'&&response&&response.canSync)syncButton.style.display='inline-block';}
 google.script.run.withSuccessHandler(done).withFailureHandler(fail).runPmosTask('${taskType}');
-syncButton.onclick=function(){syncButton.disabled=true;stage.textContent='Opening Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openCalendarSyncFromAudit();};
+syncButton.onclick=function(){syncButton.disabled=true;stage.textContent='Opening Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(fail).openVerifiedCalendarSyncFromAudit();};
 document.getElementById('closeButton').onclick=function(){google.script.host.close();};
 })();
 </script></body></html>`).setWidth(610).setHeight(540);
@@ -30,58 +30,83 @@ document.getElementById('closeButton').onclick=function(){google.script.host.clo
 function runPmosTask_(taskType) {
   return withSpreadsheetServiceRetry_(() => {
     switch (taskType) {
-      case 'CALENDAR_AUDIT': return runCalendarPlanAuditReadOnly_();
+      case 'CALENDAR_AUDIT':
+        return runVerifiedCalendarPlanAuditReadOnly_();
       case 'CALENDAR_STATUS': {
-        const preview = previewCalendarChanges();
-        const registry = getSeriesRegistry_();
-        return {summary:['Calendar Status complete.',`Registered recurring series: ${Object.keys(registry).length}`,`Creates pending: ${preview.creates||0}`,`Updates pending: ${preview.updates||0}`,`Removals pending: ${preview.deletes||0}`].join('\n')};
+        const preview = previewPmosCalendarSyncPlan();
+        return {
+          summary: [
+            'Calendar Status complete.',
+            'No spreadsheet or Calendar changes were made.',
+            `Expected recurring series: ${preview.totalSeries || 0}`,
+            `Registered series present: ${preview.registeredPresent || 0}`,
+            `Registered series missing: ${preview.registeredMissing || 0}`,
+            `Creates proposed: ${preview.creates || 0}`,
+            `Updates proposed: ${preview.updates || 0}`,
+            `Approved removals: ${preview.deletes || 0}`,
+            `Temporary visits preserved: ${preview.temporaryVisits || 0}`,
+            `Unclassified events: ${preview.unclassifiedEvents || 0}`
+          ].join('\n')
+        };
       }
-      case 'VERIFY_CALENDAR': { const r=executeVerifyCalendarJob_(); return {summary:`Verification complete.\n${r.summary}`}; }
-      case 'CUSTOMER_SYNC': { const r=synchronizeCustomerDatabase_(true); return {summary:['Customer Database Sync complete.',`IDs created: ${r.idsCreated||0}`,`Route rows updated: ${r.routeRowsUpdated||0}`,`Route rows created: ${r.routeRowsCreated||0}`].join('\n')}; }
-      case 'MAP_EXPORT': { const r=exportAffectedMapLayers(); return {summary:['Map export complete.',`Layer files exported: ${r.count||0}`,`Drive folder: ${r.folderName||''}`].join('\n')}; }
-      default: throw new Error(`Unknown PMOS task: ${taskType}`);
+      case 'VERIFY_CALENDAR': {
+        const result = executeVerifyCalendarJob_();
+        return {summary: `Verification complete.\n${result.summary}`};
+      }
+      case 'CUSTOMER_SYNC': {
+        const result = synchronizeCustomerDatabase_(true);
+        return {
+          summary: [
+            'Customer Database Sync complete.',
+            `IDs created: ${result.idsCreated || 0}`,
+            `Route rows updated: ${result.routeRowsUpdated || 0}`,
+            `Route rows created: ${result.routeRowsCreated || 0}`
+          ].join('\n')
+        };
+      }
+      case 'MAP_EXPORT': {
+        const result = exportAffectedMapLayers();
+        return {
+          summary: [
+            'Map export complete.',
+            `Layer files exported: ${result.count || 0}`,
+            `Drive folder: ${result.folderName || ''}`
+          ].join('\n')
+        };
+      }
+      default:
+        throw new Error(`Unknown PMOS task: ${taskType}`);
     }
   }, `running ${taskType}`);
 }
 
+/** Compatibility wrapper retained for existing callers. */
 function runCalendarPlanAuditReadOnly_() {
-  const sheet = getRoutesSheet_();
-  const values = sheet.getDataRange().getValues();
-  if (!values.length) throw new Error('The route template is empty.');
-  const headers = values[0].map(value => String(value || '').trim());
-  const required = ['Layer','Stop Order','Calendar Title','Customer ID'];
-  const missing = required.filter(header => headers.indexOf(header) < 0);
-  if (missing.length) {
-    return {canSync:false,summary:['Calendar Plan Audit complete.','No spreadsheet changes were made.',`Blocking errors: ${missing.length}`,'Missing required columns: '+missing.join(', ')].join('\n')};
-  }
-  const layerIndex=headers.indexOf('Layer'),orderIndex=headers.indexOf('Stop Order'),titleIndex=headers.indexOf('Calendar Title'),idIndex=headers.indexOf('Customer ID');
-  let routeRows=0,errors=0,warnings=0;
-  const series={},orders={};
-  for(let row=1;row<values.length;row++){
-    const record=values[row];
-    if(!record.some(value => value!=='' && value!=null)) continue;
-    routeRows++;
-    const layer=String(record[layerIndex]||'').trim(),title=String(record[titleIndex]||'').trim(),id=String(record[idIndex]||'').trim(),order=Number(record[orderIndex]);
-    if(!layer||!title||!id||!Number.isFinite(order)||order<1){errors++;continue;}
-    const key=id+'|'+layer;
-    if(series[key]) warnings++; else series[key]=true;
-    if(!orders[layer]) orders[layer]={};
-    if(orders[layer][order]) warnings++; else orders[layer][order]=true;
-  }
-  const uniqueSeriesCount=Object.keys(series).length;
-  return {canSync:errors===0,summary:['Calendar Plan Audit complete.','No spreadsheet changes were made.',`Route rows checked: ${routeRows}`,`Unique recurring series: ${uniqueSeriesCount}`,`Blocking errors: ${errors}`,`Warnings: ${warnings}`,errors===0?'Calendar Sync is permitted.':'Calendar Sync remains blocked until the errors are repaired.'].join('\n')};
+  return runVerifiedCalendarPlanAuditReadOnly_();
 }
 
 function withSpreadsheetServiceRetry_(operation, operationName) {
-  const delays=[0,600,1500,3000]; let lastError=null;
-  for(let attempt=0;attempt<delays.length;attempt++){
-    if(delays[attempt]) Utilities.sleep(delays[attempt]);
-    try{return operation();}catch(error){
-      lastError=error;
-      const message=String(error&&error.message?error.message:error);
-      const transient=/Service Spreadsheets failed/i.test(message)||/internal error/i.test(message)||/timed out/i.test(message)||/try again/i.test(message);
-      if(!transient||attempt===delays.length-1) throw new Error(`${operationName||'PMOS operation'} failed after ${attempt+1} attempt(s): ${message}`);
+  const delays = [0, 600, 1500, 3000];
+  let lastError = null;
+
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt]) Utilities.sleep(delays[attempt]);
+    try {
+      return operation();
+    } catch (error) {
+      lastError = error;
+      const message = String(error && error.message ? error.message : error);
+      const transient = /Service Spreadsheets failed/i.test(message) ||
+        /internal error/i.test(message) ||
+        /timed out/i.test(message) ||
+        /try again/i.test(message);
+      if (!transient || attempt === delays.length - 1) {
+        throw new Error(
+          `${operationName || 'PMOS operation'} failed after ${attempt + 1} attempt(s): ${message}`
+        );
+      }
     }
   }
+
   throw lastError;
 }
