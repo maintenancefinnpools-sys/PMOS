@@ -28,6 +28,7 @@ function onOpen() {
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
+          .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
           .addItem('PMOS Job Center', 'openPmosJobEngine')
       )
       .addSeparator()
