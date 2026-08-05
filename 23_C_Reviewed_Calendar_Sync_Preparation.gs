@@ -1,13 +1,29 @@
 /** Builds and persists the reviewed queue before the Sync window is displayed. */
+const PMOS_REVIEWED_SYNC_QUEUE_SHEET = 'Reviewed Calendar Sync Queue';
+const PMOS_REVIEWED_SYNC_QUEUE_HEADERS = Object.freeze([
+  'Queue Index',
+  'Operation ID',
+  'Action',
+  'Entity ID',
+  'Status',
+  'Attempts',
+  'Updated At',
+  'Error',
+  'Operation JSON'
+]);
+
 function prepareReviewedCalendarSyncWindow_() {
   const session = requireActivePmosReviewSession_('CALENDAR');
   const result = buildValidatedPmosCalendarSyncPlan_({});
   const plan = result && result.plan;
+
   if (!plan || !Array.isArray(plan.operations)) {
     throw new Error('Calendar Sync could not build the reviewed operation plan.');
   }
   if (!result.canExecute) {
-    throw new Error('The reviewed Calendar plan is not executable. Resolve all planner, validation, and review errors before syncing.');
+    throw new Error(
+      'The reviewed Calendar plan is not executable. Resolve all planner, validation, and review errors before syncing.'
+    );
   }
 
   const operations = plan.operations.filter(isPmosExecutableOperation);
@@ -20,15 +36,45 @@ function prepareReviewedCalendarSyncWindow_() {
   }
 
   clearReviewedCalendarSyncQueue_();
-  const writes = {};
+
   const counts = {creates: 0, updates: 0, deletes: 0};
-  operations.forEach(function (operation, index) {
+  const now = new Date();
+  const rows = operations.map(function (operation, index) {
     const action = String(operation && operation.action || '').toUpperCase();
     if (action === String(PMOS_OPERATION.CREATE).toUpperCase()) counts.creates++;
     else if (action === String(PMOS_OPERATION.UPDATE).toUpperCase()) counts.updates++;
     else if (action === String(PMOS_OPERATION.DELETE).toUpperCase()) counts.deletes++;
-    writes[PMOS_REVIEWED_SYNC_ITEM_PREFIX + String(index)] = JSON.stringify(operation);
+
+    const operationJson = JSON.stringify(operation);
+    if (operationJson.length > 49000) {
+      throw new Error(
+        'Calendar Sync operation ' + String(operation.id || index + 1) +
+        ' is too large for the durable queue. PMOS stopped before making Calendar changes.'
+      );
+    }
+
+    return [
+      index,
+      String(operation.id || ''),
+      action,
+      String(operation.entityId || ''),
+      'Pending',
+      0,
+      now,
+      '',
+      operationJson
+    ];
   });
+
+  const queueSheet = ensureReviewedCalendarSyncQueueSheet_();
+  if (queueSheet.getMaxRows() < rows.length + 1) {
+    queueSheet.insertRowsAfter(
+      queueSheet.getMaxRows(),
+      rows.length + 1 - queueSheet.getMaxRows()
+    );
+  }
+  queueSheet.getRange(2, 1, rows.length, PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length)
+    .setValues(rows);
 
   const state = {
     id: Utilities.getUuid(),
@@ -51,11 +97,12 @@ function prepareReviewedCalendarSyncWindow_() {
     currentOperation: '',
     lastError: '',
     startedAt: '',
-    updatedAt: new Date().toISOString(),
+    updatedAt: now.toISOString(),
     completedAt: ''
   };
-  writes[PMOS_REVIEWED_SYNC_STATE] = JSON.stringify(state);
-  PropertiesService.getDocumentProperties().setProperties(writes, false);
+
+  writeReviewedCalendarSyncState_(state);
+  SpreadsheetApp.flush();
 
   return {
     sessionId: state.sessionId,
@@ -68,4 +115,26 @@ function prepareReviewedCalendarSyncWindow_() {
     reviewDecisionCount: Object.keys(session.decisions || {}).length,
     preparedAt: state.updatedAt
   };
+}
+
+function ensureReviewedCalendarSyncQueueSheet_() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  let sheet = spreadsheet.getSheetByName(PMOS_REVIEWED_SYNC_QUEUE_SHEET);
+  if (!sheet) sheet = spreadsheet.insertSheet(PMOS_REVIEWED_SYNC_QUEUE_SHEET);
+
+  const headerWidth = PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length;
+  const currentHeaders = sheet.getRange(1, 1, 1, headerWidth).getValues()[0];
+  const needsHeaders = PMOS_REVIEWED_SYNC_QUEUE_HEADERS.some(function (header, index) {
+    return String(currentHeaders[index] || '') !== header;
+  });
+
+  if (needsHeaders) {
+    sheet.clear();
+    sheet.getRange(1, 1, 1, headerWidth)
+      .setValues([PMOS_REVIEWED_SYNC_QUEUE_HEADERS.slice()]);
+    sheet.setFrozenRows(1);
+  }
+
+  if (!sheet.isSheetHidden()) sheet.hideSheet();
+  return sheet;
 }
