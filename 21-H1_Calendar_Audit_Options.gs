@@ -33,5 +33,8 @@ function clearPmosCalendarAuditOptions_() {
 
 function runFreshPmosCalendarAuditWithOptions(options) {
   const normalized = savePmosCalendarAuditOptions_(options || {});
-  return runVerifiedCalendarPlanAuditReadOnly_(normalized);
+  clearPmosCalendarAuditSnapshot_();
+  return runVerifiedCalendarPlanAuditReadOnly_(Object.assign({}, normalized, {
+    forceFresh: true
+  }));
 }
