@@ -43,5 +43,6 @@ function resetPmosCalendarReviewSessionForNewAudit_() {
     PMOS_REVIEW_SESSION_PROPERTY
   );
   clearPmosCalendarAuditOptions_();
+  clearPmosCalendarAuditSnapshot_();
   return {reset: true};
 }
