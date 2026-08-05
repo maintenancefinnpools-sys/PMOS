@@ -1,17 +1,46 @@
 /**
  * Safe Calendar Sync Job Center entry.
  *
- * Initializes the existing shared runtime Job Engine only after incomplete
- * Calendar transactions are reconciled and the verified, read-only Calendar
- * Plan Audit succeeds. This deliberately bypasses the older Calendar-specific
- * auto-continue engine.
+ * Initializes the shared runtime Job Engine only after incomplete Calendar
+ * transactions are reconciled and the verified Calendar Plan Audit succeeds.
+ * Once the immutable operation queue exists, Start / Continue resumes that
+ * exact approved queue and never rebuilds the plan after PMOS's own writes.
  */
 function startVerifiedCalendarSyncJob(autoMode, options) {
-  const calendarOptions = normalizeVerifiedCalendarSyncOptions_(options);
+  const existing = readPmosJobState_();
+
+  // Resume an already-initialized Calendar Sync from its durable queue. The
+  // Calendar must differ from the original preview after successful operations,
+  // so rebuilding and comparing a new plan ID here would reject PMOS's own work.
+  const canResumeExistingQueue = Boolean(
+    existing &&
+    existing.type === 'CALENDAR_SYNC' &&
+    existing.operationQueueInitialized === true &&
+    existing.planId &&
+    Number(existing.remaining || 0) > 0 &&
+    existing.status !== 'Complete' &&
+    existing.status !== 'Cancelled'
+  );
+
+  if (canResumeExistingQueue) {
+    existing.autoEnabled = Boolean(autoMode);
+    existing.pauseRequested = false;
+    existing.status = 'Ready';
+    existing.lastError = '';
+    existing.nextRunAt = '';
+    writePmosJobState_(existing);
+    removePmosJobTrigger_();
+    return runPmosJobBatch_();
+  }
+
+  const savedAuditOptions = typeof readPmosCalendarAuditOptions_ === 'function'
+    ? readPmosCalendarAuditOptions_()
+    : {};
+  const calendarOptions = normalizeVerifiedCalendarSyncOptions_(
+    Object.assign({}, options || {}, savedAuditOptions || {})
+  );
 
   // Resolve any interrupted prior operation before accepting a new audit.
-  // Deterministic completions may repair registry bookkeeping. Operations that
-  // were never applied remain safe to retry through the idempotent queue.
   const recovery = recoverPmosCalendarRegistryTransactions_();
   try {
     assertNoAmbiguousPmosCalendarRecovery_(recovery);
@@ -31,7 +60,6 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
     );
   }
 
-  const existing = readPmosJobState_();
   if (
     existing &&
     existing.status !== 'Complete' &&
@@ -44,30 +72,11 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
     );
   }
 
-  let state = existing && existing.type === 'CALENDAR_SYNC'
-    ? existing
-    : newPmosJobState_('CALENDAR_SYNC');
-
-  const requestedPlanId = audit.planId;
-  const canResumeExistingQueue = Boolean(
-    state.operationQueueInitialized &&
-    state.planId &&
-    state.planId === requestedPlanId &&
-    Number(state.remaining || 0) > 0
-  );
-
-  if (!canResumeExistingQueue) {
-    if (state.id) deletePmosJobOperationQueue_(state.id);
-    state = newPmosJobState_('CALENDAR_SYNC');
-    state.operationQueueInitialized = false;
-    state.operationProviderFinalized = false;
-    state.processedItems = 0;
-    state.originalTotal = 0;
-    state.remaining = null;
-  }
+  if (existing && existing.id) deletePmosJobOperationQueue_(existing.id);
+  const state = newPmosJobState_('CALENDAR_SYNC');
 
   state.calendarOptions = calendarOptions;
-  state.auditedPlanId = requestedPlanId;
+  state.auditedPlanId = audit.planId;
   state.auditedAt = audit.auditedAt || new Date().toISOString();
   state.recoveryInspected = Number(recovery.inspected || 0);
   state.recoveryFinalized = Number(recovery.finalized || 0);
