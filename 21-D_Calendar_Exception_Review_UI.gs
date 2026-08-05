@@ -7,16 +7,13 @@
 function showCalendarDeletionExceptionsReview() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   const items = audit.deletionCandidates || [];
-  const decisions = readPmosCalendarReviewDecisions_();
+  const session = getOrBeginPmosReviewSession_('CALENDAR', audit.sourceVersion);
   const kept = {};
 
   items.forEach(function (item) {
-    const key = 'DELETION_CANDIDATE::' + String(item.seriesKey || '');
-    kept[item.seriesKey] = Boolean(
-      decisions[key] &&
-      decisions[key].planId === audit.planId &&
-      decisions[key].decision === 'KEEP'
-    );
+    const itemKey = String(item.seriesKey || item.seriesId || '');
+    const decision = readPmosReviewSessionDecision_(session, 'DELETION_CANDIDATE', itemKey);
+    kept[itemKey] = String(decision && decision.decision || '').toUpperCase() === 'KEEP';
   });
 
   const body = items.length
@@ -28,7 +25,8 @@ function showCalendarDeletionExceptionsReview() {
         '<span id="selectionCount">0 selected to keep</span>' +
       '</div>' +
       items.map(function (item, index) {
-        const checked = kept[item.seriesKey] ? ' checked' : '';
+        const itemKey = String(item.seriesKey || item.seriesId || '');
+        const checked = kept[itemKey] ? ' checked' : '';
         return '<label class="item deletion-exception selectable' + (checked ? ' selected-exception' : '') + '" for="keep-' + index + '" id="row-' + index + '">' +
           '<input class="keep-check" type="checkbox" id="keep-' + index + '" data-index="' + index + '"' + checked + '>' +
           '<span class="row-content"><span class="row-top"><span class="heading">' + escapePmosAuditReviewHtml_(item.title || item.seriesKey) + '</span>' +
@@ -59,10 +57,9 @@ function showCalendarDeletionExceptionsReview() {
     'function approveDeletions(button){var kept=keptIndexes(),deleteCount=candidates.length-kept.length;if(!deleteCount){alert("All events are selected to keep. There are no deletions to approve.");return;}' +
       'if(!confirm("Are you sure you would like to delete the "+deleteCount+" unselected events?"))return;' +
       'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
-      'var keptItems=kept.map(function(i){return candidates[i];});' +
-      'google.script.run.withSuccessHandler(function(result){button.textContent="Approved "+String(result.deletedCount||0)+" deletions";setTimeout(function(){google.script.host.close();},700);})' +
+      'google.script.run.withSuccessHandler(function(){google.script.host.close();})' +
       '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve deletions";alert(e&&e.message?e.message:String(e));})' +
-      '.savePmosCalendarDeletionExceptions(' + JSON.stringify(audit.planId) + ',keptItems);}' +
+      '.savePmosCalendarDeletionExceptions(' + JSON.stringify(audit.sourceVersion) + ',candidates,kept);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
@@ -80,42 +77,41 @@ function showCalendarDeletionExceptionsReview() {
   )).setWidth(800).setHeight(700);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Calendar Deletions');
-  return { count: items.length, planId: audit.planId };
+  return { count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId };
 }
 
-function savePmosCalendarDeletionExceptions(planId, keptItems) {
+function savePmosCalendarDeletionExceptions(sourceVersion, candidates, keptIndexes) {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (String(planId || '') !== String(audit.planId || '')) {
+  if (String(sourceVersion || '') !== String(audit.sourceVersion || '')) {
     throw new Error('Calendar data changed. Run the Plan Audit again before approving deletions.');
   }
 
-  const candidates = {};
-  (audit.deletionCandidates || []).forEach(function (item) {
-    candidates[String(item.seriesKey || '')] = item;
-  });
+  const kept = {};
+  (keptIndexes || []).forEach(function (index) { kept[Number(index)] = true; });
+  let deletedCount = 0;
+  let keptCount = 0;
 
-  const keptKeys = {};
-  (keptItems || []).forEach(function (item) {
-    const key = String(item && item.seriesKey || '');
-    if (!key || !candidates[key]) {
-      throw new Error('A selected event is not part of the current deletion review.');
-    }
-    keptKeys[key] = true;
-  });
-
-  Object.keys(candidates).forEach(function (seriesKey) {
-    savePmosCalendarReviewDecision(
-      audit.planId,
+  (candidates || []).forEach(function (item, index) {
+    const itemKey = String(item && (item.seriesKey || item.seriesId) || '');
+    if (!itemKey) throw new Error('A deletion candidate is missing its stable series identity.');
+    const decision = kept[index] ? 'KEEP' : 'DELETE';
+    if (decision === 'KEEP') keptCount++;
+    else deletedCount++;
+    savePmosReviewSessionDecision_(
+      'CALENDAR',
+      audit.sourceVersion,
       'DELETION_CANDIDATE',
-      keptKeys[seriesKey] ? 'KEEP' : 'DELETE',
-      candidates[seriesKey]
+      itemKey,
+      decision,
+      item
     );
   });
 
   return {
     saved: true,
-    deletedCount: Object.keys(candidates).length - Object.keys(keptKeys).length,
-    keptCount: Object.keys(keptKeys).length,
-    planId: audit.planId
+    deletedCount: deletedCount,
+    keptCount: keptCount,
+    planId: audit.planId,
+    reviewSessionId: audit.reviewSessionId
   };
 }
