@@ -106,7 +106,8 @@ function savePmosReviewStep_(scope, reviewType, records) {
     return {
       reviewType: normalizedType,
       itemKey: String(record && record.itemKey || '').trim(),
-      decision: String(record && record.decision || '').trim().toUpperCase()
+      decision: String(record && record.decision || '').trim().toUpperCase(),
+      payload: compactPmosReviewPayload_(record && record.payload)
     };
   });
   const saved = writePmosReviewSessionDecisions_(session, normalizedRecords);
@@ -138,6 +139,9 @@ function writePmosReviewSessionDecisions_(session, records) {
       decision: decision,
       updatedAt: now
     };
+    const payload = compactPmosReviewPayload_(record && record.payload);
+    if (Object.keys(payload).length) compact.payload = payload;
+
     propertiesToWrite[
       PMOS_REVIEW_DECISION_PREFIX + session.id + '::' + decisionKey
     ] = JSON.stringify(compact);
@@ -156,6 +160,25 @@ function writePmosReviewSessionDecisions_(session, records) {
   propertiesToWrite[PMOS_REVIEW_SESSION_PROPERTY] = JSON.stringify(metadata);
   PropertiesService.getDocumentProperties().setProperties(propertiesToWrite, false);
   return {sessionId: session.id, decisions: saved};
+}
+
+/** Keeps only small scalar fields required by later planners and executors. */
+function compactPmosReviewPayload_(payload) {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const allowed = [
+    'customerId', 'customerName', 'customerAddress',
+    'eventId', 'seriesId', 'seriesKey', 'operationId',
+    'title', 'start', 'end', 'location'
+  ];
+  const compact = {};
+  allowed.forEach(function (key) {
+    const value = source[key];
+    if (value === '' || value == null) return;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      compact[key] = String(value).slice(0, 500);
+    }
+  });
+  return compact;
 }
 
 function readPmosReviewSessionDecision_(session, reviewType, itemKey) {
