@@ -9,7 +9,7 @@ function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
 
   switch (type) {
     case 'SUGGESTED_MATCH':
-      saved = savePmosCalendarSuggestedMatchDecisions(items || [], selectedIndexes || []);
+      saved = savePmosCalendarSuggestedMatchDecisionsForSync_(items || [], selectedIndexes || []);
       break;
     case 'UNCLASSIFIED_EVENT':
       saved = savePmosCalendarUnclassifiedDecisions(items || [], selectedIndexes || []);
