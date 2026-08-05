@@ -1,10 +1,6 @@
 /**
  * Resolves approved Calendar Review Session decisions against verified Calendar
- * state and appends explicit, non-writing review operations to the Sync plan.
- *
- * Review operations remain SKIP operations until the dedicated executor is
- * connected. This prevents the recurring-series executor from interpreting a
- * reviewed one-time event as an ordinary recurring-series update or deletion.
+ * state and appends explicit reviewed-event operations to the Sync plan.
  */
 function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifiedState, decisionSet) {
   const decisions = decisionSet || readActivePmosCalendarReviewDecisions_();
@@ -52,9 +48,7 @@ function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifie
     reviewDecisionCounts: Object.assign({}, decisions.counts || {}),
     reviewOperationCount: reviewOperations.length,
     reviewResolutionErrorCount: resolutionErrors.length,
-    reviewExecutorPending: reviewOperations.some(function (operation) {
-      return Boolean(operation.metadata && operation.metadata.reviewExecutorPending);
-    })
+    reviewExecutorPending: false
   });
 
   return Object.freeze(Object.assign({}, plan, {
@@ -150,7 +144,7 @@ function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payl
     metadata: Object.freeze({
       reviewOperation: true,
       reviewAction: intent.action,
-      reviewExecutorPending: intent.action !== 'PRESERVE_EVENT',
+      reviewExecutorPending: false,
       userApproved: true,
       blocking: false
     })
