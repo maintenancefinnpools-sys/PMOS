@@ -49,7 +49,7 @@ function showCalendarUnclassifiedExceptionsReview() {
 
   const dataJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<button class="amber-action" id="approveButton" onclick="approveUnclassified(this)">Approve classifications</button>' +
+    ? '<button class="amber-action" id="approveButton" onclick="approveUnclassified(this)">Continue Review</button>' +
       '<button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
@@ -61,7 +61,7 @@ function showCalendarUnclassifiedExceptionsReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and ignore "+ignored.length+" selected event(s) for this sync?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve classifications";alert(e&&e.message?e.message:String(e));}).savePmosCalendarUnclassifiedDecisions(' + JSON.stringify(audit.sourceVersion) + ',events,ignored);}' +
+    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and send "+ignored.length+" selected event(s) to deletion review?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).savePmosCalendarUnclassifiedDecisions(' + JSON.stringify(audit.sourceVersion) + ',events,ignored);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
@@ -78,6 +78,7 @@ function savePmosCalendarUnclassifiedDecisions(sourceVersion, items, ignoredInde
   const session = getOrBeginPmosReviewSession_('CALENDAR', sourceVersion);
   const ignored = {};
   (ignoredIndexes || []).forEach(function (index) { ignored[Number(index)] = true; });
+  const records = [];
   let temporaryCount = 0;
   let ignoredCount = 0;
 
@@ -87,20 +88,26 @@ function savePmosCalendarUnclassifiedDecisions(sourceVersion, items, ignoredInde
     const decision = ignored[index] ? 'IGNORE' : 'TEMPORARY';
     if (decision === 'IGNORE') ignoredCount++;
     else temporaryCount++;
-    savePmosReviewSessionDecision_(
-      'CALENDAR',
-      session.sourceVersion,
-      'UNCLASSIFIED_EVENT',
-      itemKey,
-      decision,
-      item
-    );
+    records.push({
+      reviewType: 'UNCLASSIFIED_EVENT',
+      itemKey: itemKey,
+      decision: decision
+    });
   });
+
+  const saved = savePmosReviewSessionDecisions_(
+    'CALENDAR',
+    String(session.latestPlannerVersion || session.sourceVersion || sourceVersion || ''),
+    records
+  );
+  if (!saved || saved.decisions.length !== records.length) {
+    throw new Error('Not all unclassified-event decisions were saved.');
+  }
 
   return {
     saved: true,
     temporaryCount: temporaryCount,
     ignoredCount: ignoredCount,
-    reviewSessionId: session.id
+    reviewSessionId: saved.sessionId
   };
 }
