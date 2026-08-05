@@ -36,8 +36,18 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
 
   const rawUnclassified = unclassifiedOperations.map(formatPmosCalendarUnclassifiedEvent_);
   const matching = classifyPmosCalendarCustomerMatches_(rawUnclassified);
-  const suggestedMatches = matching.suggestedMatches;
-  const unclassifiedEvents = matching.unclassifiedEvents;
+  const sourceVersion = String(
+    preview.plan && preview.plan.metadata && preview.plan.metadata.sourceVersion ||
+    preview.planId || ''
+  );
+  const reviewSession = getOrBeginPmosReviewSession_('CALENDAR', sourceVersion);
+  const refinedMatching = applyPmosCalendarMatchReviewSession_(
+    matching,
+    reviewSession
+  );
+  const suggestedMatches = refinedMatching.suggestedMatches;
+  const approvedMatches = refinedMatching.approvedMatches;
+  const unclassifiedEvents = refinedMatching.unclassifiedEvents;
 
   const lines = [
     'Calendar: ' + String(preview.calendarName || ''),
@@ -58,10 +68,13 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
   return {
     canSync: preview.canExecute === true,
     planId: preview.planId || '',
+    sourceVersion: sourceVersion,
+    reviewSessionId: reviewSession.id,
     calendarName: preview.calendarName || '',
     errorCount: errors.length,
     warningCount: warnings.length,
     suggestedMatchCount: suggestedMatches.length,
+    approvedMatchCount: approvedMatches.length,
     deletionCandidateCount: deletionCandidates.length,
     unclassifiedEventCount: unclassifiedEvents.length,
     hasErrors: errors.length > 0,
@@ -76,10 +89,42 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     errors: errors,
     warnings: warnings,
     suggestedMatches: suggestedMatches,
+    approvedMatches: approvedMatches,
     deletionCandidates: deletionCandidates.map(formatPmosCalendarDeletionCandidate_),
     unclassifiedEvents: unclassifiedEvents,
     preview: preview
   };
+}
+
+function applyPmosCalendarMatchReviewSession_(matching, session) {
+  const pending = [];
+  const approved = [];
+  const unclassified = (matching.unclassifiedEvents || []).slice();
+
+  (matching.suggestedMatches || []).forEach(function (item) {
+    const itemKey = String(item.eventId || item.seriesId || '');
+    const decision = readPmosReviewSessionDecision_(
+      session,
+      'SUGGESTED_MATCH',
+      itemKey
+    );
+    const value = String(decision && decision.decision || '').toUpperCase();
+    if (value === 'IGNORE') {
+      unclassified.push(Object.freeze(Object.assign({}, item, {
+        reason: 'Exempted from the suggested customer match during this review session.'
+      })));
+    } else if (value === 'KEEP' || value === 'MATCH') {
+      approved.push(item);
+    } else {
+      pending.push(item);
+    }
+  });
+
+  return Object.freeze({
+    suggestedMatches: Object.freeze(pending),
+    approvedMatches: Object.freeze(approved),
+    unclassifiedEvents: Object.freeze(unclassified)
+  });
 }
 
 function buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations) {
