@@ -57,7 +57,7 @@ function showCalendarSuggestedMatchesReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(matches,exempt);}' +
+    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Saving and continuing…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).saveAndAdvancePmosCalendarReview("SUGGESTED_MATCH",matches,exempt);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_('Suggested Customer Matches', body, footer, script) + '<style>' +
@@ -83,5 +83,5 @@ function savePmosCalendarSuggestedMatchDecisions(items, exemptIndexes) {
 
   const saved = savePmosReviewStep_('CALENDAR', 'SUGGESTED_MATCH', records);
   if (!saved || saved.decisionCount !== records.length) throw new Error('Not all suggested-match decisions were saved.');
-  return {saved: true, approvedCount: approvedCount, exemptCount: exemptCount, reviewSessionId: saved.sessionId};
+  return {saved: true, decisionCount: records.length, approvedCount: approvedCount, exemptCount: exemptCount, reviewSessionId: saved.sessionId};
 }
