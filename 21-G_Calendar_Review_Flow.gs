@@ -53,11 +53,7 @@ function continuePmosCalendarReviewFlow() {
     return {opened: 'SUGGESTED_MATCHES'};
   }
   if (audit.hasUnclassifiedEvents) {
-    if (typeof showCalendarUnclassifiedEventsReview === 'function') {
-      showCalendarUnclassifiedEventsReview();
-    } else {
-      showCalendarUnclassifiedExceptionsReview();
-    }
+    showCalendarUnclassifiedExceptionsReview();
     return {opened: 'UNCLASSIFIED_EVENTS'};
   }
   if (Number(audit.deletionCandidateCount || 0) > 0) {
