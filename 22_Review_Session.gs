@@ -28,7 +28,7 @@ function getOrBeginPmosReviewSession_(scope, sourceVersion) {
     };
     properties.setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(session));
   }
-  return clonePmosReviewSession_(session);
+  return refreshPmosReviewSessionFromLegacy_(session);
 }
 
 function loadPmosReviewSession_() {
@@ -41,6 +41,28 @@ function loadPmosReviewSession_() {
   } catch (error) {
     return null;
   }
+}
+
+function refreshPmosReviewSessionFromLegacy_(session) {
+  const refreshed = clonePmosReviewSession_(session);
+  const imported = importLegacyPmosReviewDecisions_();
+  let changed = false;
+  Object.keys(imported).forEach(function (key) {
+    const incoming = imported[key];
+    const existing = refreshed.decisions[key];
+    if (!existing || String(incoming.updatedAt || '') >= String(existing.updatedAt || '')) {
+      refreshed.decisions[key] = incoming;
+      changed = true;
+    }
+  });
+  if (changed) {
+    refreshed.updatedAt = new Date().toISOString();
+    PropertiesService.getDocumentProperties().setProperty(
+      PMOS_REVIEW_SESSION_PROPERTY,
+      JSON.stringify(refreshed)
+    );
+  }
+  return clonePmosReviewSession_(refreshed);
 }
 
 function savePmosReviewSessionDecision_(scope, sourceVersion, reviewType, itemKey, decision, payload) {
@@ -97,7 +119,7 @@ function buildPmosReviewDecisionKey_(reviewType, itemKey) {
     String(itemKey || '').trim();
 }
 
-/** Imports the current hidden-sheet decisions when the first session begins. */
+/** Imports current hidden-sheet decisions into the active review session. */
 function importLegacyPmosReviewDecisions_() {
   const imported = {};
   if (typeof readPmosCalendarReviewDecisions_ !== 'function') return imported;
