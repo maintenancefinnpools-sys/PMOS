@@ -1,3 +1,41 @@
+/**
+ * Calendar review-flow controller.
+ * Individual dialogs submit their decisions here; this controller saves the
+ * step and opens the next unresolved review stage in one server invocation.
+ */
+function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
+  const type = String(reviewType || '').trim().toUpperCase();
+  let saved;
+
+  switch (type) {
+    case 'SUGGESTED_MATCH':
+      saved = savePmosCalendarSuggestedMatchDecisions(items || [], selectedIndexes || []);
+      break;
+    case 'UNCLASSIFIED_EVENT':
+      saved = savePmosCalendarUnclassifiedDecisions(items || [], selectedIndexes || []);
+      break;
+    case 'DELETION_CANDIDATE':
+      saved = savePmosCalendarDeletionExceptions(items || [], selectedIndexes || []);
+      break;
+    default:
+      throw new Error('Unsupported Calendar review step: ' + type);
+  }
+
+  if (!saved || saved.saved !== true) {
+    throw new Error('The Calendar review step was not saved.');
+  }
+
+  const next = continuePmosCalendarReviewFlow();
+  return {
+    saved: true,
+    reviewType: type,
+    decisionCount: Number(saved.decisionCount || 0),
+    nextStep: String(next && next.opened || ''),
+    reviewComplete: Boolean(next && next.reviewComplete),
+    canSync: Boolean(next && next.canSync)
+  };
+}
+
 /** Advance to the next unresolved Calendar review stage. */
 function continuePmosCalendarReviewFlow() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
