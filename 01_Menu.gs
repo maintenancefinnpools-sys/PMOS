@@ -27,7 +27,7 @@ function onOpen() {
           .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
-          .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
+          .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
           .addItem('PMOS Job Center', 'openPmosJobEngine')
           .addSeparator()
           .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
