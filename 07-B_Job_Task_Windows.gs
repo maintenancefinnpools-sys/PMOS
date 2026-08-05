@@ -27,7 +27,7 @@ function openAction(button,label,serverFunction,closeParent){button.setAttribute
 errorsButton.onclick=function(){openAction(errorsButton,'Errors','showCalendarAuditErrorsReview',false);};
 warningsButton.onclick=function(){openAction(warningsButton,'Warnings','showCalendarAuditWarningsReview',false);};
 matchesButton.onclick=function(){openAction(matchesButton,'Suggested Matches','showCalendarSuggestedMatchesReview',false);};
-unclassifiedButton.onclick=function(){openAction(unclassifiedButton,'Unclassified Events','showCalendarUnclassifiedEventsReview',false);};
+unclassifiedButton.onclick=function(){openAction(unclassifiedButton,'Unclassified Events','showCalendarUnclassifiedExceptionsReview',false);};
 deletionsButton.onclick=function(){openAction(deletionsButton,'Suggested Deletions','showCalendarDeletionExceptionsReview',false);};
 syncButton.onclick=function(){openAction(syncButton,'Calendar Sync','openVerifiedCalendarSyncFromAudit',true);};
 rerunButton.onclick=function(){runAudit(true);};
