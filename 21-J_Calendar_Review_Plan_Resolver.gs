@@ -128,10 +128,14 @@ function findPmosCalendarReviewDecisionRecord_(decisionSet, itemKey, intentActio
 
 function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payload, sessionId) {
   return Object.freeze({
+    modelVersion: PMOS_OPERATION_MODEL_VERSION,
     id: String(intent.id || ''),
+    planner: 'CALENDAR_SYNC',
     action: PMOS_OPERATION.SKIP,
-    entityType: 'CALENDAR_REVIEW_EVENT',
+    entity: 'CALENDAR_REVIEW_EVENT',
     entityId: String(intent.itemKey || ''),
+    destination: 'GOOGLE_CALENDAR',
+    priority: PMOS_OPERATION_PRIORITY.NORMAL,
     reason: pmosCalendarReviewIntentReason_(intent.action),
     payload: Object.freeze({
       current: stateRecord,
@@ -147,16 +151,21 @@ function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payl
       reviewExecutorPending: false,
       userApproved: true,
       blocking: false
-    })
+    }),
+    dependencies: Object.freeze([])
   });
 }
 
 function buildPmosCalendarReviewPlannerError_(intent, payload, reason) {
   return Object.freeze({
+    modelVersion: PMOS_OPERATION_MODEL_VERSION,
     id: 'REVIEW_ERROR_' + pmosCalendarHash_(String(intent && intent.itemKey || '')),
+    planner: 'CALENDAR_SYNC',
     action: PMOS_OPERATION.ERROR,
-    entityType: 'CALENDAR_REVIEW_EVENT',
+    entity: 'CALENDAR_REVIEW_EVENT',
     entityId: String(intent && intent.itemKey || ''),
+    destination: 'GOOGLE_CALENDAR',
+    priority: PMOS_OPERATION_PRIORITY.CRITICAL,
     reason: String(reason || 'A reviewed Calendar decision could not be resolved.'),
     payload: Object.freeze({review: Object.freeze(Object.assign({}, payload || {}))}),
     metadata: Object.freeze({
@@ -164,7 +173,8 @@ function buildPmosCalendarReviewPlannerError_(intent, payload, reason) {
       reviewAction: String(intent && intent.action || ''),
       userApproved: true,
       blocking: true
-    })
+    }),
+    dependencies: Object.freeze([])
   });
 }
 
