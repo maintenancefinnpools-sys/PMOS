@@ -123,13 +123,22 @@ function ensureReviewedCalendarSyncQueueSheet_() {
   if (!sheet) sheet = spreadsheet.insertSheet(PMOS_REVIEWED_SYNC_QUEUE_SHEET);
 
   const headerWidth = PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length;
+  if (sheet.getMaxColumns() < headerWidth) {
+    sheet.insertColumnsAfter(
+      sheet.getMaxColumns(),
+      headerWidth - sheet.getMaxColumns()
+    );
+  }
+
   const currentHeaders = sheet.getRange(1, 1, 1, headerWidth).getValues()[0];
   const needsHeaders = PMOS_REVIEWED_SYNC_QUEUE_HEADERS.some(function (header, index) {
     return String(currentHeaders[index] || '') !== header;
   });
 
   if (needsHeaders) {
-    sheet.clear();
+    // Repair only the header row. Never erase queued operations while repairing
+    // queue-sheet structure; queue contents are cleared explicitly only when a
+    // new reviewed sync is prepared.
     sheet.getRange(1, 1, 1, headerWidth)
       .setValues([PMOS_REVIEWED_SYNC_QUEUE_HEADERS.slice()]);
     sheet.setFrozenRows(1);
