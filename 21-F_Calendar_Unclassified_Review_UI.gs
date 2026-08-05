@@ -19,13 +19,11 @@ function showCalendarUnclassifiedExceptionsReview() {
     return '<div class="unclassified-row' + (checked ? ' selected' : '') + '" id="row-' + index + '">' +
       '<label class="unclassified-summary" for="unclassified-' + index + '">' +
         '<input class="unclassified-check" type="checkbox" id="unclassified-' + index + '" data-index="' + index + '"' + checked + '>' +
-        '<span class="compact">' +
-          '<span class="type-badge">' + escapePmosAuditReviewHtml_(type) + '</span>' +
+        '<span class="compact"><span class="type-badge">' + escapePmosAuditReviewHtml_(type) + '</span>' +
           '<span class="exception-badge">IGNORE FOR THIS SYNC</span>' +
           '<span class="heading">' + escapePmosAuditReviewHtml_(item.title || 'Calendar event') +
             (dateText ? ' • ' + escapePmosAuditReviewHtml_(dateText) : '') + '</span>' +
-          (item.location ? '<span class="event-location">' + escapePmosAuditReviewHtml_(item.location) + '</span>' : '') +
-        '</span>' +
+          (item.location ? '<span class="event-location">' + escapePmosAuditReviewHtml_(item.location) + '</span>' : '') + '</span>' +
         '<button type="button" class="expand" onclick="toggleDetails(event,' + index + ')">Details</button>' +
       '</label>' +
       '<div class="expanded" id="details-' + index + '">' +
@@ -36,12 +34,11 @@ function showCalendarUnclassifiedExceptionsReview() {
         (item.location ? '<div><strong>Location:</strong> ' + escapePmosAuditReviewHtml_(item.location) + '</div>' : '') +
         (item.description ? '<div><strong>Description:</strong> ' + escapePmosAuditReviewHtml_(item.description) + '</div>' : '') +
         '<div><strong>Reason:</strong> ' + escapePmosAuditReviewHtml_(item.reason || 'No customer match was found.') + '</div>' +
-      '</div>' +
-    '</div>';
+      '</div></div>';
   }).join('');
 
   const body = items.length
-    ? '<div class="instructions amber">Unselected events will become Temporary Visits during Calendar Sync. Select only events to ignore for this sync.</div>' +
+    ? '<div class="instructions amber">Unselected events will become Temporary Visits during Calendar Sync. Select only events to send to deletion review.</div>' +
       '<div class="bulk-toolbar amber-toolbar" id="bulkToolbar"><label class="bulk-toggle" id="bulkToggle" role="button" tabindex="0">' +
       '<input type="checkbox" id="toggleAll" tabindex="-1"><span id="toggleAllLabel">Select all</span></label>' +
       '<span id="selectionCount">0 selected</span></div>' + rows
@@ -49,8 +46,7 @@ function showCalendarUnclassifiedExceptionsReview() {
 
   const dataJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<button class="amber-action" id="approveButton" onclick="approveUnclassified(this)">Continue Review</button>' +
-      '<button onclick="google.script.host.close()">Close</button>'
+    ? '<button class="amber-action" id="approveButton" onclick="approveUnclassified(this)">Continue Review</button><button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
     'var events=' + dataJson + ';' +
@@ -61,21 +57,17 @@ function showCalendarUnclassifiedExceptionsReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and send "+ignored.length+" selected event(s) to deletion review?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).savePmosCalendarUnclassifiedDecisions(' + JSON.stringify(audit.sourceVersion) + ',events,ignored);}' +
+    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and send "+ignored.length+" selected event(s) to deletion review?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).savePmosCalendarUnclassifiedDecisions(events,ignored);}' +
     '</script>';
 
-  const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Unclassified Calendar Events', body, footer, script
-  ) + '<style>' +
-    '.instructions.amber{background:#fef3c7;color:#92400e}.amber-toolbar{background:#fffbeb;border-color:#fcd34d}.amber-toolbar.partial{background:#fef3c7;border-color:#fbbf24}.amber-toolbar.all{background:#fde68a;border-color:#f59e0b}.unclassified-row{background:#fff;border:1px solid #fde68a;border-left:5px solid #d97706;border-radius:10px;margin:9px 0}.unclassified-row.selected{background:#fffbeb;opacity:.78}.unclassified-summary{display:grid;grid-template-columns:22px 1fr auto;gap:9px;align-items:start;padding:10px;cursor:pointer}.compact span{display:block}.type-badge,.exception-badge{display:inline-block!important;width:max-content;font-size:10px;font-weight:800;border-radius:999px;padding:2px 7px;margin-bottom:4px}.type-badge{background:#fef3c7;color:#92400e}.exception-badge{display:none!important;background:#fde68a;color:#78350f}.selected .exception-badge{display:inline-block!important}.event-location{font-size:13px;color:#92400e;margin-top:3px}.expand{padding:5px 8px;background:#fef3c7;color:#92400e}.expanded{display:none;padding:0 12px 12px 41px;font-size:13px;line-height:1.5}.expanded.open{display:block}.amber-action{background:#fef3c7;color:#92400e}' +
-    '</style>').setWidth(820).setHeight(700);
+  const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_('Unclassified Calendar Events', body, footer, script) + '<style>' +
+    '.instructions.amber{background:#fef3c7;color:#92400e}.amber-toolbar{background:#fffbeb;border-color:#fcd34d}.amber-toolbar.partial{background:#fef3c7;border-color:#fbbf24}.amber-toolbar.all{background:#fde68a;border-color:#f59e0b}.unclassified-row{background:#fff;border:1px solid #fde68a;border-left:5px solid #d97706;border-radius:10px;margin:9px 0}.unclassified-row.selected{background:#fffbeb;opacity:.78}.unclassified-summary{display:grid;grid-template-columns:22px 1fr auto;gap:9px;align-items:start;padding:10px;cursor:pointer}.compact span{display:block}.type-badge,.exception-badge{display:inline-block!important;width:max-content;font-size:10px;font-weight:800;border-radius:999px;padding:2px 7px;margin-bottom:4px}.type-badge{background:#fef3c7;color:#92400e}.exception-badge{display:none!important;background:#fde68a;color:#78350f}.selected .exception-badge{display:inline-block!important}.event-location{font-size:13px;color:#92400e;margin-top:3px}.expand{padding:5px 8px;background:#fef3c7;color:#92400e}.expanded{display:none;padding:0 12px 12px 41px;font-size:13px;line-height:1.5}.expanded.open{display:block}.amber-action{background:#fef3c7;color:#92400e}</style>').setWidth(820).setHeight(700);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Unclassified Calendar Events');
   return {count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId};
 }
 
-function savePmosCalendarUnclassifiedDecisions(sourceVersion, items, ignoredIndexes) {
-  const session = getOrBeginPmosReviewSession_('CALENDAR', sourceVersion);
+function savePmosCalendarUnclassifiedDecisions(items, ignoredIndexes) {
   const ignored = {};
   (ignoredIndexes || []).forEach(function (index) { ignored[Number(index)] = true; });
   const records = [];
@@ -83,31 +75,14 @@ function savePmosCalendarUnclassifiedDecisions(sourceVersion, items, ignoredInde
   let ignoredCount = 0;
 
   (items || []).forEach(function (item, index) {
-    const itemKey = String(item.eventId || item.seriesId || item.operationId || '');
+    const itemKey = String(item && (item.eventId || item.seriesId || item.operationId) || '');
     if (!itemKey) throw new Error('An unclassified event is missing its stable Calendar identity.');
     const decision = ignored[index] ? 'IGNORE' : 'TEMPORARY';
-    if (decision === 'IGNORE') ignoredCount++;
-    else temporaryCount++;
-    records.push({
-      reviewType: 'UNCLASSIFIED_EVENT',
-      itemKey: itemKey,
-      decision: decision
-    });
+    if (decision === 'IGNORE') ignoredCount++; else temporaryCount++;
+    records.push({itemKey: itemKey, decision: decision});
   });
 
-  const saved = savePmosReviewSessionDecisions_(
-    'CALENDAR',
-    String(session.latestPlannerVersion || session.sourceVersion || sourceVersion || ''),
-    records
-  );
-  if (!saved || saved.decisions.length !== records.length) {
-    throw new Error('Not all unclassified-event decisions were saved.');
-  }
-
-  return {
-    saved: true,
-    temporaryCount: temporaryCount,
-    ignoredCount: ignoredCount,
-    reviewSessionId: saved.sessionId
-  };
+  const saved = savePmosReviewStep_('CALENDAR', 'UNCLASSIFIED_EVENT', records);
+  if (!saved || saved.decisionCount !== records.length) throw new Error('Not all unclassified-event decisions were saved.');
+  return {saved: true, temporaryCount: temporaryCount, ignoredCount: ignoredCount, reviewSessionId: saved.sessionId};
 }
