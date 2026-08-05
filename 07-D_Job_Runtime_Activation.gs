@@ -19,11 +19,16 @@ function runPmosJobBatch_() {
 
 /**
  * Trigger handler for the runtime worker.
+ *
+ * Use a short script-level lock only to prevent two trigger handlers from
+ * entering at once. Do not hold the document lock while running the worker:
+ * queue claiming deliberately uses the document lock for each operation.
  */
 function runPmosJobTrigger_() {
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
 
+  let shouldRun = false;
   try {
     const state = readPmosJobState_();
     if (!state || !state.autoEnabled) {
@@ -35,11 +40,12 @@ function runPmosJobTrigger_() {
       const nextRunTime = new Date(state.nextRunAt).getTime();
       if (Number.isFinite(nextRunTime) && Date.now() < nextRunTime) return;
     }
-
-    runPmosJobBatch_();
+    shouldRun = true;
   } finally {
     lock.releaseLock();
   }
+
+  if (shouldRun) runPmosJobBatch_();
 }
 
 /**
