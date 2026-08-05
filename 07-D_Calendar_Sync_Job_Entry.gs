@@ -9,9 +9,6 @@
 function startVerifiedCalendarSyncJob(autoMode, options) {
   const existing = readPmosJobState_();
 
-  // Resume an already-initialized Calendar Sync from its durable queue. The
-  // Calendar must differ from the original preview after successful operations,
-  // so rebuilding and comparing a new plan ID here would reject PMOS's own work.
   const canResumeExistingQueue = Boolean(
     existing &&
     existing.type === 'CALENDAR_SYNC' &&
@@ -40,7 +37,6 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
     Object.assign({}, options || {}, savedAuditOptions || {})
   );
 
-  // Resolve any interrupted prior operation before accepting a new audit.
   const recovery = recoverPmosCalendarRegistryTransactions_();
   try {
     assertNoAmbiguousPmosCalendarRecovery_(recovery);
@@ -51,7 +47,12 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
     );
   }
 
-  const audit = runVerifiedCalendarPlanAuditReadOnly_(calendarOptions);
+  // Review screens reuse the immutable snapshot for speed. Creating the job is
+  // the one deliberate point where PMOS rereads Calendar and verifies that the
+  // approved decisions still resolve safely before queuing any writes.
+  const audit = runVerifiedCalendarPlanAuditReadOnly_(Object.assign({}, calendarOptions, {
+    forceFresh: true
+  }));
 
   if (!audit.canSync) {
     throw new Error(
