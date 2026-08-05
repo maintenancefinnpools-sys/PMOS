@@ -1,52 +1,15 @@
 /** Resumable executor for a validated reviewed Calendar Sync plan. */
 const PMOS_REVIEWED_SYNC_STATE = 'PMOS_REVIEWED_CALENDAR_SYNC_STATE_V1';
-const PMOS_REVIEWED_SYNC_ITEM_PREFIX = 'PMOS_REVIEWED_CALENDAR_SYNC_ITEM_V1::';
 const PMOS_REVIEWED_SYNC_TRIGGER = 'runReviewedCalendarSyncWorker_';
 
 function initializeReviewedCalendarSyncExecution_() {
-  const prepared = prepareSafeReviewedCalendarSync_();
-  const result = buildValidatedPmosCalendarSyncPlan_({});
-  const operations = result.plan.operations.filter(isPmosExecutableOperation);
-  if (operations.length !== prepared.total) {
-    throw new Error('Calendar Sync plan changed while the execution queue was being prepared. Re-run Calendar Plan Audit.');
-  }
-
-  clearReviewedCalendarSyncQueue_();
-  const properties = PropertiesService.getDocumentProperties();
-  const writes = {};
-  operations.forEach(function (operation, index) {
-    writes[PMOS_REVIEWED_SYNC_ITEM_PREFIX + String(index)] = JSON.stringify(operation);
-  });
-
-  const state = {
-    id: Utilities.getUuid(),
-    sessionId: prepared.sessionId,
-    planId: prepared.planId,
-    sourceVersion: prepared.sourceVersion,
-    status: 'Prepared',
-    phase: 'Ready to start',
-    total: operations.length,
-    cursor: 0,
-    processed: 0,
-    remaining: operations.length,
-    created: 0,
-    updated: 0,
-    deleted: 0,
-    failed: 0,
-    currentOperation: '',
-    lastError: '',
-    startedAt: '',
-    updatedAt: new Date().toISOString(),
-    completedAt: ''
-  };
-  writes[PMOS_REVIEWED_SYNC_STATE] = JSON.stringify(state);
-  properties.setProperties(writes, false);
-  return cloneReviewedCalendarSyncState_(state);
+  prepareReviewedCalendarSyncWindow_();
+  return cloneReviewedCalendarSyncState_(readReviewedCalendarSyncState_());
 }
 
 function startReviewedCalendarSyncExecution() {
   let state = readReviewedCalendarSyncState_();
-  if (!state || state.status === 'Complete' || state.planId === '') {
+  if (!state || state.status === 'Complete' || !state.planId) {
     state = initializeReviewedCalendarSyncExecution_();
   }
   if (state.status === 'Running' || state.status === 'Scheduled') return state;
@@ -74,6 +37,7 @@ function getReviewedCalendarSyncStatus() {
 function runReviewedCalendarSyncWorker_() {
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(1000)) return;
+
   try {
     let state = readReviewedCalendarSyncState_();
     if (!state || ['Complete', 'Paused on error', 'Cancelled'].indexOf(state.status) >= 0) {
@@ -96,17 +60,52 @@ function runReviewedCalendarSyncWorker_() {
     const maxItems = 8;
     let handled = 0;
 
-    while (state.cursor < state.total && handled < maxItems && Date.now() - started < maxRunMs) {
-      const operation = readReviewedCalendarSyncOperation_(state.cursor);
-      if (!operation) throw new Error('Calendar Sync queue item ' + state.cursor + ' is missing.');
-      state.currentOperation = String(operation.id || operation.entityId || ('Operation ' + (state.cursor + 1)));
+    while (
+      state.cursor < state.total &&
+      handled < maxItems &&
+      Date.now() - started < maxRunMs
+    ) {
+      const queueItem = readReviewedCalendarSyncQueueItem_(state.cursor);
+      if (!queueItem || !queueItem.operation) {
+        throw new Error('Calendar Sync queue item ' + state.cursor + ' is missing.');
+      }
+
+      const operation = queueItem.operation;
+      const operationLabel = String(
+        operation.id || operation.entityId || ('Operation ' + (state.cursor + 1))
+      );
+
+      state.currentOperation = operationLabel;
       state.updatedAt = new Date().toISOString();
       writeReviewedCalendarSyncState_(state);
+      markReviewedCalendarSyncQueueItem_(queueItem.row, 'Running', '', queueItem.attempts + 1);
 
-      const outcome = executeReviewedCalendarOperation_(operation);
-      if (outcome.action === 'CREATE') state.created++;
-      else if (outcome.action === 'UPDATE') state.updated++;
-      else if (outcome.action === 'DELETE') state.deleted++;
+      try {
+        const outcome = executeReviewedCalendarOperation_(operation);
+        if (outcome.action === 'CREATE') state.created++;
+        else if (outcome.action === 'UPDATE') state.updated++;
+        else if (outcome.action === 'DELETE') state.deleted++;
+
+        markReviewedCalendarSyncQueueItem_(
+          queueItem.row,
+          'Complete',
+          '',
+          queueItem.attempts + 1
+        );
+      } catch (operationError) {
+        const message = String(
+          operationError && operationError.message
+            ? operationError.message
+            : operationError
+        );
+        markReviewedCalendarSyncQueueItem_(
+          queueItem.row,
+          'Error',
+          message,
+          queueItem.attempts + 1
+        );
+        throw operationError;
+      }
 
       state.cursor++;
       state.processed++;
@@ -134,6 +133,7 @@ function runReviewedCalendarSyncWorker_() {
     state.updatedAt = new Date().toISOString();
     writeReviewedCalendarSyncState_(state);
     ensureReviewedCalendarSyncTrigger_();
+
   } catch (error) {
     const state = readReviewedCalendarSyncState_() || {};
     state.status = 'Paused on error';
@@ -153,36 +153,56 @@ function executeReviewedCalendarOperation_(operation) {
   const payload = operation && operation.payload || {};
   const desired = reviveReviewedCalendarSeriesPlan_(payload.desired || null);
   const current = payload.current || {};
-  const reviewAction = String(operation && operation.metadata && operation.metadata.reviewAction || '').toUpperCase();
+  const reviewAction = String(
+    operation && operation.metadata && operation.metadata.reviewAction || ''
+  ).toUpperCase();
 
   if (reviewAction && ['MATCH', 'TEMPORARY'].indexOf(reviewAction) >= 0) {
-    throw new Error('Review operation ' + reviewAction + ' does not yet have a verified Calendar mutation adapter. Operation: ' + String(operation.id || operation.entityId || 'unknown'));
+    throw new Error(
+      'Review operation ' + reviewAction +
+      ' does not yet have a verified Calendar mutation adapter. Operation: ' +
+      String(operation.id || operation.entityId || 'unknown')
+    );
   }
 
   const calendar = getRecurringCalendar_();
+
   if (action === String(PMOS_OPERATION.CREATE).toUpperCase()) {
     if (!desired || !desired.seriesKey || !desired.start || !desired.end) {
       throw new Error('CREATE operation is missing its recurring-series plan.');
     }
     const series = createReviewedRecurringSeries_(calendar, desired);
-    upsertReviewedSeriesRegistry_(desired, series.getId(), getRecurringCalendarSettings_().calendarName, 'Active');
+    upsertReviewedSeriesRegistry_(
+      desired,
+      series.getId(),
+      getRecurringCalendarSettings_().calendarName,
+      'Active'
+    );
     return {action: 'CREATE', id: series.getId()};
   }
 
   if (action === String(PMOS_OPERATION.UPDATE).toUpperCase()) {
-    if (!desired || !desired.seriesKey) throw new Error('UPDATE operation is missing its desired series plan.');
+    if (!desired || !desired.seriesKey) {
+      throw new Error('UPDATE operation is missing its desired series plan.');
+    }
     const seriesId = String(current.seriesId || current.id || payload.seriesId || '');
     if (!seriesId) throw new Error('UPDATE operation is missing its current Calendar series ID.');
     const series = calendar.getEventSeriesById(seriesId);
     if (!series) throw new Error('Calendar series could not be found for UPDATE: ' + seriesId);
     updateReviewedRecurringSeries_(series, desired);
-    upsertReviewedSeriesRegistry_(desired, series.getId(), getRecurringCalendarSettings_().calendarName, 'Active');
+    upsertReviewedSeriesRegistry_(
+      desired,
+      series.getId(),
+      getRecurringCalendarSettings_().calendarName,
+      'Active'
+    );
     return {action: 'UPDATE', id: series.getId()};
   }
 
   if (action === String(PMOS_OPERATION.DELETE).toUpperCase()) {
     const seriesId = String(current.seriesId || current.id || payload.seriesId || '');
     const eventId = String(current.eventId || payload.eventId || '');
+
     if (seriesId) {
       const series = calendar.getEventSeriesById(seriesId);
       if (series) series.deleteEventSeries();
@@ -192,7 +212,10 @@ function executeReviewedCalendarOperation_(operation) {
     } else {
       throw new Error('DELETE operation is missing a Calendar event or series ID.');
     }
-    deleteReviewedSeriesRegistryRow_(String(operation.entityId || current.seriesKey || ''));
+
+    deleteReviewedSeriesRegistryRow_(
+      String(operation.entityId || current.seriesKey || '')
+    );
     return {action: 'DELETE', id: seriesId || eventId};
   }
 
@@ -201,7 +224,10 @@ function executeReviewedCalendarOperation_(operation) {
 
 function createReviewedRecurringSeries_(calendar, plan) {
   const series = calendar.createEventSeries(
-    plan.title, plan.start, plan.end, buildReviewedFourWeekRecurrence_(plan),
+    plan.title,
+    plan.start,
+    plan.end,
+    buildReviewedFourWeekRecurrence_(plan),
     {description: plan.description || '', location: plan.location || ''}
   );
   series.setTag('PMOS_SERIES_KEY', plan.seriesKey);
@@ -240,10 +266,26 @@ function upsertReviewedSeriesRegistry_(plan, seriesId, calendarName, status) {
   const sheet = ensureRecurringSeriesRegistry_();
   const values = sheet.getDataRange().getValues();
   let rowNumber = 0;
+
   for (let index = 1; index < values.length; index++) {
-    if (String(values[index][0] || '') === String(plan.seriesKey || '')) { rowNumber = index + 1; break; }
+    if (String(values[index][0] || '') === String(plan.seriesKey || '')) {
+      rowNumber = index + 1;
+      break;
+    }
   }
-  const row = [plan.seriesKey, plan.customerId || '', plan.layer || '', seriesId, calendarName, plan.signature || '', new Date(), status || 'Active', ''];
+
+  const row = [
+    plan.seriesKey,
+    plan.customerId || '',
+    plan.layer || '',
+    seriesId,
+    calendarName,
+    plan.signature || '',
+    new Date(),
+    status || 'Active',
+    ''
+  ];
+
   if (rowNumber) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
 }
@@ -264,32 +306,87 @@ function ensureReviewedCalendarSyncTrigger_() {
 
 function removeReviewedCalendarSyncTriggers_() {
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
-    if (trigger.getHandlerFunction() === PMOS_REVIEWED_SYNC_TRIGGER) ScriptApp.deleteTrigger(trigger);
+    if (trigger.getHandlerFunction() === PMOS_REVIEWED_SYNC_TRIGGER) {
+      ScriptApp.deleteTrigger(trigger);
+    }
   });
 }
 
-function readReviewedCalendarSyncOperation_(index) {
-  const raw = PropertiesService.getDocumentProperties().getProperty(PMOS_REVIEWED_SYNC_ITEM_PREFIX + String(index));
-  return raw ? JSON.parse(raw) : null;
+function readReviewedCalendarSyncQueueItem_(index) {
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  const row = Number(index) + 2;
+  if (row > sheet.getLastRow()) return null;
+
+  const values = sheet.getRange(
+    row,
+    1,
+    1,
+    PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length
+  ).getValues()[0];
+
+  if (Number(values[0]) !== Number(index)) return null;
+
+  let operation = null;
+  try {
+    operation = JSON.parse(String(values[8] || ''));
+  } catch (error) {
+    throw new Error('Calendar Sync queue item ' + index + ' contains invalid operation JSON.');
+  }
+
+  return {
+    row: row,
+    index: Number(values[0]),
+    operationId: String(values[1] || ''),
+    action: String(values[2] || ''),
+    entityId: String(values[3] || ''),
+    status: String(values[4] || ''),
+    attempts: Number(values[5] || 0),
+    error: String(values[7] || ''),
+    operation: operation
+  };
+}
+
+function markReviewedCalendarSyncQueueItem_(row, status, error, attempts) {
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  sheet.getRange(row, 5, 1, 4).setValues([[
+    String(status || ''),
+    Number(attempts || 0),
+    new Date(),
+    String(error || '')
+  ]]);
 }
 
 function clearReviewedCalendarSyncQueue_() {
-  const properties = PropertiesService.getDocumentProperties();
-  const all = properties.getProperties();
-  Object.keys(all).forEach(function (key) {
-    if (key === PMOS_REVIEWED_SYNC_STATE || key.indexOf(PMOS_REVIEWED_SYNC_ITEM_PREFIX) === 0) properties.deleteProperty(key);
-  });
   removeReviewedCalendarSyncTriggers_();
+  PropertiesService.getDocumentProperties().deleteProperty(PMOS_REVIEWED_SYNC_STATE);
+
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(
+      2,
+      1,
+      lastRow - 1,
+      PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length
+    ).clearContent();
+  }
 }
 
 function readReviewedCalendarSyncState_() {
   const raw = PropertiesService.getDocumentProperties().getProperty(PMOS_REVIEWED_SYNC_STATE);
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch (error) { return null; }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
 }
 
 function writeReviewedCalendarSyncState_(state) {
-  PropertiesService.getDocumentProperties().setProperty(PMOS_REVIEWED_SYNC_STATE, JSON.stringify(state));
+  PropertiesService.getDocumentProperties().setProperty(
+    PMOS_REVIEWED_SYNC_STATE,
+    JSON.stringify(state)
+  );
 }
 
 function cloneReviewedCalendarSyncState_(state) {
