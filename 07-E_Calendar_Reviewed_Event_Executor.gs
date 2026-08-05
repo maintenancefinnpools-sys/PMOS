@@ -35,7 +35,6 @@ function executePmosReviewedCalendarOperation_(state, operation) {
     const customerId = String(review.customerId || '').trim();
     if (!customerId) throw new Error('Reviewed customer match is missing the approved Customer ID.');
     event.setDescription(upsertPmosReviewedEventMetadata_(event.getDescription(), {
-      PMOS_EVENT_TYPE: 'TEMPORARY_VISIT',
       PMOS_CUSTOMER_ID: customerId,
       PMOS_REVIEW_SESSION_ID: String(review.reviewSessionId || payload.reviewSessionId || ''),
       PMOS_REVIEW_ACTION: 'LINK_CUSTOMER'
@@ -99,6 +98,7 @@ function verifyPmosReviewedCalendarOperation_(operation, result) {
     if (String(metadata.PMOS_CUSTOMER_ID || '') !== String(review.customerId || '')) {
       throw new Error('Reviewed customer link could not be verified.');
     }
+    return {verified: true, eventId: String(event.getId() || '')};
   }
   if (String(metadata.PMOS_EVENT_TYPE || '') !== 'TEMPORARY_VISIT') {
     throw new Error('Temporary Visit registration could not be verified.');
