@@ -17,19 +17,34 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
   const warningOperations = operations.filter(function (operation) {
     return operation.action === PMOS_OPERATION.WARNING;
   });
+  const unclassifiedOperations = warningOperations.filter(function (operation) {
+    return String(operation.metadata && operation.metadata.reviewType || '') ===
+      'UNCLASSIFIED_CALENDAR_EVENT';
+  });
   const deletionCandidates = warningOperations.filter(function (operation) {
-    return Boolean(operation.payload && operation.payload.current) &&
+    return String(operation.metadata && operation.metadata.reviewType || '') !==
+        'UNCLASSIFIED_CALENDAR_EVENT' &&
+      Boolean(operation.payload && operation.payload.current) &&
       !(operation.payload && operation.payload.desired);
   });
+  const ordinaryWarningOperations = warningOperations.filter(function (operation) {
+    return unclassifiedOperations.indexOf(operation) < 0 &&
+      deletionCandidates.indexOf(operation) < 0;
+  });
 
-  const issues = buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations);
+  const issues = buildPmosCalendarAuditReviewItems_(
+    validationIssues,
+    ordinaryWarningOperations
+  );
   const errors = issues.filter(function (item) {
     return String(item.severity || '').toUpperCase() === 'ERROR';
   });
   const warnings = issues.filter(function (item) {
-    return String(item.severity || '').toUpperCase() !== 'ERROR' &&
-      item.reviewType !== 'DELETION_CANDIDATE';
+    return String(item.severity || '').toUpperCase() !== 'ERROR';
   });
+  const unclassifiedEvents = unclassifiedOperations.map(
+    formatPmosCalendarUnclassifiedEvent_
+  );
 
   const errorCount = errors.length;
   const warningCount = warnings.length;
@@ -40,15 +55,15 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     'Expected recurring series: ' + Number(preview.totalSeries || 0),
     'Creates proposed: ' + Number(preview.creates || 0),
     'Updates proposed: ' + Number(preview.updates || 0),
-    'Blocking errors: ' + errorCount,
-    'Warnings requiring review: ' + warningCount,
+    'Errors: ' + errorCount,
+    'Warnings: ' + warningCount,
     'Suggested deletions: ' + deletionCandidates.length,
-    'Registered series missing: ' + Number(preview.registeredMissing || 0),
-    'Unclassified events requiring review: ' + Number(preview.unclassifiedEvents || 0)
+    'Unclassified events: ' + unclassifiedEvents.length,
+    'Registered series missing: ' + Number(preview.registeredMissing || 0)
   ];
 
   if (!preview.canExecute) {
-    lines.push('Calendar Sync remains blocked until the blocking errors are resolved.');
+    lines.push('Calendar Sync remains blocked until the errors are resolved.');
   }
 
   return {
@@ -58,14 +73,18 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     errorCount: errorCount,
     warningCount: warningCount,
     deletionCandidateCount: deletionCandidates.length,
+    unclassifiedEventCount: unclassifiedEvents.length,
     hasErrors: errorCount > 0,
     hasWarnings: warningCount > 0,
-    hasReviewItems: warningCount > 0 || errorCount > 0 || deletionCandidates.length > 0,
+    hasUnclassifiedEvents: unclassifiedEvents.length > 0,
+    hasReviewItems: warningCount > 0 || errorCount > 0 ||
+      deletionCandidates.length > 0 || unclassifiedEvents.length > 0,
     summary: lines.join('\n'),
     issues: issues,
     errors: errors,
     warnings: warnings,
     deletionCandidates: deletionCandidates.map(formatPmosCalendarDeletionCandidate_),
+    unclassifiedEvents: unclassifiedEvents,
     preview: preview
   };
 }
@@ -100,7 +119,7 @@ function buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations)
       operationId: String(operation.id || ''),
       seriesKey: String(operation.entityId || ''),
       layer: String(desired.layer || current.layer || ''),
-      reviewType: current && !desired ? 'DELETION_CANDIDATE' : 'WARNING'
+      reviewType: 'WARNING'
     };
     item.resolution = recommendPmosCalendarAuditResolution_(item);
     items.push(item);
@@ -113,13 +132,6 @@ function recommendPmosCalendarAuditResolution_(item) {
   const text = [item.code, item.title, item.details, item.path]
     .join(' ').toLowerCase();
 
-  if (item.reviewType === 'DELETION_CANDIDATE' || /delet|absent from the desired|source of truth/.test(text)) {
-    return {
-      type: 'DELETIONS',
-      label: 'Suggested Deletions',
-      explanation: 'Review the unmatched Calendar series and select only those that should be deleted.'
-    };
-  }
   if (/customer id|customer database|customer record|customer match/.test(text)) {
     return {
       type: 'CUSTOMER_SYNC',
@@ -175,13 +187,28 @@ function formatPmosCalendarDeletionCandidate_(operation) {
   };
 }
 
+function formatPmosCalendarUnclassifiedEvent_(operation) {
+  const current = operation.payload && operation.payload.current || {};
+  return {
+    operationId: String(operation.id || ''),
+    eventId: String(current.eventId || operation.entityId || ''),
+    seriesId: String(current.seriesId || ''),
+    title: String(current.title || 'Unclassified Calendar event'),
+    start: String(current.start || ''),
+    end: String(current.end || ''),
+    location: String(current.location || ''),
+    recurring: Boolean(current.seriesId),
+    reason: String(operation.reason || 'Calendar event has no PMOS classification metadata.')
+  };
+}
+
 /** Opens Calendar Sync in the Job Center without starting or approving work. */
 function openVerifiedCalendarSyncFromAudit() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   if (!audit.canSync) {
     throw new Error(
       'Calendar Plan Audit has ' + audit.errorCount +
-      ' blocking error(s). Calendar Sync was not opened.'
+      ' error(s). Calendar Sync was not opened.'
     );
   }
 
