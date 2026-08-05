@@ -38,25 +38,15 @@ startClock();google.script.run.withSuccessHandler(done).withFailureHandler(fail)
 function resetPmosCalendarReviewSessionForNewAudit_() {
   const properties = PropertiesService.getDocumentProperties();
   const all = properties.getProperties();
-  const keysToDelete = [];
+  let removedDecisionCount = 0;
 
   Object.keys(all).forEach(function (key) {
     if (key === PMOS_REVIEW_SESSION_PROPERTY ||
         key.indexOf(PMOS_REVIEW_DECISION_PREFIX) === 0) {
-      keysToDelete.push(key);
+      properties.deleteProperty(key);
+      if (key.indexOf(PMOS_REVIEW_DECISION_PREFIX) === 0) removedDecisionCount++;
     }
   });
 
-  if (keysToDelete.length) properties.deleteAllProperties();
-
-  // Restore unrelated document properties if deleteAllProperties was required.
-  if (keysToDelete.length) {
-    const retained = {};
-    Object.keys(all).forEach(function (key) {
-      if (keysToDelete.indexOf(key) < 0) retained[key] = all[key];
-    });
-    if (Object.keys(retained).length) properties.setProperties(retained, false);
-  }
-
-  return {reset: true, removedDecisionCount: Math.max(0, keysToDelete.length - 1)};
+  return {reset: true, removedDecisionCount: removedDecisionCount};
 }
