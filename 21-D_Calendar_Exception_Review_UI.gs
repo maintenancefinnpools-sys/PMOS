@@ -1,6 +1,5 @@
 /**
  * Exception-based Calendar review windows.
- *
  * PMOS proposes the normal action. Checked rows are exceptions to that action.
  */
 function showCalendarDeletionExceptionsReview() {
@@ -39,7 +38,7 @@ function showCalendarDeletionExceptionsReview() {
 
   const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<button id="approveButton" class="delete" onclick="approveDeletions(this)">Approve deletions</button>' +
+    ? '<button id="approveButton" class="delete" onclick="approveDeletions(this)">Complete deletion review</button>' +
       '<button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
 
@@ -53,12 +52,12 @@ function showCalendarDeletionExceptionsReview() {
     'function applyBulkToggle(){var shouldSelect=!allSelected();boxes().forEach(function(x){x.checked=shouldSelect;});updateBulkControl();}' +
     'boxes().forEach(function(x){x.addEventListener("change",updateBulkControl);});' +
     'var bulk=document.getElementById("bulkToggle");if(bulk){bulk.addEventListener("click",function(event){event.preventDefault();applyBulkToggle();});bulk.addEventListener("keydown",function(event){if(event.key===" "||event.key==="Enter"){event.preventDefault();applyBulkToggle();}});}updateBulkControl();' +
-    'function approveDeletions(button){var kept=keptIndexes(),deleteCount=candidates.length-kept.length;if(!deleteCount){alert("All events are selected to keep. There are no deletions to approve.");return;}' +
-      'if(!confirm("Are you sure you would like to delete the "+deleteCount+" unselected events?"))return;' +
-      'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
-      'google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){throw new Error("The deletion decisions were not saved.");}button.textContent="Complete";google.script.host.close();})' +
-      '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve deletions";alert(e&&e.message?e.message:String(e));})' +
-      '.savePmosCalendarDeletionExceptions(candidates,kept);}' +
+    'function approveDeletions(button){var kept=keptIndexes(),deleteCount=candidates.length-kept.length;' +
+      'if(deleteCount>0&&!confirm("Are you sure you would like to delete the "+deleteCount+" unselected events?"))return;' +
+      'button.disabled=true;button.classList.add("opening");button.textContent="Saving and continuing…";' +
+      'google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.classList.remove("opening");button.textContent="Complete deletion review";alert("The deletion decisions were not saved.");return;}google.script.host.close();})' +
+      '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Complete deletion review";alert(e&&e.message?e.message:String(e));})' +
+      '.saveAndAdvancePmosCalendarReview("DELETION_CANDIDATE",candidates,kept);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
@@ -98,6 +97,7 @@ function savePmosCalendarDeletionExceptions(candidates, keptIndexes) {
   }
   return {
     saved: true,
+    decisionCount: records.length,
     deletedCount: deletedCount,
     keptCount: keptCount,
     reviewSessionId: saved.sessionId
