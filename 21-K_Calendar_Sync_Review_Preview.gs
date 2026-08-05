@@ -54,7 +54,7 @@ function openReviewedCalendarSyncPreview() {
 ${blockedText ? '<div class="notice">' + escapePmosSyncPreviewHtml_(blockedText) + '</div>' : ''}
 <div class="actions"><button class="primary" ${executorPending || resolutionErrors ? 'disabled' : ''} onclick="approveSync(this)">Approve</button><button class="secondary" onclick="google.script.host.close()">Close</button></div>
 <script>
-function approveSync(button){button.disabled=true;button.textContent='Opening Job Center…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent='Approve';alert(e&&e.message?e.message:String(e));}).openPmosJobEngine('CALENDAR_SYNC');}
+function approveSync(button){button.disabled=true;button.textContent='Opening Job Center…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent='Approve';alert(e&&e.message?e.message:String(e));}).prepareApprovedCalendarSyncAndOpenJobCenter();}
 </script></body></html>`).setWidth(860).setHeight(720);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Calendar Sync Preview');
@@ -66,6 +66,41 @@ function approveSync(button){button.disabled=true;button.textContent='Opening Jo
     executorPending: executorPending,
     resolutionErrors: resolutionErrors
   };
+}
+
+function prepareApprovedCalendarSyncAndOpenJobCenter() {
+  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  if (!audit.canSync) {
+    throw new Error('Calendar review is no longer ready for synchronization. Reopen Calendar Plan Audit.');
+  }
+
+  const existing = readPmosJobState_();
+  if (existing && existing.id) {
+    deletePmosJobOperationQueue_(existing.id);
+  }
+  removePmosJobTrigger_();
+
+  const state = newPmosJobState_('CALENDAR_SYNC');
+  state.status = 'Ready';
+  state.planId = String(audit.planId || '');
+  state.auditedPlanId = String(audit.planId || '');
+  state.auditedAt = new Date().toISOString();
+  state.calendarOptions = readPmosCalendarAuditOptions_();
+  state.reviewSessionId = String(audit.reviewSessionId || '');
+  state.operationQueueInitialized = false;
+  state.operationProviderFinalized = false;
+  state.processedItems = 0;
+  state.originalTotal = 0;
+  state.remaining = null;
+  state.autoEnabled = true;
+  state.pauseRequested = false;
+  state.lastError = '';
+  state.lastSummary = 'Approved Calendar Sync is ready to start.';
+  state.nextRunAt = '';
+  writePmosJobState_(state);
+
+  openPmosJobEngine('CALENDAR_SYNC');
+  return {opened: true, prepared: true, planId: state.planId};
 }
 
 function countPmosReviewedCalendarActions_(reviewedActions) {
