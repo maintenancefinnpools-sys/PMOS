@@ -36,17 +36,12 @@ startClock();google.script.run.withSuccessHandler(done).withFailureHandler(fail)
 }
 
 function resetPmosCalendarReviewSessionForNewAudit_() {
-  const properties = PropertiesService.getDocumentProperties();
-  const all = properties.getProperties();
-  let removedDecisionCount = 0;
-
-  Object.keys(all).forEach(function (key) {
-    if (key === PMOS_REVIEW_SESSION_PROPERTY ||
-        key.indexOf(PMOS_REVIEW_DECISION_PREFIX) === 0) {
-      properties.deleteProperty(key);
-      if (key.indexOf(PMOS_REVIEW_DECISION_PREFIX) === 0) removedDecisionCount++;
-    }
-  });
-
-  return {reset: true, removedDecisionCount: removedDecisionCount};
+  // Removing only the active-session pointer is sufficient to start a fresh
+  // operation. Old decision records are namespaced by the former session ID and
+  // therefore cannot affect the new audit. Avoiding a full property scan keeps
+  // the audit window opening immediately even after a large review.
+  PropertiesService.getDocumentProperties().deleteProperty(
+    PMOS_REVIEW_SESSION_PROPERTY
+  );
+  return {reset: true};
 }
