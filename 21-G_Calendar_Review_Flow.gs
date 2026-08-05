@@ -61,18 +61,18 @@ function continuePmosCalendarReviewFlow() {
     return {opened: 'SUGGESTED_DELETIONS'};
   }
 
-  if (audit.canSync === true) {
-    openVerifiedCalendarSyncFromAudit();
+  if (audit.reviewComplete === true) {
+    openReviewedCalendarSyncPreview();
     return {
-      opened: 'CALENDAR_SYNC',
+      opened: 'CALENDAR_SYNC_PREVIEW',
       reviewComplete: true,
-      canSync: true
+      canSync: audit.canSync === true
     };
   }
 
   return {
     opened: '',
-    reviewComplete: audit.reviewComplete === true,
+    reviewComplete: false,
     canSync: false
   };
 }
