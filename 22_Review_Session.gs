@@ -16,11 +16,6 @@ function getOrBeginPmosReviewSession_(scope, sourceVersion) {
 
   const properties = PropertiesService.getDocumentProperties();
   let session = loadPmosReviewSession_();
-
-  // Planner IDs and planner source-version values may change whenever an audit
-  // is rebuilt. They do not, by themselves, prove that the underlying Calendar
-  // or spreadsheet data changed. Preserve an active session for the same scope
-  // until an operation explicitly invalidates or completes it.
   const needsNewSession = !session ||
     session.scope !== normalizedScope ||
     session.status !== 'ACTIVE';
@@ -58,6 +53,16 @@ function loadPmosReviewSession_() {
   }
 }
 
+function requireActivePmosReviewSession_(scope) {
+  const normalizedScope = String(scope || '').trim().toUpperCase();
+  const session = loadPmosReviewSession_();
+  if (!session || session.status !== 'ACTIVE' || session.scope !== normalizedScope) {
+    throw new Error('No active ' + normalizedScope + ' review session is available. Run the Plan Audit again.');
+  }
+  session.decisions = loadPmosReviewSessionDecisions_(session.id);
+  return session;
+}
+
 function loadPmosReviewSessionDecisions_(sessionId) {
   const prefix = PMOS_REVIEW_DECISION_PREFIX + String(sessionId || '') + '::';
   const properties = PropertiesService.getDocumentProperties().getProperties();
@@ -87,6 +92,33 @@ function savePmosReviewSessionDecision_(scope, sourceVersion, reviewType, itemKe
 
 function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
   const session = getOrBeginPmosReviewSession_(scope, sourceVersion);
+  return writePmosReviewSessionDecisions_(session, records);
+}
+
+/**
+ * Saves one complete review step into the already-active session.
+ * No planner or audit is rebuilt and no planner version is compared here.
+ */
+function savePmosReviewStep_(scope, reviewType, records) {
+  const session = requireActivePmosReviewSession_(scope);
+  const normalizedType = String(reviewType || '').trim().toUpperCase();
+  const normalizedRecords = (records || []).map(function (record) {
+    return {
+      reviewType: normalizedType,
+      itemKey: String(record && record.itemKey || '').trim(),
+      decision: String(record && record.decision || '').trim().toUpperCase()
+    };
+  });
+  const saved = writePmosReviewSessionDecisions_(session, normalizedRecords);
+  return {
+    saved: true,
+    sessionId: saved.sessionId,
+    decisionCount: saved.decisions.length,
+    reviewType: normalizedType
+  };
+}
+
+function writePmosReviewSessionDecisions_(session, records) {
   const now = new Date().toISOString();
   const propertiesToWrite = {};
   const saved = [];
@@ -116,14 +148,13 @@ function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
     id: session.id,
     scope: session.scope,
     sourceVersion: session.sourceVersion,
-    latestPlannerVersion: String(sourceVersion || session.latestPlannerVersion || ''),
+    latestPlannerVersion: String(session.latestPlannerVersion || session.sourceVersion || ''),
     status: session.status,
     createdAt: session.createdAt,
     updatedAt: now
   };
   propertiesToWrite[PMOS_REVIEW_SESSION_PROPERTY] = JSON.stringify(metadata);
   PropertiesService.getDocumentProperties().setProperties(propertiesToWrite, false);
-
   return {sessionId: session.id, decisions: saved};
 }
 
