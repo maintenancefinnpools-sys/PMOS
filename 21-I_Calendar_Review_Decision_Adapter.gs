@@ -85,3 +85,67 @@ function summarizePmosCalendarReviewDecisions_() {
     approvedDeletions: decisions.counts.delete
   };
 }
+
+/**
+ * Converts the normalized Review Session into immutable operation intents.
+ *
+ * These are not executable Calendar operations yet. The planner resolves each
+ * stable item key against verified Calendar state before creating a write.
+ */
+function buildPmosCalendarReviewOperationIntents_(decisionSet) {
+  const decisions = decisionSet || readActivePmosCalendarReviewDecisions_();
+  const intents = [];
+
+  appendPmosCalendarReviewIntents_(intents, decisions.matches, 'LINK_CUSTOMER');
+  appendPmosCalendarReviewIntents_(intents, decisions.temporaryVisits, 'REGISTER_TEMPORARY_VISIT');
+  appendPmosCalendarReviewIntents_(intents, decisions.keeps, 'PRESERVE_EVENT');
+  appendPmosCalendarReviewIntents_(intents, decisions.deletions, 'DELETE_APPROVED_EVENT');
+
+  return Object.freeze(intents.map(function (intent) {
+    return Object.freeze(intent);
+  }));
+}
+
+function appendPmosCalendarReviewIntents_(target, collection, action) {
+  Object.keys(collection || {}).sort().forEach(function (itemKey) {
+    target.push({
+      id: 'REVIEW_' + action + '_' + pmosCalendarHash_(String(itemKey)),
+      action: action,
+      itemKey: String(itemKey),
+      approvedByUser: true
+    });
+  });
+}
+
+/**
+ * Verifies the decision set before it is attached to a Calendar Sync plan.
+ * Ignored events are deliberately omitted because they must have received a
+ * later TEMPORARY, KEEP, or DELETE disposition before synchronization.
+ */
+function validatePmosCalendarReviewDecisionSet_(decisionSet) {
+  const decisions = decisionSet || readActivePmosCalendarReviewDecisions_();
+  const intents = buildPmosCalendarReviewOperationIntents_(decisions);
+  const seen = {};
+  const errors = [];
+
+  intents.forEach(function (intent) {
+    const key = String(intent.itemKey || '');
+    if (!key) {
+      errors.push('A review decision is missing its stable Calendar identity.');
+      return;
+    }
+    if (seen[key]) {
+      errors.push('Calendar item ' + key + ' has more than one final review disposition.');
+      return;
+    }
+    seen[key] = intent.action;
+  });
+
+  return Object.freeze({
+    valid: errors.length === 0,
+    errorCount: errors.length,
+    errors: Object.freeze(errors.slice()),
+    intentCount: intents.length,
+    sessionId: String(decisions.sessionId || '')
+  });
+}
