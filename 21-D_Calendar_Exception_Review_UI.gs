@@ -28,7 +28,7 @@ function showCalendarDeletionExceptionsReview() {
         return '<label class="item deletion-exception selectable' + (checked ? ' selected-exception' : '') + '" for="keep-' + index + '" id="row-' + index + '">' +
           '<input class="keep-check" type="checkbox" id="keep-' + index + '" data-index="' + index + '"' + checked + '>' +
           '<span class="row-content"><span class="row-top"><span class="heading">' + escapePmosAuditReviewHtml_(item.title || item.seriesKey) + '</span>' +
-          '<span class="exception-badge">KEEP</span></span>' +
+          '<span class="exception-badge">KEEP THIS EVENT</span></span>' +
           (item.layer ? '<span class="meta">Route: ' + escapePmosAuditReviewHtml_(item.layer) + '</span>' : '') +
           '<span class="meta">Series: ' + escapePmosAuditReviewHtml_(item.seriesKey) + '</span>' +
           '<span class="details">' + escapePmosAuditReviewHtml_(item.reason) + '</span></span>' +
@@ -66,7 +66,7 @@ function showCalendarDeletionExceptionsReview() {
       '.delete-toolbar{background:#fff1f2;border-color:#fda4af}.delete-toolbar.partial{background:#ffe4e6;border-color:#fb7185}.delete-toolbar.all{background:#fecdd3;border-color:#f43f5e}' +
       '.deletion-exception{border-left:5px solid #dc2626}.deletion-exception .exception-badge{display:none}' +
       '.deletion-exception.selected-exception{background:#f8fafc;border-left-color:#64748b;opacity:.82}' +
-      '.deletion-exception.selected-exception .exception-badge{display:inline-block;background:#e2e8f0;color:#334155;border-radius:999px;padding:2px 7px;font-size:11px;font-weight:800}' +
+      '.deletion-exception.selected-exception .exception-badge{display:inline-block;background:#e2e8f0;color:#334155;border-radius:999px;padding:4px 11px;font-size:13px;font-weight:900;letter-spacing:.2px}' +
       '.row-top{display:flex!important;align-items:center;gap:8px}.row-top .heading{margin-right:auto}' +
     '</style>'
   )).setWidth(800).setHeight(700);
