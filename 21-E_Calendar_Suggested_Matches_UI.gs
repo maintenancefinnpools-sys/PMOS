@@ -61,7 +61,7 @@ function showCalendarSuggestedMatchesReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Complete";google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(' + JSON.stringify(audit.reviewSessionId) + ',matches,exempt);}' +
+    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Complete";google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(matches,exempt);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
@@ -73,14 +73,10 @@ function showCalendarSuggestedMatchesReview() {
   return {count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId};
 }
 
-function savePmosCalendarSuggestedMatchDecisions(reviewSessionId, items, exemptIndexes) {
+function savePmosCalendarSuggestedMatchDecisions(items, exemptIndexes) {
   const session = loadPmosReviewSession_();
-  if (!session || session.status !== 'ACTIVE' ||
-      String(session.id || '') !== String(reviewSessionId || '') ||
-      String(session.scope || '') !== 'CALENDAR') {
-    throw new Error(
-      'This review session is no longer active. Re-run Calendar Plan Audit and reopen Suggested Matches.'
-    );
+  if (!session || session.status !== 'ACTIVE' || String(session.scope || '') !== 'CALENDAR') {
+    throw new Error('No active Calendar review session is available. Re-run Calendar Plan Audit.');
   }
 
   const current = {};
@@ -112,7 +108,7 @@ function savePmosCalendarSuggestedMatchDecisions(reviewSessionId, items, exemptI
 
   const saved = savePmosReviewSessionDecisions_(
     'CALENDAR',
-    String(session.latestPlannerVersion || session.sourceVersion || ''),
+    String(session.latestPlannerVersion || session.sourceVersion || 'CALENDAR_REVIEW'),
     records
   );
   if (!saved || saved.decisions.length !== records.length) {
@@ -123,6 +119,6 @@ function savePmosCalendarSuggestedMatchDecisions(reviewSessionId, items, exemptI
     saved: true,
     approvedCount: approvedCount,
     exemptCount: exemptCount,
-    reviewSessionId: session.id
+    reviewSessionId: saved.sessionId
   };
 }
