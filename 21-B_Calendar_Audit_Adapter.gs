@@ -46,8 +46,15 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     refinedMatching.unclassifiedEvents,
     reviewSession
   );
+
+  const ignoredDeletionCandidates = refinedUnclassified.ignored.map(
+    formatPmosIgnoredEventDeletionCandidate_
+  );
+  const allDeletionCandidates = rawDeletionCandidates
+    .map(formatPmosCalendarDeletionCandidate_)
+    .concat(ignoredDeletionCandidates);
   const refinedDeletions = applyPmosCalendarDeletionReviewSession_(
-    rawDeletionCandidates.map(formatPmosCalendarDeletionCandidate_),
+    allDeletionCandidates,
     reviewSession
   );
 
@@ -245,7 +252,7 @@ function recommendPmosCalendarAuditResolution_(item) {
   if (/calendar name|season start|season end|app settings|effective date/.test(text)) return {
     type: 'SETTINGS_SHEET', label: 'Open App Settings',
     explanation: 'Open App Settings and correct the referenced Calendar configuration.'
-  };
+  }
   return {type: 'NONE', label: '', explanation: 'Review the details shown here.'};
 }
 
@@ -258,6 +265,21 @@ function formatPmosCalendarDeletionCandidate_(operation) {
     layer: String(current.layer || ''),
     seriesId: String(current.seriesId || ''),
     reason: String(operation.reason || 'Series is not present in the current source of truth.')
+  };
+}
+
+function formatPmosIgnoredEventDeletionCandidate_(item) {
+  const eventKey = String(item.eventId || item.seriesId || item.operationId || '');
+  return {
+    operationId: String(item.operationId || ''),
+    seriesKey: eventKey,
+    title: String(item.title || 'Unclassified Calendar event'),
+    layer: '',
+    seriesId: String(item.seriesId || item.eventId || ''),
+    eventId: String(item.eventId || ''),
+    start: String(item.start || ''),
+    location: String(item.location || ''),
+    reason: 'This event was excluded from matching and Temporary Visit conversion. Choose whether to keep or delete it.'
   };
 }
 
