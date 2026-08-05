@@ -61,7 +61,7 @@ function showCalendarSuggestedMatchesReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Complete";google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(' + JSON.stringify(audit.sourceVersion) + ',matches,exempt);}' +
+    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Complete";google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(' + JSON.stringify(audit.reviewSessionId) + ',' + JSON.stringify(audit.sourceVersion) + ',matches,exempt);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
@@ -73,16 +73,23 @@ function showCalendarSuggestedMatchesReview() {
   return {count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId};
 }
 
-function savePmosCalendarSuggestedMatchDecisions(sourceVersion, items, exemptIndexes) {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (String(sourceVersion || '') !== String(audit.sourceVersion || '')) {
-    throw new Error('Calendar data changed. Run Calendar Plan Audit again before approving matches.');
+function savePmosCalendarSuggestedMatchDecisions(reviewSessionId, sourceVersion, items, exemptIndexes) {
+  const session = loadPmosReviewSession_();
+  if (!session || session.status !== 'ACTIVE' ||
+      String(session.id || '') !== String(reviewSessionId || '') ||
+      String(session.scope || '') !== 'CALENDAR' ||
+      String(session.sourceVersion || '') !== String(sourceVersion || '')) {
+    throw new Error(
+      'This review session is no longer active. Re-run Calendar Plan Audit and reopen Suggested Matches.'
+    );
   }
 
   const current = {};
-  (audit.suggestedMatches || []).forEach(function (item) {
-    current[String(item.eventId || item.seriesId || '')] = item;
+  (items || []).forEach(function (item) {
+    const key = String(item && (item.eventId || item.seriesId) || '');
+    if (key) current[key] = item;
   });
+
   const exempt = {};
   (exemptIndexes || []).forEach(function (index) { exempt[Number(index)] = true; });
   const records = [];
@@ -91,7 +98,9 @@ function savePmosCalendarSuggestedMatchDecisions(sourceVersion, items, exemptInd
 
   (items || []).forEach(function (item, index) {
     const eventKey = String(item.eventId || item.seriesId || '');
-    if (!eventKey || !current[eventKey]) throw new Error('A suggested match is no longer current.');
+    if (!eventKey || !current[eventKey]) {
+      throw new Error('A suggested match is missing its Calendar event identity.');
+    }
     const decision = exempt[index] ? 'IGNORE' : 'MATCH';
     if (decision === 'MATCH') approvedCount++;
     else exemptCount++;
@@ -104,7 +113,7 @@ function savePmosCalendarSuggestedMatchDecisions(sourceVersion, items, exemptInd
 
   const saved = savePmosReviewSessionDecisions_(
     'CALENDAR',
-    audit.sourceVersion,
+    session.sourceVersion,
     records
   );
   if (!saved || saved.decisions.length !== records.length) {
@@ -115,6 +124,6 @@ function savePmosCalendarSuggestedMatchDecisions(sourceVersion, items, exemptInd
     saved: true,
     approvedCount: approvedCount,
     exemptCount: exemptCount,
-    reviewSessionId: saved.sessionId
+    reviewSessionId: session.id
   };
 }
