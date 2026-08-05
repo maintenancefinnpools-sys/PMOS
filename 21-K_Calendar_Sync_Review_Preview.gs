@@ -92,7 +92,7 @@ function prepareApprovedCalendarSyncAndOpenJobCenter() {
   state.processedItems = 0;
   state.originalTotal = 0;
   state.remaining = null;
-  state.autoEnabled = true;
+  state.autoEnabled = false;
   state.pauseRequested = false;
   state.lastError = '';
   state.lastSummary = 'Approved Calendar Sync is ready to start.';
