@@ -24,7 +24,7 @@ function openAction(button,label,serverFunction,closeParent){button.setAttribute
 google.script.run.withSuccessHandler(done).withFailureHandler(fail).runPmosTask('${taskType}');
 errorsButton.onclick=function(){openAction(errorsButton,'Errors','showCalendarAuditErrorsReview',false);};
 warningsButton.onclick=function(){openAction(warningsButton,'Warnings','showCalendarAuditWarningsReview',false);};
-deletionsButton.onclick=function(){openAction(deletionsButton,'Suggested Deletions','showCalendarDeletionReview',false);};
+deletionsButton.onclick=function(){openAction(deletionsButton,'Suggested Deletions','showCalendarDeletionExceptionsReview',false);};
 unclassifiedButton.onclick=function(){openAction(unclassifiedButton,'Unclassified Events','showCalendarUnclassifiedEventsReview',false);};
 syncButton.onclick=function(){openAction(syncButton,'Calendar Sync','openVerifiedCalendarSyncFromAudit',true);};
 document.getElementById('closeButton').onclick=function(){google.script.host.close();};
