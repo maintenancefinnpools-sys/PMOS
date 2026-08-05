@@ -20,13 +20,6 @@ const PMOS_JOB_BACKOFF_DELAYS_MS = [
 /**
  * Runs job operations until the runtime budget is nearly exhausted, the job
  * completes, Pause is requested, or Google requires adaptive backoff.
- *
- * executeNextOperation(state) must return an object with these optional fields:
- *   processed: number of successfully completed work items (normally 1)
- *   remaining: remaining work after this operation
- *   complete: whether all work is complete
- *   summary: user-facing progress summary
- *   error: non-throwing operation error
  */
 function runPmosRuntimeWorker_(executeNextOperation) {
   if (typeof executeNextOperation !== 'function') {
@@ -34,13 +27,12 @@ function runPmosRuntimeWorker_(executeNextOperation) {
   }
 
   const startedAt = Date.now();
-  const deadline =
-    startedAt +
-    PMOS_JOB_RUNTIME_LIMIT_MS -
-    PMOS_JOB_RUNTIME_SAFETY_MS;
+  const deadline = startedAt + PMOS_JOB_RUNTIME_LIMIT_MS - PMOS_JOB_RUNTIME_SAFETY_MS;
 
   let state = readPmosJobState_();
   if (!state) throw new Error('No active PMOS job.');
+  const workerJobId = String(state.id || '');
+  if (!workerJobId) throw new Error('The active PMOS job has no identity.');
 
   state.status = 'Running';
   state.lastError = '';
@@ -52,9 +44,13 @@ function runPmosRuntimeWorker_(executeNextOperation) {
   let operationsThisRun = 0;
 
   while (Date.now() < deadline) {
-    state = readPmosJobState_() || state;
+    const current = readPmosJobState_();
+    if (!current || String(current.id || '') !== workerJobId) {
+      return getPmosJobStatus();
+    }
+    state = current;
 
-    if (state.status === 'Paused' || !state.autoEnabled && state.pauseRequested) {
+    if (state.status === 'Paused' || (!state.autoEnabled && state.pauseRequested)) {
       return finalizePmosRuntimePause_(state, operationsThisRun);
     }
 
@@ -62,24 +58,25 @@ function runPmosRuntimeWorker_(executeNextOperation) {
     try {
       operationResult = executeNextOperation(state) || {};
     } catch (error) {
-      return handlePmosRuntimeWorkerError_(
-        state,
-        error,
-        operationsThisRun
-      );
+      const errorState = readPmosJobState_();
+      if (!errorState || String(errorState.id || '') !== workerJobId) {
+        return getPmosJobStatus();
+      }
+      return handlePmosRuntimeWorkerError_(errorState, error, operationsThisRun);
     }
 
     operationsThisRun++;
-    state = mergePmosRuntimeOperationResult_(
-      readPmosJobState_() || state,
-      operationResult,
-      operationsThisRun
-    );
+    const latest = readPmosJobState_();
+    if (!latest || String(latest.id || '') !== workerJobId) {
+      return getPmosJobStatus();
+    }
+    state = mergePmosRuntimeOperationResult_(latest, operationResult, operationsThisRun);
     writePmosJobState_(state);
 
-    // Re-read persisted state so a Pause request made while the Calendar call
-    // was running is honoured before another operation begins.
-    const persisted = readPmosJobState_() || state;
+    const persisted = readPmosJobState_();
+    if (!persisted || String(persisted.id || '') !== workerJobId) {
+      return getPmosJobStatus();
+    }
     if (persisted.status === 'Paused' || persisted.pauseRequested) {
       return finalizePmosRuntimePause_(persisted, operationsThisRun);
     }
@@ -115,9 +112,7 @@ function mergePmosRuntimeOperationResult_(state, result, operationsThisRun) {
   state.operationsThisRun = operationsThisRun;
   state.lastOperationAt = new Date().toISOString();
   state.lastSummary = String(
-    result.summary ||
-    state.lastSummary ||
-    `${state.processedItems} item(s) processed.`
+    result.summary || state.lastSummary || `${state.processedItems} item(s) processed.`
   );
   state.lastError = '';
   state.backoffLevel = Math.max(0, Number(state.backoffLevel || 0) - 1);
@@ -161,9 +156,7 @@ function finalizePmosRuntimeYield_(state, operationsThisRun, startedAt) {
 
   if (state.autoEnabled) {
     state.status = 'Waiting';
-    state.nextRunAt = new Date(
-      Date.now() + PMOS_JOB_NORMAL_CONTINUATION_MS
-    ).toISOString();
+    state.nextRunAt = new Date(Date.now() + PMOS_JOB_NORMAL_CONTINUATION_MS).toISOString();
     writePmosJobState_(state);
     schedulePmosRuntimeContinuation_(PMOS_JOB_NORMAL_CONTINUATION_MS);
   } else {
@@ -177,9 +170,7 @@ function finalizePmosRuntimeYield_(state, operationsThisRun, startedAt) {
 }
 
 function handlePmosRuntimeWorkerError_(state, error, operationsThisRun) {
-  const message = String(
-    error && error.message ? error.message : error || 'Unknown error'
-  );
+  const message = String(error && error.message ? error.message : error || 'Unknown error');
 
   state.operationsThisRun = operationsThisRun;
   state.lastError = message;
@@ -232,10 +223,6 @@ function isPmosRetryableCalendarError_(message) {
   );
 }
 
-/**
- * Schedules a one-time continuation. Apps Script may round very short delays,
- * but using a one-time trigger avoids retaining the old fixed one-minute loop.
- */
 function schedulePmosRuntimeContinuation_(delayMs) {
   removePmosJobTrigger_();
   ScriptApp.newTrigger(PMOS_JOB_TRIGGER_HANDLER)
@@ -244,19 +231,13 @@ function schedulePmosRuntimeContinuation_(delayMs) {
     .create();
 }
 
-/**
- * Records a Pause request without waiting for the current Calendar operation.
- * The runtime worker re-reads this flag before beginning its next operation.
- */
 function requestPmosRuntimePause_() {
   const state = readPmosJobState_();
   if (!state) return getPmosJobStatus();
 
   state.pauseRequested = true;
   state.autoEnabled = false;
-  state.status = state.status === 'Running'
-    ? 'Pausing'
-    : 'Paused';
+  state.status = state.status === 'Running' ? 'Pausing' : 'Paused';
   state.nextRunAt = '';
   writePmosJobState_(state);
   removePmosJobTrigger_();
