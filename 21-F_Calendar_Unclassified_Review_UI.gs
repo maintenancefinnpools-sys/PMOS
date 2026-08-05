@@ -57,7 +57,7 @@ function showCalendarUnclassifiedExceptionsReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and send "+ignored.length+" selected event(s) to deletion review?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).savePmosCalendarUnclassifiedDecisions(events,ignored);}' +
+    'function approveUnclassified(button){var ignored=selectedIndexes();var temporaryCount=events.length-ignored.length;if(!confirm("Convert "+temporaryCount+" unselected event(s) to Temporary Visits and send "+ignored.length+" selected event(s) to deletion review?"))return;button.disabled=true;button.textContent="Saving and continuing…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).saveAndAdvancePmosCalendarReview("UNCLASSIFIED_EVENT",events,ignored);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_('Unclassified Calendar Events', body, footer, script) + '<style>' +
@@ -84,5 +84,5 @@ function savePmosCalendarUnclassifiedDecisions(items, ignoredIndexes) {
 
   const saved = savePmosReviewStep_('CALENDAR', 'UNCLASSIFIED_EVENT', records);
   if (!saved || saved.decisionCount !== records.length) throw new Error('Not all unclassified-event decisions were saved.');
-  return {saved: true, temporaryCount: temporaryCount, ignoredCount: ignoredCount, reviewSessionId: saved.sessionId};
+  return {saved: true, decisionCount: records.length, temporaryCount: temporaryCount, ignoredCount: ignoredCount, reviewSessionId: saved.sessionId};
 }
