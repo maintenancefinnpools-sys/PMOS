@@ -33,11 +33,28 @@ function buildValidatedPmosCalendarSyncPlan_(options) {
       includeSkips: false
     }
   );
-  const plan = appendPmosCalendarStateReviewPlan_(
+
+  let plan = appendPmosCalendarStateReviewPlan_(
     basePlan,
     currentState,
     verifiedState
   );
+
+  let reviewDecisions = null;
+  try {
+    reviewDecisions = readActivePmosCalendarReviewDecisions_();
+  } catch (error) {
+    reviewDecisions = null;
+  }
+
+  if (reviewDecisions) {
+    plan = appendResolvedPmosCalendarReviewOperations_(
+      plan,
+      currentState,
+      verifiedState,
+      reviewDecisions
+    );
+  }
 
   const genericValidation = validatePmosPlan(plan, {
     validateCustomers: false
@@ -52,13 +69,20 @@ function buildValidatedPmosCalendarSyncPlan_(options) {
     return operation.action === PMOS_OPERATION.ERROR ||
       Boolean(operation.metadata && operation.metadata.blocking);
   });
+  const reviewExecutorPending = Boolean(
+    plan.metadata && plan.metadata.reviewExecutorPending
+  );
 
   return Object.freeze({
     plan: plan,
     validation: validation,
     currentState: currentState,
     verifiedState: verifiedState,
-    canExecute: validation.executable && plannerErrors.length === 0,
+    reviewDecisions: reviewDecisions,
+    reviewExecutorPending: reviewExecutorPending,
+    canExecute: validation.executable &&
+      plannerErrors.length === 0 &&
+      !reviewExecutorPending,
     plannerErrorCount: plannerErrors.length
   });
 }
@@ -207,6 +231,13 @@ function previewPmosCalendarSyncPlan(options) {
   const plan = result.plan;
   const summary = summarizePmosCalendarSyncPlan(plan);
   const executable = plan.operations.filter(isPmosExecutableOperation);
+  const reviewOperations = plan.operations.filter(function (operation) {
+    return Boolean(operation.metadata && operation.metadata.reviewOperation);
+  });
+  const reviewCounts = Object.assign(
+    {match: 0, temporary: 0, ignore: 0, keep: 0, delete: 0},
+    plan.metadata && plan.metadata.reviewDecisionCounts || {}
+  );
 
   return Object.freeze({
     planId: plan.id,
@@ -221,6 +252,17 @@ function previewPmosCalendarSyncPlan(options) {
     validationErrors: Number(result.validation.errorCount || 0),
     validationWarnings: Number(result.validation.warningCount || 0),
     canExecute: result.canExecute,
+    reviewExecutorPending: result.reviewExecutorPending,
+    reviewSessionId: String(plan.metadata.reviewSessionId || ''),
+    reviewOperationCount: reviewOperations.length,
+    reviewedMatches: Number(reviewCounts.match || 0),
+    reviewedTemporaryVisits: Number(reviewCounts.temporary || 0),
+    reviewedKeeps: Number(reviewCounts.keep || 0),
+    reviewedDeletions: Number(reviewCounts.delete || 0),
+    reviewResolutionErrors: Number(
+      plan.metadata.reviewResolutionErrorCount || 0
+    ),
+    reviewedActions: reviewOperations.map(formatPmosCalendarPreviewOperation_),
     affectedRoutes: countPmosCalendarAffectedRoutes_(executable),
     affectedEvents: executable.length,
     registeredPresent: Number(result.currentState.registeredPresentCount || 0),
@@ -252,20 +294,32 @@ function previewPmosCalendarChangesLegacyShape_() {
     canExecute: preview.canExecute,
     validationErrors: preview.validationErrors,
     validationWarnings: preview.validationWarnings,
-    plannerErrors: preview.plannerErrors
+    plannerErrors: preview.plannerErrors,
+    reviewExecutorPending: preview.reviewExecutorPending,
+    reviewOperationCount: preview.reviewOperationCount,
+    reviewedMatches: preview.reviewedMatches,
+    reviewedTemporaryVisits: preview.reviewedTemporaryVisits,
+    reviewedKeeps: preview.reviewedKeeps,
+    reviewedDeletions: preview.reviewedDeletions,
+    reviewedActions: preview.reviewedActions
   };
 }
 
 function formatPmosCalendarPreviewOperation_(operation) {
   const desired = operation.payload && operation.payload.desired;
   const current = operation.payload && operation.payload.current;
-  const record = desired || current || {};
+  const review = operation.payload && operation.payload.review;
+  const record = desired || current || review || {};
   return {
     id: operation.id,
     action: operation.action,
+    reviewAction: operation.metadata && operation.metadata.reviewAction || '',
+    reviewOperation: Boolean(operation.metadata && operation.metadata.reviewOperation),
     seriesKey: operation.entityId,
     layer: record.layer || '',
-    title: record.title || operation.entityId || '',
+    title: record.title || record.eventTitle || operation.entityId || '',
+    customerId: review && review.customerId || '',
+    customerName: review && review.customerName || '',
     reason: operation.reason || '',
     changedFields: operation.payload && operation.payload.changedFields
       ? operation.payload.changedFields.slice()
