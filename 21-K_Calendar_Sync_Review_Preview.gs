@@ -35,7 +35,7 @@ function openReviewedCalendarSyncPreview() {
 
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:18px;color:#1f2937}h2{margin:0 0 4px}.muted{font-size:13px;color:#64748b}.section{margin-top:15px;border:1px solid #e2e8f0;border-radius:10px;padding:13px}.section h3{margin:0 0 10px}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric{border:1px solid #e2e8f0;border-radius:8px;padding:9px;background:#f8fafc}.metric span{display:block;font-size:11px;color:#64748b}.metric strong{display:block;margin-top:3px;font-size:17px}.review-list{max-height:315px;overflow:auto}.review-row{border:1px solid #e2e8f0;border-left:5px solid #64748b;border-radius:9px;padding:10px;margin:8px 0}.review-row.link_customer{border-left-color:#2563eb}.review-row.register_temporary_visit{border-left-color:#d97706}.review-row.preserve_event{border-left-color:#64748b}.review-row.delete_approved_event{border-left-color:#dc2626}.review-action{font-size:11px;font-weight:900;letter-spacing:.2px}.review-title{font-weight:700;margin-top:3px}.review-meta,.review-reason{font-size:12px;color:#475569;margin-top:3px}.notice{margin-top:14px;padding:11px;border-radius:9px;background:#fef3c7;color:#92400e;font-weight:700}.actions{display:flex;gap:8px;margin-top:14px}button{border:0;border-radius:8px;padding:10px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#1f2937}button:disabled{opacity:.5;cursor:default}.empty{color:#64748b;font-size:13px}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:18px;color:#1f2937}h2{margin:0 0 4px}.muted{font-size:13px;color:#64748b}.section{margin-top:15px;border:1px solid #e2e8f0;border-radius:10px;padding:13px}.section h3{margin:0 0 10px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.section-head h3{margin:0}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric{border:1px solid #e2e8f0;border-radius:8px;padding:9px;background:#f8fafc}.metric span{display:block;font-size:11px;color:#64748b}.metric strong{display:block;margin-top:3px;font-size:17px}.review-list{max-height:205px;overflow:auto;transition:max-height .18s ease}.review-list.expanded{max-height:405px}.review-row{border:1px solid #e2e8f0;border-left:5px solid #64748b;border-radius:9px;padding:10px;margin:8px 0}.review-row.link_customer{border-left-color:#2563eb}.review-row.register_temporary_visit{border-left-color:#d97706}.review-row.preserve_event{border-left-color:#64748b}.review-row.delete_approved_event{border-left-color:#dc2626}.review-action{font-size:11px;font-weight:900;letter-spacing:.2px}.review-title{font-weight:700;margin-top:3px}.review-meta,.review-reason{font-size:12px;color:#475569;margin-top:3px}.toggle{padding:6px 9px;background:#f1f5f9;color:#334155;font-size:12px;white-space:nowrap}.notice{margin-top:14px;padding:11px;border-radius:9px;background:#fef3c7;color:#92400e;font-weight:700}.actions{display:flex;gap:8px;margin-top:14px}button{border:0;border-radius:8px;padding:10px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#1f2937}button:disabled{opacity:.5;cursor:default}.empty{color:#64748b;font-size:13px}
 </style></head><body>
 <h2>Calendar Sync Preview</h2><div class="muted">Review the approved plan for ${escapePmosSyncPreviewHtml_(preview.calendarName || '')} before sending it to the Job Center.</div>
 <div class="section"><h3>Recurring schedule changes</h3><div class="metrics">
@@ -43,19 +43,20 @@ function openReviewedCalendarSyncPreview() {
 <div class="metric"><span>Update</span><strong>${Number(preview.updates || 0)}</strong></div>
 <div class="metric"><span>Delete</span><strong>${Number(preview.deletes || 0)}</strong></div>
 </div></div>
-<div class="section"><h3>Reviewed Event Actions</h3><div class="metrics">
+<div class="section"><div class="section-head"><h3>Reviewed Event Actions</h3>${reviewed.length > 3 ? '<button id="toggleReviewList" class="toggle" type="button" onclick="toggleReviewedEvents()">Show More</button>' : ''}</div><div class="metrics">
 <div class="metric"><span>Customer matches</span><strong>${counts.match}</strong></div>
 <div class="metric"><span>Temporary Visits</span><strong>${counts.temporary}</strong></div>
 <div class="metric"><span>Keep events</span><strong>${counts.keep}</strong></div>
 <div class="metric"><span>Approved deletions</span><strong>${counts.delete}</strong></div>
 <div class="metric"><span>Total reviewed</span><strong>${counts.total}</strong></div>
 <div class="metric"><span>Resolution errors</span><strong>${resolutionErrors}</strong></div>
-</div><div class="review-list">${reviewedRows}</div></div>
+</div><div id="reviewList" class="review-list">${reviewedRows}</div></div>
 ${blockedText ? '<div class="notice">' + escapePmosSyncPreviewHtml_(blockedText) + '</div>' : ''}
 <div class="actions"><button class="primary" ${executorPending || resolutionErrors ? 'disabled' : ''} onclick="approveSync(this)">Approve</button><button class="secondary" onclick="google.script.host.close()">Close</button></div>
 <script>
+function toggleReviewedEvents(){var list=document.getElementById('reviewList'),button=document.getElementById('toggleReviewList');if(!list||!button)return;var expanded=list.classList.toggle('expanded');button.textContent=expanded?'Show Less':'Show More';}
 function approveSync(button){button.disabled=true;button.textContent='Opening Job Center…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent='Approve';alert(e&&e.message?e.message:String(e));}).prepareApprovedCalendarSyncAndOpenJobCenter();}
-</script></body></html>`).setWidth(860).setHeight(720);
+</script></body></html>`).setWidth(860).setHeight(650);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Calendar Sync Preview');
   return {
