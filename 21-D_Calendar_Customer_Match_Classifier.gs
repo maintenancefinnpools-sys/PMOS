@@ -1,7 +1,9 @@
 /**
  * Read-only customer matching for unclassified Calendar events.
  *
- * Produces only unique, evidence-backed suggestions. It performs no writes.
+ * A clear customer name, Calendar title, or service-address match is sufficient
+ * to create a suggestion. Phone, email, and additional matching fields increase
+ * confidence. Ambiguous results remain unclassified. This performs no writes.
  */
 function classifyPmosCalendarCustomerMatches_(events) {
   const customers = buildPmosCalendarMatchCustomerIndex_();
@@ -19,8 +21,9 @@ function classifyPmosCalendarCustomerMatches_(events) {
 
     const best = ranked[0];
     const second = ranked[1];
-    const unique = best && best.score >= 70 &&
-      (!second || best.score - second.score >= 20);
+    const hasPrimaryEvidence = Boolean(best && best.primaryEvidence);
+    const clearlyAhead = !second || best.score - second.score >= 10;
+    const unique = Boolean(best && hasPrimaryEvidence && best.score >= 65 && clearlyAhead);
 
     if (!unique) {
       unmatchedEvents.push(event);
@@ -81,11 +84,8 @@ function buildPmosCalendarMatchCustomerIndex_() {
 function scorePmosCalendarCustomerMatch_(event, customer) {
   const title = normalizePmosCalendarMatchText_(event && event.title);
   const location = normalizePmosCalendarMatchText_(event && event.location);
-  const searchable = normalizePmosCalendarMatchText_([
-    event && event.title,
-    event && event.location,
-    event && event.description
-  ].join(' '));
+  const description = normalizePmosCalendarMatchText_(event && event.description);
+  const searchable = normalizePmosCalendarMatchText_([title, location, description].join(' '));
   const name = normalizePmosCalendarMatchText_(customer.fullName);
   const calendarTitle = normalizePmosCalendarMatchText_(customer.title);
   const address = normalizePmosCalendarMatchText_(customer.address);
@@ -94,44 +94,78 @@ function scorePmosCalendarCustomerMatch_(event, customer) {
   const email = String(customer.email || '').trim().toLowerCase();
 
   let score = 0;
+  let primaryEvidence = false;
   const matchedFields = [];
 
-  if (address && location && (location === address || location.indexOf(address) >= 0 || address.indexOf(location) >= 0)) {
-    score += 70;
+  if (address && textContainsEitherPmosCalendarMatch_(location, address)) {
+    score += 85;
+    primaryEvidence = true;
     matchedFields.push('service address');
-  } else if (address && searchable.indexOf(address) >= 0) {
-    score += 65;
+  } else if (address && textContainsEitherPmosCalendarMatch_(searchable, address)) {
+    score += 75;
+    primaryEvidence = true;
     matchedFields.push('service address');
   }
 
   if (calendarTitle && title === calendarTitle) {
-    score += 60;
+    score += 85;
+    primaryEvidence = true;
+    matchedFields.push('Calendar title');
+  } else if (calendarTitle && textContainsEitherPmosCalendarMatch_(title, calendarTitle)) {
+    score += 75;
+    primaryEvidence = true;
     matchedFields.push('Calendar title');
   } else if (calendarTitle && searchable.indexOf(calendarTitle) >= 0) {
-    score += 45;
+    score += 65;
+    primaryEvidence = true;
     matchedFields.push('Calendar title');
   }
 
-  if (name && (title === name || searchable.indexOf(name) >= 0)) {
-    score += 45;
+  if (name && title === name) {
+    score += 85;
+    primaryEvidence = true;
+    matchedFields.push('customer name');
+  } else if (name && textContainsEitherPmosCalendarMatch_(title, name)) {
+    score += 75;
+    primaryEvidence = true;
+    matchedFields.push('customer name');
+  } else if (name && searchable.indexOf(name) >= 0) {
+    score += 65;
+    primaryEvidence = true;
     matchedFields.push('customer name');
   }
 
-  const eventDigits = normalizePmosCalendarMatchPhone_(searchable);
-  if (phone && eventDigits.indexOf(phone) >= 0) {
-    score += 55;
+  const eventDigits = normalizePmosCalendarMatchPhone_([
+    event && event.title,
+    event && event.location,
+    event && event.description
+  ].join(' '));
+  if (phone && phone.length >= 7 && eventDigits.indexOf(phone) >= 0) {
+    score += 25;
     matchedFields.push('phone');
-  } else if (secondaryPhone && eventDigits.indexOf(secondaryPhone) >= 0) {
-    score += 50;
+  } else if (secondaryPhone && secondaryPhone.length >= 7 && eventDigits.indexOf(secondaryPhone) >= 0) {
+    score += 20;
     matchedFields.push('secondary phone');
   }
 
   if (email && searchable.indexOf(email) >= 0) {
-    score += 60;
+    score += 25;
     matchedFields.push('email');
   }
 
-  return { customer: customer, score: score, matchedFields: matchedFields };
+  return {
+    customer: customer,
+    score: score,
+    primaryEvidence: primaryEvidence,
+    matchedFields: matchedFields
+  };
+}
+
+function textContainsEitherPmosCalendarMatch_(left, right) {
+  const a = String(left || '').trim();
+  const b = String(right || '').trim();
+  if (!a || !b) return false;
+  return a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
 }
 
 function normalizePmosCalendarMatchText_(value) {
