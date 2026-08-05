@@ -46,7 +46,10 @@ function getExistingConfiguredPmosCalendar_(calendarName) {
 }
 
 function normalizePmosCalendarReadRange_(settings, options) {
-  const source = options || {};
+  const stored = typeof readPmosCalendarAuditOptions_ === 'function'
+    ? readPmosCalendarAuditOptions_()
+    : {includeStartedToday:false};
+  const source = Object.assign({}, stored || {}, options || {});
   const now = new Date();
   const today = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const configuredEnd = settings && settings.seasonEnd instanceof Date ? new Date(settings.seasonEnd) : today;
