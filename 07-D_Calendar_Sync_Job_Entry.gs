@@ -22,7 +22,7 @@ function startVerifiedCalendarSyncJob(autoMode, options) {
     );
   }
 
-  const audit = runPmosCalendarPlanAuditReadOnly_(calendarOptions);
+  const audit = runVerifiedCalendarPlanAuditReadOnly_(calendarOptions);
 
   if (!audit.canSync) {
     throw new Error(
