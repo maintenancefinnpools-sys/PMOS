@@ -90,8 +90,8 @@ function savePmosCalendarSuggestedMatchDecisions(planId, items, exemptIndexes) {
     const eventKey = String(item.eventId || item.seriesId || '');
     if (!eventKey || !current[eventKey]) throw new Error('A suggested match is no longer current.');
     const record = Object.assign({}, current[eventKey], {seriesKey: eventKey});
-    const decision = exempt[index] ? 'IGNORE' : 'MATCH';
-    if (decision === 'MATCH') approvedCount++;
+    const decision = exempt[index] ? 'IGNORE' : 'KEEP';
+    if (decision === 'KEEP') approvedCount++;
     savePmosCalendarReviewDecision(audit.planId, 'SUGGESTED_MATCH', decision, record);
   });
   return {saved: true, approvedCount: approvedCount, exemptCount: (items || []).length - approvedCount};
