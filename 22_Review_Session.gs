@@ -16,18 +16,29 @@ function getOrBeginPmosReviewSession_(scope, sourceVersion) {
 
   const properties = PropertiesService.getDocumentProperties();
   let session = loadPmosReviewSession_();
-  const invalid = !session || session.scope !== normalizedScope ||
-    session.sourceVersion !== normalizedSource || session.status !== 'ACTIVE';
 
-  if (invalid) {
+  // Planner IDs and planner source-version values may change whenever an audit
+  // is rebuilt. They do not, by themselves, prove that the underlying Calendar
+  // or spreadsheet data changed. Preserve an active session for the same scope
+  // until an operation explicitly invalidates or completes it.
+  const needsNewSession = !session ||
+    session.scope !== normalizedScope ||
+    session.status !== 'ACTIVE';
+
+  if (needsNewSession) {
     session = {
       id: Utilities.getUuid(),
       scope: normalizedScope,
       sourceVersion: normalizedSource,
+      latestPlannerVersion: normalizedSource,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+    properties.setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(session));
+  } else if (session.latestPlannerVersion !== normalizedSource) {
+    session.latestPlannerVersion = normalizedSource;
+    session.updatedAt = new Date().toISOString();
     properties.setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(session));
   }
 
@@ -105,6 +116,7 @@ function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
     id: session.id,
     scope: session.scope,
     sourceVersion: session.sourceVersion,
+    latestPlannerVersion: String(sourceVersion || session.latestPlannerVersion || ''),
     status: session.status,
     createdAt: session.createdAt,
     updatedAt: now
