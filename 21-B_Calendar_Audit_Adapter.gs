@@ -57,8 +57,8 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     'Updates proposed: ' + Number(preview.updates || 0),
     'Errors: ' + errorCount,
     'Warnings: ' + warningCount,
-    'Suggested deletions: ' + deletionCandidates.length,
     'Unclassified events: ' + unclassifiedEvents.length,
+    'Suggested deletions: ' + deletionCandidates.length,
     'Registered series missing: ' + Number(preview.registeredMissing || 0)
   ];
 
