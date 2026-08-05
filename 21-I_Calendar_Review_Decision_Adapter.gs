@@ -12,6 +12,7 @@ function readActivePmosCalendarReviewDecisions_() {
     sessionId: String(session.id || ''),
     sourceVersion: String(session.sourceVersion || ''),
     latestPlannerVersion: String(session.latestPlannerVersion || ''),
+    records: {},
     matches: {},
     temporaryVisits: {},
     ignored: {},
@@ -32,6 +33,14 @@ function readActivePmosCalendarReviewDecisions_() {
     const itemKey = String(record.itemKey || '').trim();
     const decision = String(record.decision || '').trim().toUpperCase();
     if (!reviewType || !itemKey || !decision) return;
+
+    result.records[key] = Object.freeze({
+      reviewType: reviewType,
+      itemKey: itemKey,
+      decision: decision,
+      payload: Object.freeze(Object.assign({}, record.payload || {})),
+      updatedAt: String(record.updatedAt || '')
+    });
 
     if (reviewType === 'SUGGESTED_MATCH') {
       if (decision === 'MATCH') {
@@ -66,6 +75,13 @@ function readActivePmosCalendarReviewDecisions_() {
     }
   });
 
+  Object.freeze(result.records);
+  Object.freeze(result.matches);
+  Object.freeze(result.temporaryVisits);
+  Object.freeze(result.ignored);
+  Object.freeze(result.keeps);
+  Object.freeze(result.deletions);
+  Object.freeze(result.counts);
   return Object.freeze(result);
 }
 
