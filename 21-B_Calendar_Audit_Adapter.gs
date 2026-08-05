@@ -15,7 +15,7 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     return String(operation.metadata && operation.metadata.reviewType || '') ===
       'UNCLASSIFIED_CALENDAR_EVENT';
   });
-  const deletionCandidates = warningOperations.filter(function (operation) {
+  const rawDeletionCandidates = warningOperations.filter(function (operation) {
     return String(operation.metadata && operation.metadata.reviewType || '') !==
         'UNCLASSIFIED_CALENDAR_EVENT' &&
       Boolean(operation.payload && operation.payload.current) &&
@@ -23,7 +23,7 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
   });
   const ordinaryWarningOperations = warningOperations.filter(function (operation) {
     return unclassifiedOperations.indexOf(operation) < 0 &&
-      deletionCandidates.indexOf(operation) < 0;
+      rawDeletionCandidates.indexOf(operation) < 0;
   });
 
   const issues = buildPmosCalendarAuditReviewItems_(validationIssues, ordinaryWarningOperations);
@@ -41,13 +41,29 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     preview.planId || ''
   );
   const reviewSession = getOrBeginPmosReviewSession_('CALENDAR', sourceVersion);
-  const refinedMatching = applyPmosCalendarMatchReviewSession_(
-    matching,
+  const refinedMatching = applyPmosCalendarMatchReviewSession_(matching, reviewSession);
+  const refinedUnclassified = applyPmosCalendarUnclassifiedReviewSession_(
+    refinedMatching.unclassifiedEvents,
     reviewSession
   );
+  const refinedDeletions = applyPmosCalendarDeletionReviewSession_(
+    rawDeletionCandidates.map(formatPmosCalendarDeletionCandidate_),
+    reviewSession
+  );
+
   const suggestedMatches = refinedMatching.suggestedMatches;
   const approvedMatches = refinedMatching.approvedMatches;
-  const unclassifiedEvents = refinedMatching.unclassifiedEvents;
+  const unclassifiedEvents = refinedUnclassified.pending;
+  const approvedTemporaryVisits = refinedUnclassified.temporaryVisits;
+  const ignoredEvents = refinedUnclassified.ignored;
+  const deletionCandidates = refinedDeletions.pending;
+  const approvedDeletions = refinedDeletions.approved;
+  const keptDeletions = refinedDeletions.kept;
+
+  const reviewComplete = errors.length === 0 && warnings.length === 0 &&
+    suggestedMatches.length === 0 && unclassifiedEvents.length === 0 &&
+    deletionCandidates.length === 0;
+  const canSync = preview.canExecute === true && reviewComplete;
 
   const lines = [
     'Calendar: ' + String(preview.calendarName || ''),
@@ -63,10 +79,15 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     'Registered series missing: ' + Number(preview.registeredMissing || 0)
   ];
 
-  if (!preview.canExecute) lines.push('Calendar Sync remains blocked until the errors are resolved.');
+  if (!preview.canExecute) {
+    lines.push('Calendar Sync remains blocked until the errors are resolved.');
+  } else if (!reviewComplete) {
+    lines.push('Complete the remaining review items before opening Calendar Sync.');
+  }
 
   return {
-    canSync: preview.canExecute === true,
+    canSync: canSync,
+    reviewComplete: reviewComplete,
     planId: preview.planId || '',
     sourceVersion: sourceVersion,
     reviewSessionId: reviewSession.id,
@@ -76,22 +97,28 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
     suggestedMatchCount: suggestedMatches.length,
     approvedMatchCount: approvedMatches.length,
     deletionCandidateCount: deletionCandidates.length,
+    approvedDeletionCount: approvedDeletions.length,
+    keptDeletionCount: keptDeletions.length,
     unclassifiedEventCount: unclassifiedEvents.length,
+    approvedTemporaryVisitCount: approvedTemporaryVisits.length,
+    ignoredEventCount: ignoredEvents.length,
     hasErrors: errors.length > 0,
     hasWarnings: warnings.length > 0,
     hasSuggestedMatches: suggestedMatches.length > 0,
     hasUnclassifiedEvents: unclassifiedEvents.length > 0,
-    hasReviewItems: errors.length > 0 || warnings.length > 0 ||
-      suggestedMatches.length > 0 || deletionCandidates.length > 0 ||
-      unclassifiedEvents.length > 0,
+    hasReviewItems: !reviewComplete,
     summary: lines.join('\n'),
     issues: issues,
     errors: errors,
     warnings: warnings,
     suggestedMatches: suggestedMatches,
     approvedMatches: approvedMatches,
-    deletionCandidates: deletionCandidates.map(formatPmosCalendarDeletionCandidate_),
+    deletionCandidates: deletionCandidates,
+    approvedDeletions: approvedDeletions,
+    keptDeletionCandidates: keptDeletions,
     unclassifiedEvents: unclassifiedEvents,
+    approvedTemporaryVisits: approvedTemporaryVisits,
+    ignoredEvents: ignoredEvents,
     preview: preview
   };
 }
@@ -103,11 +130,7 @@ function applyPmosCalendarMatchReviewSession_(matching, session) {
 
   (matching.suggestedMatches || []).forEach(function (item) {
     const itemKey = String(item.eventId || item.seriesId || '');
-    const decision = readPmosReviewSessionDecision_(
-      session,
-      'SUGGESTED_MATCH',
-      itemKey
-    );
+    const decision = readPmosReviewSessionDecision_(session, 'SUGGESTED_MATCH', itemKey);
     const value = String(decision && decision.decision || '').toUpperCase();
     if (value === 'IGNORE') {
       unclassified.push(Object.freeze(Object.assign({}, item, {
@@ -124,6 +147,44 @@ function applyPmosCalendarMatchReviewSession_(matching, session) {
     suggestedMatches: Object.freeze(pending),
     approvedMatches: Object.freeze(approved),
     unclassifiedEvents: Object.freeze(unclassified)
+  });
+}
+
+function applyPmosCalendarUnclassifiedReviewSession_(items, session) {
+  const pending = [];
+  const temporaryVisits = [];
+  const ignored = [];
+  (items || []).forEach(function (item) {
+    const itemKey = String(item.eventId || item.seriesId || item.operationId || '');
+    const decision = readPmosReviewSessionDecision_(session, 'UNCLASSIFIED_EVENT', itemKey);
+    const value = String(decision && decision.decision || '').toUpperCase();
+    if (value === 'TEMPORARY' || value === 'TEMPORARY_VISIT') temporaryVisits.push(item);
+    else if (value === 'IGNORE') ignored.push(item);
+    else pending.push(item);
+  });
+  return Object.freeze({
+    pending: Object.freeze(pending),
+    temporaryVisits: Object.freeze(temporaryVisits),
+    ignored: Object.freeze(ignored)
+  });
+}
+
+function applyPmosCalendarDeletionReviewSession_(items, session) {
+  const pending = [];
+  const approved = [];
+  const kept = [];
+  (items || []).forEach(function (item) {
+    const itemKey = String(item.seriesKey || item.seriesId || '');
+    const decision = readPmosReviewSessionDecision_(session, 'DELETION_CANDIDATE', itemKey);
+    const value = String(decision && decision.decision || '').toUpperCase();
+    if (value === 'DELETE') approved.push(item);
+    else if (value === 'KEEP') kept.push(item);
+    else pending.push(item);
+  });
+  return Object.freeze({
+    pending: Object.freeze(pending),
+    approved: Object.freeze(approved),
+    kept: Object.freeze(kept)
   });
 }
 
@@ -219,7 +280,7 @@ function formatPmosCalendarUnclassifiedEvent_(operation) {
 function openVerifiedCalendarSyncFromAudit() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   if (!audit.canSync) throw new Error(
-    'Calendar Plan Audit has ' + audit.errorCount + ' error(s). Calendar Sync was not opened.'
+    'Calendar Plan Audit still has unresolved review items or errors. Complete the review before opening Calendar Sync.'
   );
   showPmosJobEngineFor_('CALENDAR_SYNC');
   return {opened: true, started: false, selectedType: 'CALENDAR_SYNC', planId: audit.planId};
