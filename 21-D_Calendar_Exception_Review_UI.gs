@@ -3,7 +3,6 @@
  *
  * PMOS proposes the normal action. Checked rows are exceptions to that action.
  */
-
 function showCalendarDeletionExceptionsReview() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   const items = audit.deletionCandidates || [];
@@ -57,16 +56,13 @@ function showCalendarDeletionExceptionsReview() {
     'function approveDeletions(button){var kept=keptIndexes(),deleteCount=candidates.length-kept.length;if(!deleteCount){alert("All events are selected to keep. There are no deletions to approve.");return;}' +
       'if(!confirm("Are you sure you would like to delete the "+deleteCount+" unselected events?"))return;' +
       'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
-      'google.script.run.withSuccessHandler(function(){google.script.host.close();})' +
+      'google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){throw new Error("The deletion decisions were not saved.");}button.textContent="Complete";google.script.host.close();})' +
       '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve deletions";alert(e&&e.message?e.message:String(e));})' +
-      '.savePmosCalendarDeletionExceptions(' + JSON.stringify(audit.sourceVersion) + ',candidates,kept);}' +
+      '.savePmosCalendarDeletionExceptions(candidates,kept);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Suggested Calendar Deletions',
-    body,
-    footer,
-    script + '<style>' +
+    'Suggested Calendar Deletions', body, footer, script + '<style>' +
       '.delete-instructions{background:#fee2e2;color:#7f1d1d}' +
       '.delete-toolbar{background:#fff1f2;border-color:#fda4af}.delete-toolbar.partial{background:#ffe4e6;border-color:#fb7185}.delete-toolbar.all{background:#fecdd3;border-color:#f43f5e}' +
       '.deletion-exception{border-left:5px solid #dc2626}.deletion-exception .exception-badge{display:none}' +
@@ -77,17 +73,13 @@ function showCalendarDeletionExceptionsReview() {
   )).setWidth(800).setHeight(700);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Calendar Deletions');
-  return { count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId };
+  return {count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId};
 }
 
-function savePmosCalendarDeletionExceptions(sourceVersion, candidates, keptIndexes) {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (String(sourceVersion || '') !== String(audit.sourceVersion || '')) {
-    throw new Error('Calendar data changed. Run the Plan Audit again before approving deletions.');
-  }
-
+function savePmosCalendarDeletionExceptions(candidates, keptIndexes) {
   const kept = {};
   (keptIndexes || []).forEach(function (index) { kept[Number(index)] = true; });
+  const records = [];
   let deletedCount = 0;
   let keptCount = 0;
 
@@ -97,21 +89,17 @@ function savePmosCalendarDeletionExceptions(sourceVersion, candidates, keptIndex
     const decision = kept[index] ? 'KEEP' : 'DELETE';
     if (decision === 'KEEP') keptCount++;
     else deletedCount++;
-    savePmosReviewSessionDecision_(
-      'CALENDAR',
-      audit.sourceVersion,
-      'DELETION_CANDIDATE',
-      itemKey,
-      decision,
-      item
-    );
+    records.push({itemKey: itemKey, decision: decision});
   });
 
+  const saved = savePmosReviewStep_('CALENDAR', 'DELETION_CANDIDATE', records);
+  if (!saved || saved.decisionCount !== records.length) {
+    throw new Error('Not all deletion decisions were saved.');
+  }
   return {
     saved: true,
     deletedCount: deletedCount,
     keptCount: keptCount,
-    planId: audit.planId,
-    reviewSessionId: audit.reviewSessionId
+    reviewSessionId: saved.sessionId
   };
 }
