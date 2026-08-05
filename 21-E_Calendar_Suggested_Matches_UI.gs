@@ -49,7 +49,7 @@ function showCalendarSuggestedMatchesReview() {
 
   const dataJson = JSON.stringify(items).replace(/</g, '\\u003c');
   const footer = items.length
-    ? '<button class="guided" id="approveButton" onclick="approveMatches(this)">Approve matches</button>' +
+    ? '<button class="guided" id="approveButton" onclick="approveMatches(this)">Continue Review</button>' +
       '<button onclick="google.script.host.close()">Close</button>'
     : '<button onclick="google.script.host.close()">Close</button>';
   const script = '<script>' +
@@ -61,7 +61,7 @@ function showCalendarSuggestedMatchesReview() {
     'function toggleAll(){var value=!allSelected();boxes().forEach(function(x){x.checked=value;});refresh();}' +
     'function toggleDetails(event,i){event.preventDefault();event.stopPropagation();document.getElementById("details-"+i).classList.toggle("open");}' +
     'boxes().forEach(function(x){x.addEventListener("change",refresh);});document.getElementById("bulkToggle").addEventListener("click",function(e){e.preventDefault();toggleAll();});refresh();' +
-    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Approving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Approve matches";alert("The review decisions were not saved.");return;}button.textContent="Complete";google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Approve matches";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(matches,exempt);}' +
+    'function approveMatches(button){var exempt=selectedIndexes();var approvedCount=matches.length-exempt.length;if(!confirm("Approve "+approvedCount+" suggested customer matches and exempt "+exempt.length+" selected event(s)?"))return;button.disabled=true;button.textContent="Saving…";google.script.run.withSuccessHandler(function(result){if(!result||result.saved!==true){button.disabled=false;button.textContent="Continue Review";alert("The review decisions were not saved.");return;}button.textContent="Opening next review…";google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).continuePmosCalendarReviewFlow();}).withFailureHandler(function(e){button.disabled=false;button.textContent="Continue Review";alert(e&&e.message?e.message:String(e));}).savePmosCalendarSuggestedMatchDecisions(matches,exempt);}' +
     '</script>';
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
