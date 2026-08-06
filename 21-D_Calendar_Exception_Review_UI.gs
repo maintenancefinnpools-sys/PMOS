@@ -88,7 +88,19 @@ function savePmosCalendarDeletionExceptions(candidates, keptIndexes) {
     const decision = kept[index] ? 'KEEP' : 'DELETE';
     if (decision === 'KEEP') keptCount++;
     else deletedCount++;
-    records.push({itemKey: itemKey, decision: decision});
+    records.push({
+      itemKey: itemKey,
+      decision: decision,
+      payload: {
+        operationId: String(item && item.operationId || ''),
+        seriesKey: String(item && item.seriesKey || ''),
+        seriesId: String(item && item.seriesId || ''),
+        eventId: String(item && item.eventId || ''),
+        title: String(item && item.title || ''),
+        start: String(item && item.start || ''),
+        location: String(item && item.location || '')
+      }
+    });
   });
 
   const saved = savePmosReviewStep_('CALENDAR', 'DELETION_CANDIDATE', records);
