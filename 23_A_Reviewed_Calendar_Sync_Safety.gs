@@ -5,34 +5,47 @@ function openSafeReviewedCalendarSyncPreview_() {
     ? prepared.preflightWarnings.slice()
     : [];
   const warningHtml = preflightWarnings.length
-    ? '<div class="warning"><b>Preflight warning</b><br>' +
+    ? '<div class="notice danger"><b>Preflight warning</b><br>' +
       preflightWarnings.map(escapePmosSyncPreviewHtml_).join('<br>') +
       '</div>'
     : '';
   const warningJson = JSON.stringify(preflightWarnings).replace(/</g, '\\u003c');
+
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;margin:0}h2{margin:0 0 6px}.muted{font-size:13px;color:#6b7280}.target{margin-top:8px;padding:10px 12px;border:1px solid #f59e0b;border-radius:9px;background:#fffbeb;color:#92400e;font-weight:700}.warning{margin-top:8px;padding:10px 12px;border:1px solid #dc2626;border-radius:9px;background:#fef2f2;color:#991b1b;font-size:13px;line-height:1.45}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.card{padding:11px;border-radius:9px;background:#f3f4f6}.card b{font-size:20px}.ready{background:#dcfce7;color:#166534}.phase{margin:12px 0 8px;padding:10px 12px;border-radius:9px;background:#eff6ff;color:#1e40af;font-weight:700}.phase.paused{background:#fef3c7;color:#92400e}.phase.complete{background:#dcfce7;color:#166534}.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.status-card{padding:10px;border-radius:9px;background:#f8fafc;border:1px solid #e5e7eb}.status-card span{display:block;font-size:11px;color:#64748b}.status-card strong{display:block;margin-top:3px;font-size:16px;overflow-wrap:anywhere}.wide{grid-column:1/-1}.progress{height:15px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:13px 0}.bar{height:100%;width:0;background:#2563eb;transition:width .25s}.error{display:none;margin-top:10px;padding:10px;background:#fee2e2;color:#991b1b;border-radius:8px;white-space:pre-wrap}.buttons{display:flex;gap:8px;margin-top:16px}button{border:0;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb;color:#111827}button:disabled{opacity:.5;cursor:default}
+*{box-sizing:border-box}html,body{height:100%}body{font-family:Arial,sans-serif;margin:0;color:#1f2937;display:flex;flex-direction:column;overflow:hidden}.content{padding:18px 18px 0;overflow:auto;flex:1;min-height:0}h2{margin:0 0 4px}.muted{font-size:13px;color:#64748b}.section{margin-top:15px;border:1px solid #e2e8f0;border-radius:10px;padding:13px}.section h3{margin:0 0 10px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.section-head h3{margin:0}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric{border:1px solid #e2e8f0;border-radius:8px;padding:9px;background:#f8fafc}.metric span{display:block;font-size:11px;color:#64748b}.metric strong{display:block;margin-top:3px;font-size:17px;overflow-wrap:anywhere}.metric.wide{grid-column:1/-1}.target{margin-top:12px;padding:11px;border-radius:9px;background:#fffbeb;color:#92400e;border:1px solid #f59e0b;font-weight:700}.phase{padding:11px;border-radius:9px;background:#eff6ff;color:#1e40af;font-weight:700}.phase.paused{background:#fef3c7;color:#92400e}.phase.complete{background:#dcfce7;color:#166534}.progress{height:14px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:11px}.bar{height:100%;width:0;background:#2563eb;transition:width .25s}.notice{margin-top:14px;padding:11px;border-radius:9px;background:#fef3c7;color:#92400e;font-weight:700;line-height:1.45}.notice.danger{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.error{display:none;margin-top:12px;padding:11px;background:#fee2e2;color:#991b1b;border-radius:9px;white-space:pre-wrap}.actions{display:flex;gap:8px;padding:12px 18px 14px;margin-top:12px;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -4px 12px rgba(15,23,42,.06);flex:0 0 auto;position:relative;z-index:5}button{border:0;border-radius:8px;padding:10px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#1f2937}button:disabled{opacity:.5;cursor:default}.bottom-space{height:14px}
 </style></head><body>
-<h2>Calendar Sync</h2><div class="muted">The reviewed plan is validated and stored in the durable execution queue. No Calendar changes begin until Start Sync is selected.</div>
+<div class="content">
+<h2>Calendar Sync</h2>
+<div class="muted">Review the prepared synchronization for ${escapePmosSyncPreviewHtml_(prepared.calendarName || '')}. No Calendar changes begin until Start Sync is selected.</div>
 <div class="target">Target Calendar: ${escapePmosSyncPreviewHtml_(prepared.calendarName || '')}</div>
 ${warningHtml}
-<div class="summary"><div class="card ready"><b>${prepared.total}</b><br><small>Total operations</small></div><div class="card"><b>${prepared.creates}</b><br><small>Expected creates</small></div><div class="card"><b>${prepared.updates}</b><br><small>Expected updates</small></div><div class="card"><b>${prepared.deletes}</b><br><small>Expected deletes</small></div></div>
-<div id="phase" class="phase">Preparing</div>
+
+<div class="section"><h3>Planned Calendar changes</h3><div class="metrics">
+<div class="metric"><span>Create</span><strong>${prepared.creates}</strong></div>
+<div class="metric"><span>Update</span><strong>${prepared.updates}</strong></div>
+<div class="metric"><span>Delete</span><strong>${prepared.deletes}</strong></div>
+<div class="metric"><span>Total operations</span><strong>${prepared.total}</strong></div>
+<div class="metric"><span>Processed</span><strong id="processed">0 / ${prepared.total}</strong></div>
+<div class="metric"><span>Remaining</span><strong id="remaining">${prepared.total}</strong></div>
+</div></div>
+
+<div class="section"><div class="section-head"><h3>Execution status</h3><button id="refresh" class="secondary" type="button">Refresh</button></div>
+<div id="phase" class="phase">Preparing complete — ready to start</div>
 <div class="progress"><div id="bar" class="bar"></div></div>
-<div class="status-grid">
-<div class="status-card"><span>Processed</span><strong id="processed">0 / ${prepared.total}</strong></div>
-<div class="status-card"><span>Remaining</span><strong id="remaining">${prepared.total}</strong></div>
-<div class="status-card"><span>Creates</span><strong id="created">0 / ${prepared.creates}</strong></div>
-<div class="status-card"><span>Updates</span><strong id="updated">0 / ${prepared.updates}</strong></div>
-<div class="status-card"><span>Deletes</span><strong id="deleted">0 / ${prepared.deletes}</strong></div>
-<div class="status-card"><span>Retries</span><strong id="retries">0</strong></div>
-<div class="status-card wide"><span>Current operation</span><strong id="currentOperation">Queue prepared</strong></div>
-<div class="status-card"><span>Queue status</span><strong id="queueStatus">Prepared</strong></div>
-<div class="status-card"><span>Attempts</span><strong id="attempts">0</strong></div>
+<div class="metrics" style="margin-top:10px">
+<div class="metric"><span>Creates completed</span><strong id="created">0 / ${prepared.creates}</strong></div>
+<div class="metric"><span>Updates completed</span><strong id="updated">0 / ${prepared.updates}</strong></div>
+<div class="metric"><span>Deletes completed</span><strong id="deleted">0 / ${prepared.deletes}</strong></div>
+<div class="metric"><span>Attempts</span><strong id="attempts">0</strong></div>
+<div class="metric"><span>Retries</span><strong id="retries">0</strong></div>
+<div class="metric"><span>Queue status</span><strong id="queueStatus">Prepared</strong></div>
+<div class="metric wide"><span>Current operation</span><strong id="currentOperation">Queue prepared</strong></div>
+</div></div>
+
+<div id="error" class="error"></div><div class="bottom-space"></div>
 </div>
-<div id="error" class="error"></div>
-<div class="buttons"><button id="start" class="primary">Start Sync</button><button id="refresh" class="secondary">Refresh</button><button class="secondary" onclick="google.script.host.close()">Close</button></div>
+<div class="actions"><button id="start" class="primary">Start Sync</button><button class="secondary" onclick="google.script.host.close()">Close</button></div>
 <script>
 (function(){
 var start=document.getElementById('start'),refresh=document.getElementById('refresh'),phase=document.getElementById('phase'),bar=document.getElementById('bar'),error=document.getElementById('error'),timer=null;
@@ -78,7 +91,7 @@ start.onclick=function(){
 refresh.onclick=poll;
 poll();
 })();
-</script></body></html>`).setWidth(760).setHeight(735);
+</script></body></html>`).setWidth(860).setHeight(650);
   SpreadsheetApp.getUi().showModalDialog(html, 'Reviewed Calendar Sync');
   return prepared;
 }
