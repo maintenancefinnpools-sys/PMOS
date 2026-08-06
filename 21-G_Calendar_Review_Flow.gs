@@ -62,9 +62,9 @@ function continuePmosCalendarReviewFlow() {
   }
 
   if (audit.reviewComplete === true) {
-    openSafeReviewedCalendarSyncPreview_();
+    openReviewedCalendarSyncPreview();
     return {
-      opened: 'REVIEWED_CALENDAR_SYNC',
+      opened: 'CALENDAR_SYNC_PREVIEW',
       reviewComplete: true,
       canSync: audit.canSync === true
     };
