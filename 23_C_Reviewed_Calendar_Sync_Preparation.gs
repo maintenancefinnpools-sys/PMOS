@@ -42,7 +42,10 @@ function prepareReviewedCalendarSyncWindow_() {
   const rows = operations.map(function (operation, index) {
     const action = String(operation && operation.action || '').toUpperCase();
     if (action === String(PMOS_OPERATION.CREATE).toUpperCase()) counts.creates++;
-    else if (action === String(PMOS_OPERATION.UPDATE).toUpperCase()) counts.updates++;
+    else if (
+      action === String(PMOS_OPERATION.UPDATE).toUpperCase() ||
+      action === String(PMOS_OPERATION.MERGE).toUpperCase()
+    ) counts.updates++;
     else if (action === String(PMOS_OPERATION.DELETE).toUpperCase()) counts.deletes++;
 
     const operationJson = JSON.stringify(operation);
