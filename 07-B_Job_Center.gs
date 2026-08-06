@@ -41,7 +41,24 @@ const definitions=[
 ];
 let selectedType=${JSON.stringify(selectedType)},busy=false,currentState={},lastError='';
 const $=id=>document.getElementById(id);
-const server=(name,...args)=>new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));runner[name](...args);});
+function server(name,...args){
+  return new Promise((resolve,reject)=>{
+    const runner=google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));
+    switch(name){
+      case 'rememberPmosJobType': return runner.rememberPmosJobType(args[0]);
+      case 'getReviewedCalendarSyncJobCenterStatus_': return runner.getReviewedCalendarSyncJobCenterStatus_();
+      case 'runPmosTask': return runner.runPmosTask(args[0]);
+      case 'startReviewedCalendarSyncJobCenterExecution_': return runner.startReviewedCalendarSyncJobCenterExecution_();
+      case 'resumeReviewedCalendarSyncJobCenterExecution_': return runner.resumeReviewedCalendarSyncJobCenterExecution_();
+      case 'pauseReviewedCalendarSyncJobCenterExecution_': return runner.pauseReviewedCalendarSyncJobCenterExecution_();
+      case 'showIntegratedPmosJobEngine': return runner.showIntegratedPmosJobEngine(args[0]);
+      case 'showPmosJobHistory': return runner.showPmosJobHistory();
+      default: return reject(new Error('Unsupported PMOS server action: '+name));
+    }
+  });
+}
 function definition(){return definitions.find(item=>item.type===selectedType)||definitions[0];}
 function isProcessing(state){return Boolean(state&&state.type&&['Running','Scheduled','Waiting','Waiting for Google'].indexOf(String(state.status||''))>=0);}
 function isPaused(state){return ['Paused','Paused on error'].indexOf(String(state&&state.status||''))>=0;}
