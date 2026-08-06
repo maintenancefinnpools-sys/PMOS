@@ -42,7 +42,12 @@ function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifie
     ));
   });
 
-  const existingOperations = (plan && plan.operations || []).slice();
+  // A final reviewed disposition replaces the warning that originally required
+  // review. Unrelated warnings remain in the plan and continue to block Sync.
+  const resolvedKeys = buildPmosCalendarResolvedReviewIdentitySet_(intents, decisions);
+  const existingOperations = (plan && plan.operations || []).filter(function (operation) {
+    return !isPmosCalendarResolvedReviewWarning_(operation, resolvedKeys);
+  });
   const metadata = Object.assign({}, plan && plan.metadata || {}, {
     reviewSessionId: String(decisions.sessionId || ''),
     reviewDecisionCounts: Object.assign({}, decisions.counts || {}),
@@ -61,6 +66,52 @@ function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifie
       operationCount: reviewOperations.length
     })
   }));
+}
+
+function buildPmosCalendarResolvedReviewIdentitySet_(intents, decisionSet) {
+  const identities = {};
+  (intents || []).forEach(function (intent) {
+    const itemKey = String(intent && intent.itemKey || '').trim();
+    if (itemKey) identities[itemKey] = true;
+
+    const record = findPmosCalendarReviewDecisionRecord_(
+      decisionSet,
+      itemKey,
+      intent && intent.action
+    );
+    const payload = record && record.payload || {};
+    [payload.eventId, payload.seriesId, payload.seriesKey, payload.operationId]
+      .forEach(function (value) {
+        const key = String(value || '').trim();
+        if (key) identities[key] = true;
+      });
+  });
+  return identities;
+}
+
+function isPmosCalendarResolvedReviewWarning_(operation, resolvedKeys) {
+  if (!operation || operation.action !== PMOS_OPERATION.WARNING) return false;
+
+  const metadata = operation.metadata || {};
+  const payload = operation.payload || {};
+  const current = payload.current || {};
+  const isReviewWarning = metadata.reviewRequired === true ||
+    String(metadata.reviewType || '').toUpperCase() === 'UNCLASSIFIED_CALENDAR_EVENT' ||
+    (Boolean(payload.current) && !payload.desired);
+  if (!isReviewWarning) return false;
+
+  const identities = [
+    operation.entityId,
+    operation.id,
+    current.eventId,
+    current.seriesId,
+    current.seriesKey,
+    current.operationId
+  ];
+  return identities.some(function (value) {
+    const key = String(value || '').trim();
+    return Boolean(key && resolvedKeys[key]);
+  });
 }
 
 function buildPmosCalendarReviewStateIndex_(currentState, verifiedState) {
