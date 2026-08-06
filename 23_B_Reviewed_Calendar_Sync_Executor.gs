@@ -200,7 +200,8 @@ function reconcileReviewedCalendarSyncState_(state) {
       }
       completedPrefix++;
       const action = String(rows[index][2] || '').toUpperCase();
-      if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
+      if (action === 'MERGE') counts.UPDATE++;
+      else if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
       continue;
     }
 
@@ -282,7 +283,8 @@ function verifyReviewedCalendarSyncCompletion_(state) {
 
     if (status === 'Complete') {
       const action = String(rows[index][2] || '').toUpperCase();
-      if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
+      if (action === 'MERGE') counts.UPDATE++;
+      else if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
     }
   }
 
@@ -343,16 +345,14 @@ function executeReviewedCalendarOperation_(operation) {
   const reviewAction = String(
     operation && operation.metadata && operation.metadata.reviewAction || ''
   ).toUpperCase();
-
-  if (reviewAction && ['MATCH', 'TEMPORARY'].indexOf(reviewAction) >= 0) {
-    throw new Error(
-      'Review operation ' + reviewAction +
-      ' does not yet have a verified Calendar mutation adapter. Operation: ' +
-      String(operation.id || operation.entityId || 'unknown')
-    );
-  }
-
   const calendar = getRecurringCalendar_();
+
+  if (reviewAction === 'MATCH') {
+    return executeReviewedCalendarMatchOperation_(operation, calendar);
+  }
+  if (reviewAction === 'TEMPORARY') {
+    return executeReviewedCalendarTemporaryOperation_(operation, calendar);
+  }
 
   if (action === String(PMOS_OPERATION.CREATE).toUpperCase()) {
     if (!desired || !desired.seriesKey || !desired.start || !desired.end) {
