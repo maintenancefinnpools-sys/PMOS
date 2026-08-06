@@ -131,7 +131,7 @@ function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payl
     modelVersion: PMOS_OPERATION_MODEL_VERSION,
     id: String(intent.id || ''),
     planner: 'CALENDAR_SYNC',
-    action: PMOS_OPERATION.SKIP,
+    action: pmosCalendarReviewOperationAction_(intent.action),
     entity: 'CALENDAR_REVIEW_EVENT',
     entityId: String(intent.itemKey || ''),
     destination: 'GOOGLE_CALENDAR',
@@ -147,13 +147,38 @@ function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payl
     }),
     metadata: Object.freeze({
       reviewOperation: true,
-      reviewAction: intent.action,
+      reviewAction: pmosCalendarReviewExecutorAction_(intent.action),
+      reviewIntent: String(intent.action || ''),
       reviewExecutorPending: false,
       userApproved: true,
       blocking: false
     }),
     dependencies: Object.freeze([])
   });
+}
+
+function pmosCalendarReviewOperationAction_(intentAction) {
+  switch (String(intentAction || '').toUpperCase()) {
+    case 'LINK_CUSTOMER':
+    case 'REGISTER_TEMPORARY_VISIT':
+      return PMOS_OPERATION.MERGE;
+    case 'DELETE_APPROVED_EVENT':
+      return PMOS_OPERATION.DELETE;
+    case 'PRESERVE_EVENT':
+      return PMOS_OPERATION.SKIP;
+    default:
+      return PMOS_OPERATION.ERROR;
+  }
+}
+
+function pmosCalendarReviewExecutorAction_(intentAction) {
+  switch (String(intentAction || '').toUpperCase()) {
+    case 'LINK_CUSTOMER': return 'MATCH';
+    case 'REGISTER_TEMPORARY_VISIT': return 'TEMPORARY';
+    case 'DELETE_APPROVED_EVENT': return 'DELETE';
+    case 'PRESERVE_EVENT': return 'KEEP';
+    default: return 'UNKNOWN';
+  }
 }
 
 function buildPmosCalendarReviewPlannerError_(intent, payload, reason) {
