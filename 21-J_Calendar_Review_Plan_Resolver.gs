@@ -42,8 +42,6 @@ function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifie
     ));
   });
 
-  // A final reviewed disposition replaces the warning that originally required
-  // review. Unrelated warnings remain in the plan and continue to block Sync.
   const resolvedKeys = buildPmosCalendarResolvedReviewIdentitySet_(intents, decisions);
   const existingOperations = (plan && plan.operations || []).filter(function (operation) {
     return !isPmosCalendarResolvedReviewWarning_(operation, resolvedKeys);
@@ -178,6 +176,8 @@ function findPmosCalendarReviewDecisionRecord_(decisionSet, itemKey, intentActio
 }
 
 function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payload, sessionId) {
+  const isReviewedDelete = String(intent && intent.action || '').toUpperCase() ===
+    'DELETE_APPROVED_EVENT';
   return Object.freeze({
     modelVersion: PMOS_OPERATION_MODEL_VERSION,
     id: String(intent.id || ''),
@@ -202,6 +202,7 @@ function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payl
       reviewIntent: String(intent.action || ''),
       reviewExecutorPending: false,
       userApproved: true,
+      deletionApproved: isReviewedDelete,
       blocking: false
     }),
     dependencies: Object.freeze([])
