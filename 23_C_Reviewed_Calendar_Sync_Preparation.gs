@@ -28,9 +28,7 @@ function prepareReviewedCalendarSyncWindow_() {
     throw new Error('Calendar Sync could not build the reviewed operation plan.');
   }
   if (!result.canExecute) {
-    throw new Error(
-      'The reviewed Calendar plan is not executable. Resolve all planner, validation, and review errors before syncing.'
-    );
+    throw new Error(formatReviewedCalendarSyncPlanBlockers_(result));
   }
 
   const operations = plan.operations.filter(isPmosExecutableOperation);
@@ -141,6 +139,47 @@ function prepareReviewedCalendarSyncWindow_() {
     preflightWarnings: state.preflightWarnings.slice(),
     preparedAt: state.updatedAt
   };
+}
+
+function formatReviewedCalendarSyncPlanBlockers_(result) {
+  const blockers = [];
+  const validation = result && result.validation || {};
+  const issues = Array.isArray(validation.issues) ? validation.issues : [];
+
+  issues.forEach(function (issue) {
+    if (String(issue && issue.severity || '').toUpperCase() !== 'ERROR') return;
+    blockers.push(
+      String(issue.code || 'VALIDATION_ERROR') +
+      (issue.operationId ? ' [' + issue.operationId + ']' : '') +
+      ': ' + String(issue.message || 'Calendar plan validation failed.')
+    );
+  });
+
+  const operations = result && result.plan && Array.isArray(result.plan.operations)
+    ? result.plan.operations : [];
+  operations.forEach(function (operation) {
+    if (!operation) return;
+    if (operation.action === PMOS_OPERATION.ERROR ||
+        Boolean(operation.metadata && operation.metadata.blocking)) {
+      blockers.push(
+        'PLANNER_ERROR' +
+        (operation.id ? ' [' + operation.id + ']' : '') +
+        ': ' + String(operation.reason || 'Blocking planner operation.')
+      );
+    }
+  });
+
+  if (result && result.reviewExecutorPending) {
+    blockers.push('REVIEW_EXECUTOR_PENDING: Reviewed Calendar execution support is not ready.');
+  }
+
+  const unique = blockers.filter(function (message, index, values) {
+    return values.indexOf(message) === index;
+  });
+  return 'The reviewed Calendar plan is not executable.' +
+    (unique.length
+      ? '\n\nRemaining blocker(s):\n- ' + unique.join('\n- ')
+      : '\n\nNo detailed blocker was reported; reopen Calendar Plan Audit and inspect Errors.');
 }
 
 function ensureReviewedCalendarSyncQueueSheet_() {
