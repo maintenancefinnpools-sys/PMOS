@@ -27,6 +27,7 @@ function savePmosCalendarSuggestedMatchDecisionsForSync_(items, exemptIndexes) {
         seriesId: String(item && item.seriesId || ''),
         customerId: String(item && item.customerId || ''),
         customerName: String(item && item.customerName || ''),
+        customerTitle: String(item && item.customerTitle || ''),
         customerAddress: String(item && item.customerAddress || ''),
         title: String(item && item.title || ''),
         start: String(item && item.start || ''),
