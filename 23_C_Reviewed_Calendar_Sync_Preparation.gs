@@ -16,6 +16,13 @@ function prepareReviewedCalendarSyncWindow_() {
   const session = requireActivePmosReviewSession_('CALENDAR');
   const result = buildValidatedPmosCalendarSyncPlan_({});
   const plan = result && result.plan;
+  const settings = getRecurringCalendarSettings_();
+  const calendarName = String(settings && settings.calendarName || '').trim();
+
+  if (!calendarName) {
+    throw new Error('Calendar Sync cannot prepare because Calendar Name is blank in App Settings.');
+  }
+  getExistingConfiguredPmosCalendar_(calendarName);
 
   if (!plan || !Array.isArray(plan.operations)) {
     throw new Error('Calendar Sync could not build the reviewed operation plan.');
@@ -84,6 +91,7 @@ function prepareReviewedCalendarSyncWindow_() {
     sessionId: session.id,
     planId: String(plan.id || ''),
     sourceVersion: String(plan.metadata && plan.metadata.sourceVersion || ''),
+    calendarName: calendarName,
     status: 'Prepared',
     phase: 'Ready to start',
     total: operations.length,
@@ -111,6 +119,7 @@ function prepareReviewedCalendarSyncWindow_() {
     sessionId: state.sessionId,
     planId: state.planId,
     sourceVersion: state.sourceVersion,
+    calendarName: state.calendarName,
     total: state.total,
     creates: counts.creates,
     updates: counts.updates,
@@ -139,9 +148,6 @@ function ensureReviewedCalendarSyncQueueSheet_() {
   });
 
   if (needsHeaders) {
-    // Repair only the header row. Never erase queued operations while repairing
-    // queue-sheet structure; queue contents are cleared explicitly only when a
-    // new reviewed sync is prepared.
     sheet.getRange(1, 1, 1, headerWidth)
       .setValues([PMOS_REVIEWED_SYNC_QUEUE_HEADERS.slice()]);
     sheet.setFrozenRows(1);
