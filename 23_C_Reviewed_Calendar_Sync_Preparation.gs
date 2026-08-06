@@ -22,7 +22,7 @@ function prepareReviewedCalendarSyncWindow_() {
   if (!calendarName) {
     throw new Error('Calendar Sync cannot prepare because Calendar Name is blank in App Settings.');
   }
-  getExistingConfiguredPmosCalendar_(calendarName);
+  const calendar = getExistingConfiguredPmosCalendar_(calendarName);
 
   if (!plan || !Array.isArray(plan.operations)) {
     throw new Error('Calendar Sync could not build the reviewed operation plan.');
@@ -39,6 +39,18 @@ function prepareReviewedCalendarSyncWindow_() {
       'Calendar Sync produced zero executable operations from ' +
       Object.keys(session.decisions || {}).length +
       ' reviewed decision(s). PMOS stopped before making Calendar changes.'
+    );
+  }
+
+  const preflight = validateReviewedCalendarSyncPreflight_(
+    operations,
+    calendar,
+    calendarName
+  );
+  if (!preflight.valid) {
+    throw new Error(
+      'Calendar Sync preflight failed before queue preparation:\n' +
+      preflight.errors.join('\n')
     );
   }
 
@@ -107,6 +119,7 @@ function prepareReviewedCalendarSyncWindow_() {
     failed: 0,
     currentOperation: '',
     lastError: '',
+    preflightWarnings: preflight.warnings.slice(),
     startedAt: '',
     updatedAt: now.toISOString(),
     completedAt: ''
@@ -125,6 +138,7 @@ function prepareReviewedCalendarSyncWindow_() {
     updates: counts.updates,
     deletes: counts.deletes,
     reviewDecisionCount: Object.keys(session.decisions || {}).length,
+    preflightWarnings: state.preflightWarnings.slice(),
     preparedAt: state.updatedAt
   };
 }
