@@ -353,6 +353,9 @@ function executeReviewedCalendarOperation_(operation) {
   if (reviewAction === 'TEMPORARY') {
     return executeReviewedCalendarTemporaryOperation_(operation, calendar);
   }
+  if (reviewAction === 'DELETE') {
+    return executeReviewedCalendarDeleteOperation_(operation, calendar);
+  }
 
   if (action === String(PMOS_OPERATION.CREATE).toUpperCase()) {
     if (!desired || !desired.seriesKey || !desired.start || !desired.end) {
