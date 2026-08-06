@@ -8,13 +8,14 @@
 const PMOS_CALENDAR_VALIDATION_CODE = Object.freeze({
   DELETE_APPROVAL_REQUIRED: 'CALENDAR_DELETE_APPROVAL_REQUIRED',
   DELETE_CURRENT_RECORD_REQUIRED: 'CALENDAR_DELETE_CURRENT_RECORD_REQUIRED',
-  DELETE_SERIES_ID_REQUIRED: 'CALENDAR_DELETE_SERIES_ID_REQUIRED'
+  DELETE_TARGET_ID_REQUIRED: 'CALENDAR_DELETE_TARGET_ID_REQUIRED'
 });
 
 /**
  * Validates Calendar-specific safety requirements and returns an immutable
- * report. Every Calendar DELETE must carry explicit approval metadata and a
- * concrete current series identity.
+ * report. Every Calendar DELETE must carry explicit approval metadata and an
+ * exact current Calendar target identity. Recurring deletes require seriesId;
+ * reviewed one-time deletes may use eventId.
  */
 function validatePmosCalendarPlanSafety_(plan) {
   const issues = [];
@@ -40,20 +41,28 @@ function validatePmosCalendarPlanSafety_(plan) {
       issues.push({
         severity: PMOS_VALIDATION_SEVERITY.ERROR,
         code: PMOS_CALENDAR_VALIDATION_CODE.DELETE_CURRENT_RECORD_REQUIRED,
-        message: 'Calendar deletion requires the current Calendar-series record.',
+        message: 'Calendar deletion requires the current Calendar record.',
         operationId: operation.id || null,
         path: 'payload.current'
       });
       return;
     }
 
-    if (!current.seriesId) {
+    const reviewAction = String(
+      operation.metadata && operation.metadata.reviewAction || ''
+    ).toUpperCase();
+    const isReviewedOneTimeDelete = reviewAction === 'DELETE' &&
+      Boolean(String(current.eventId || '').trim()) &&
+      !Boolean(String(current.seriesId || '').trim());
+    const hasSeriesId = Boolean(String(current.seriesId || '').trim());
+
+    if (!hasSeriesId && !isReviewedOneTimeDelete) {
       issues.push({
         severity: PMOS_VALIDATION_SEVERITY.ERROR,
-        code: PMOS_CALENDAR_VALIDATION_CODE.DELETE_SERIES_ID_REQUIRED,
-        message: 'Calendar deletion requires a verified recurring-series ID.',
+        code: PMOS_CALENDAR_VALIDATION_CODE.DELETE_TARGET_ID_REQUIRED,
+        message: 'Calendar deletion requires a verified recurring-series ID or an explicitly reviewed one-time event ID.',
         operationId: operation.id || null,
-        path: 'payload.current.seriesId'
+        path: 'payload.current.seriesId|eventId'
       });
     }
   });
