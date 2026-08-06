@@ -117,9 +117,16 @@ function runReviewedCalendarSyncWorker_() {
     }
 
     if (state.cursor >= state.total) {
+      const completion = verifyReviewedCalendarSyncCompletion_(state);
+      if (!completion.complete) throw new Error(completion.message);
+
+      state.processed = completion.completeCount;
+      state.remaining = 0;
+      state.failed = 0;
       state.status = 'Complete';
       state.phase = 'Synchronization complete';
-      state.remaining = 0;
+      state.currentOperation = '';
+      state.lastError = '';
       state.completedAt = new Date().toISOString();
       state.updatedAt = state.completedAt;
       writeReviewedCalendarSyncState_(state);
@@ -146,6 +153,105 @@ function runReviewedCalendarSyncWorker_() {
   } finally {
     lock.releaseLock();
   }
+}
+
+function verifyReviewedCalendarSyncCompletion_(state) {
+  const expectedTotal = Number(state && state.total || 0);
+  if (expectedTotal <= 0) {
+    return {
+      complete: false,
+      completeCount: 0,
+      message: 'Calendar Sync cannot complete because the reviewed queue contains no operations.'
+    };
+  }
+
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  if (sheet.getLastRow() < expectedTotal + 1) {
+    return {
+      complete: false,
+      completeCount: 0,
+      message: 'Calendar Sync cannot complete because one or more queue rows are missing.'
+    };
+  }
+
+  const rows = sheet.getRange(
+    2,
+    1,
+    expectedTotal,
+    PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length
+  ).getValues();
+  const counts = {
+    Complete: 0, Pending: 0, Running: 0, Error: 0, Other: 0,
+    CREATE: 0, UPDATE: 0, DELETE: 0
+  };
+
+  for (let index = 0; index < rows.length; index++) {
+    const queueIndex = Number(rows[index][0]);
+    if (queueIndex !== index) {
+      return {
+        complete: false,
+        completeCount: counts.Complete,
+        message: 'Calendar Sync queue index mismatch at row ' + (index + 2) + '.'
+      };
+    }
+
+    const status = String(rows[index][4] || '');
+    if (Object.prototype.hasOwnProperty.call(counts, status)) counts[status]++;
+    else counts.Other++;
+
+    if (status === 'Complete') {
+      const action = String(rows[index][2] || '').toUpperCase();
+      if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
+    }
+  }
+
+  const expectedCreates = Number(state.expectedCreates || 0);
+  const expectedUpdates = Number(state.expectedUpdates || 0);
+  const expectedDeletes = Number(state.expectedDeletes || 0);
+  const problems = [];
+
+  if (counts.Complete !== expectedTotal) {
+    problems.push(
+      counts.Complete + ' of ' + expectedTotal + ' queue rows are Complete' +
+      ' (Pending ' + counts.Pending + ', Running ' + counts.Running +
+      ', Error ' + counts.Error + ', Other ' + counts.Other + ')'
+    );
+  }
+  if (Number(state.processed || 0) !== expectedTotal) {
+    problems.push('processed is ' + Number(state.processed || 0) + ' but total is ' + expectedTotal);
+  }
+  if (Number(state.remaining || 0) !== 0) {
+    problems.push('remaining is ' + Number(state.remaining || 0) + ' instead of 0');
+  }
+  if (Number(state.failed || 0) !== 0) {
+    problems.push('failed is ' + Number(state.failed || 0) + ' instead of 0');
+  }
+  if (counts.CREATE !== expectedCreates) {
+    problems.push('completed creates are ' + counts.CREATE + ' but expected ' + expectedCreates);
+  }
+  if (counts.UPDATE !== expectedUpdates) {
+    problems.push('completed updates are ' + counts.UPDATE + ' but expected ' + expectedUpdates);
+  }
+  if (counts.DELETE !== expectedDeletes) {
+    problems.push('completed deletes are ' + counts.DELETE + ' but expected ' + expectedDeletes);
+  }
+  if (Number(state.created || 0) !== expectedCreates) {
+    problems.push('recorded creates are ' + Number(state.created || 0) + ' but expected ' + expectedCreates);
+  }
+  if (Number(state.updated || 0) !== expectedUpdates) {
+    problems.push('recorded updates are ' + Number(state.updated || 0) + ' but expected ' + expectedUpdates);
+  }
+  if (Number(state.deleted || 0) !== expectedDeletes) {
+    problems.push('recorded deletes are ' + Number(state.deleted || 0) + ' but expected ' + expectedDeletes);
+  }
+
+  return {
+    complete: problems.length === 0,
+    completeCount: counts.Complete,
+    message: problems.length
+      ? 'Calendar Sync completion verification failed: ' + problems.join('; ') + '.'
+      : ''
+  };
 }
 
 function executeReviewedCalendarOperation_(operation) {
