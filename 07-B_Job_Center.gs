@@ -48,11 +48,11 @@ function server(name,...args){
       .withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));
     switch(name){
       case 'rememberPmosJobType': return runner.rememberPmosJobType(args[0]);
-      case 'getReviewedCalendarSyncJobCenterStatus_': return runner.getReviewedCalendarSyncJobCenterStatus_();
+      case 'getReviewedCalendarSyncJobCenterStatus': return runner.getReviewedCalendarSyncJobCenterStatus();
       case 'runPmosTask': return runner.runPmosTask(args[0]);
-      case 'startReviewedCalendarSyncJobCenterExecution_': return runner.startReviewedCalendarSyncJobCenterExecution_();
-      case 'resumeReviewedCalendarSyncJobCenterExecution_': return runner.resumeReviewedCalendarSyncJobCenterExecution_();
-      case 'pauseReviewedCalendarSyncJobCenterExecution_': return runner.pauseReviewedCalendarSyncJobCenterExecution_();
+      case 'startReviewedCalendarSyncJobCenterExecution': return runner.startReviewedCalendarSyncJobCenterExecution();
+      case 'resumeReviewedCalendarSyncJobCenterExecution': return runner.resumeReviewedCalendarSyncJobCenterExecution();
+      case 'pauseReviewedCalendarSyncJobCenterExecution': return runner.pauseReviewedCalendarSyncJobCenterExecution();
       case 'showIntegratedPmosJobEngine': return runner.showIntegratedPmosJobEngine(args[0]);
       case 'showPmosJobHistory': return runner.showPmosJobHistory();
       default: return reject(new Error('Unsupported PMOS server action: '+name));
@@ -68,12 +68,12 @@ function setBusy(value){busy=value;$('refresh').disabled=value;renderDefinition(
 function showReady(){$('status').textContent='Ready';$('remaining').textContent='—';$('processed').textContent='—';setProgress(0);$('summary').textContent='Ready to run '+definition().label+'.';$('error').textContent=lastError;renderDefinition();}
 function setProgress(percent){const value=Math.max(0,Math.min(100,Number(percent||0)));$('progressBar').style.width=value+'%';$('progressText').textContent=Math.round(value)+'%';}
 function renderRuntime(state){currentState=state||{};const total=Number(currentState.originalTotal||0),remaining=currentState.remaining==null?null:Number(currentState.remaining),percent=currentState.status==='Complete'?100:(total>0&&remaining!=null?Math.round((total-remaining)/total*100):0);$('status').textContent=currentState.status||'Not prepared';$('remaining').textContent=remaining==null?'—':remaining;$('processed').textContent=String(currentState.processedItems||0);setProgress(percent);$('summary').textContent=currentState.lastSummary||('Calendar Sync status: '+String(currentState.status||'Not prepared')+'.');$('error').textContent=lastError||currentState.lastError||'';renderDefinition();}
-async function refreshRuntime(){try{renderRuntime(await server('getReviewedCalendarSyncJobCenterStatus_'));}catch(error){lastError=error.message;$('error').textContent=lastError;}}
+async function refreshRuntime(){try{renderRuntime(await server('getReviewedCalendarSyncJobCenterStatus'));}catch(error){lastError=error.message;$('error').textContent=lastError;}}
 async function runTask(){setBusy(true);lastError='';$('error').textContent='';$('status').textContent='Running';$('summary').textContent='Running '+definition().label+'…';try{const result=await server('runPmosTask',selectedType);$('status').textContent='Complete';$('remaining').textContent='—';$('processed').textContent='—';setProgress(100);$('summary').textContent=result&&result.summary?result.summary:'Operation completed.';}catch(error){lastError=error.message;$('status').textContent='Needs attention';$('error').textContent=lastError;}finally{setBusy(false);}}
-async function runRuntime(){setBusy(true);lastError='';$('error').textContent='';try{const fn=currentState.status==='Paused'?'resumeReviewedCalendarSyncJobCenterExecution_':'startReviewedCalendarSyncJobCenterExecution_';renderRuntime(await server(fn));}catch(error){lastError=error.message;$('error').textContent=lastError;}finally{setBusy(false);}}
+async function runRuntime(){setBusy(true);lastError='';$('error').textContent='';try{const fn=currentState.status==='Paused'?'resumeReviewedCalendarSyncJobCenterExecution':'startReviewedCalendarSyncJobCenterExecution';renderRuntime(await server(fn));}catch(error){lastError=error.message;$('error').textContent=lastError;}finally{setBusy(false);}}
 async function openRepair(){setBusy(true);try{await server('showIntegratedPmosJobEngine','CALENDAR_REPAIR');google.script.host.close();}catch(error){lastError=error.message;$('error').textContent=lastError;setBusy(false);}}
 async function execute(){const mode=definition().mode;if(mode==='runtime')return runRuntime();if(mode==='repair')return openRepair();return runTask();}
-async function pause(){setBusy(true);try{renderRuntime(await server('pauseReviewedCalendarSyncJobCenterExecution_'));}catch(error){lastError=error.message;$('error').textContent=lastError;}finally{setBusy(false);}}
+async function pause(){setBusy(true);try{renderRuntime(await server('pauseReviewedCalendarSyncJobCenterExecution'));}catch(error){lastError=error.message;$('error').textContent=lastError;}finally{setBusy(false);}}
 $('start').onclick=execute;$('pause').onclick=pause;$('refresh').onclick=()=>definition().mode==='runtime'?refreshRuntime():showReady();$('history').onclick=()=>server('showPmosJobHistory').catch(error=>{$('error').textContent=error.message;});$('close').onclick=()=>google.script.host.close();
 renderJobs();renderDefinition();if(definition().mode==='runtime')refreshRuntime();else showReady();setInterval(()=>{if(!busy&&definition().mode==='runtime')refreshRuntime();},2000);
 })();
