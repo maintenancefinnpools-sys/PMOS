@@ -1,12 +1,22 @@
 /** Guarded handoff from Calendar Review into resumable Calendar Sync. */
 function openSafeReviewedCalendarSyncPreview_() {
   const prepared = prepareReviewedCalendarSyncWindow_();
+  const preflightWarnings = Array.isArray(prepared.preflightWarnings)
+    ? prepared.preflightWarnings.slice()
+    : [];
+  const warningHtml = preflightWarnings.length
+    ? '<div class="warning"><b>Preflight warning</b><br>' +
+      preflightWarnings.map(escapePmosSyncPreviewHtml_).join('<br>') +
+      '</div>'
+    : '';
+  const warningJson = JSON.stringify(preflightWarnings).replace(/</g, '\\u003c');
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;margin:0}h2{margin:0 0 6px}.muted{font-size:13px;color:#6b7280}.target{margin-top:8px;padding:10px 12px;border:1px solid #f59e0b;border-radius:9px;background:#fffbeb;color:#92400e;font-weight:700}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.card{padding:11px;border-radius:9px;background:#f3f4f6}.card b{font-size:20px}.ready{background:#dcfce7;color:#166534}.phase{margin:12px 0 8px;padding:10px 12px;border-radius:9px;background:#eff6ff;color:#1e40af;font-weight:700}.phase.paused{background:#fef3c7;color:#92400e}.phase.complete{background:#dcfce7;color:#166534}.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.status-card{padding:10px;border-radius:9px;background:#f8fafc;border:1px solid #e5e7eb}.status-card span{display:block;font-size:11px;color:#64748b}.status-card strong{display:block;margin-top:3px;font-size:16px;overflow-wrap:anywhere}.wide{grid-column:1/-1}.progress{height:15px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:13px 0}.bar{height:100%;width:0;background:#2563eb;transition:width .25s}.error{display:none;margin-top:10px;padding:10px;background:#fee2e2;color:#991b1b;border-radius:8px;white-space:pre-wrap}.buttons{display:flex;gap:8px;margin-top:16px}button{border:0;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb;color:#111827}button:disabled{opacity:.5;cursor:default}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:18px;color:#1f2937;margin:0}h2{margin:0 0 6px}.muted{font-size:13px;color:#6b7280}.target{margin-top:8px;padding:10px 12px;border:1px solid #f59e0b;border-radius:9px;background:#fffbeb;color:#92400e;font-weight:700}.warning{margin-top:8px;padding:10px 12px;border:1px solid #dc2626;border-radius:9px;background:#fef2f2;color:#991b1b;font-size:13px;line-height:1.45}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.card{padding:11px;border-radius:9px;background:#f3f4f6}.card b{font-size:20px}.ready{background:#dcfce7;color:#166534}.phase{margin:12px 0 8px;padding:10px 12px;border-radius:9px;background:#eff6ff;color:#1e40af;font-weight:700}.phase.paused{background:#fef3c7;color:#92400e}.phase.complete{background:#dcfce7;color:#166534}.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.status-card{padding:10px;border-radius:9px;background:#f8fafc;border:1px solid #e5e7eb}.status-card span{display:block;font-size:11px;color:#64748b}.status-card strong{display:block;margin-top:3px;font-size:16px;overflow-wrap:anywhere}.wide{grid-column:1/-1}.progress{height:15px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:13px 0}.bar{height:100%;width:0;background:#2563eb;transition:width .25s}.error{display:none;margin-top:10px;padding:10px;background:#fee2e2;color:#991b1b;border-radius:8px;white-space:pre-wrap}.buttons{display:flex;gap:8px;margin-top:16px}button{border:0;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb;color:#111827}button:disabled{opacity:.5;cursor:default}
 </style></head><body>
 <h2>Calendar Sync</h2><div class="muted">The reviewed plan is validated and stored in the durable execution queue. No Calendar changes begin until Start Sync is selected.</div>
 <div class="target">Target Calendar: ${escapePmosSyncPreviewHtml_(prepared.calendarName || '')}</div>
+${warningHtml}
 <div class="summary"><div class="card ready"><b>${prepared.total}</b><br><small>Total operations</small></div><div class="card"><b>${prepared.creates}</b><br><small>Expected creates</small></div><div class="card"><b>${prepared.updates}</b><br><small>Expected updates</small></div><div class="card"><b>${prepared.deletes}</b><br><small>Expected deletes</small></div></div>
 <div id="phase" class="phase">Preparing</div>
 <div class="progress"><div id="bar" class="bar"></div></div>
@@ -27,6 +37,7 @@ function openSafeReviewedCalendarSyncPreview_() {
 (function(){
 var start=document.getElementById('start'),refresh=document.getElementById('refresh'),phase=document.getElementById('phase'),bar=document.getElementById('bar'),error=document.getElementById('error'),timer=null;
 var expected={total:${prepared.total},creates:${prepared.creates},updates:${prepared.updates},deletes:${prepared.deletes}};
+var preflightWarnings=${warningJson};
 function text(id,value){document.getElementById(id).textContent=String(value);}
 function fail(e){error.style.display='block';error.textContent=e&&e.message?e.message:String(e);start.disabled=false;refresh.disabled=false;}
 function render(s){
@@ -59,11 +70,15 @@ function render(s){
   if((s.status==='Complete'||s.status==='Paused on error')&&timer){clearInterval(timer);timer=null;}
 }
 function poll(){google.script.run.withSuccessHandler(render).withFailureHandler(fail).getReviewedCalendarSyncDetailedStatus();}
-start.onclick=function(){start.disabled=true;error.style.display='none';phase.textContent='Running — scheduling execution worker';google.script.run.withSuccessHandler(function(){poll();if(!timer)timer=setInterval(poll,2000);}).withFailureHandler(fail).startReviewedCalendarSyncExecution();};
+start.onclick=function(){
+  if(preflightWarnings.length&&!confirm(preflightWarnings.join('\n\n')+'\n\nStart Calendar Sync anyway?'))return;
+  start.disabled=true;error.style.display='none';phase.textContent='Running — scheduling execution worker';
+  google.script.run.withSuccessHandler(function(){poll();if(!timer)timer=setInterval(poll,2000);}).withFailureHandler(fail).startReviewedCalendarSyncExecution();
+};
 refresh.onclick=poll;
 poll();
 })();
-</script></body></html>`).setWidth(760).setHeight(700);
+</script></body></html>`).setWidth(760).setHeight(735);
   SpreadsheetApp.getUi().showModalDialog(html, 'Reviewed Calendar Sync');
   return prepared;
 }
@@ -81,6 +96,9 @@ function prepareSafeReviewedCalendarSync_() {
       creates: Number(state.expectedCreates || 0),
       updates: Number(state.expectedUpdates || 0),
       deletes: Number(state.expectedDeletes || 0),
+      preflightWarnings: Array.isArray(state.preflightWarnings)
+        ? state.preflightWarnings.slice()
+        : [],
       preparedAt: state.updatedAt
     };
   }
