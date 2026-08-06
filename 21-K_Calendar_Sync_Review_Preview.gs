@@ -58,7 +58,7 @@ ${blockedText ? '<div class="notice">' + escapePmosSyncPreviewHtml_(blockedText)
 <div class="actions"><button class="primary" ${executorPending || resolutionErrors ? 'disabled' : ''} onclick="approveSync(this)">Approve</button><button class="secondary" onclick="google.script.host.close()">Close</button></div>
 <script>
 function toggleReviewedEvents(){var list=document.getElementById('reviewList'),button=document.getElementById('toggleReviewList');if(!list||!button)return;var expanded=list.classList.toggle('expanded');button.textContent=expanded?'Show Less':'Show More';}
-function approveSync(button){button.disabled=true;button.textContent='Preparing Calendar Sync…';google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(e){button.disabled=false;button.textContent='Approve';alert(e&&e.message?e.message:String(e));}).prepareApprovedCalendarSyncAndOpenJobCenter();}
+function approveSync(button){button.disabled=true;button.textContent='Preparing Calendar Sync…';google.script.run.withSuccessHandler(function(){button.textContent='Approved';}).withFailureHandler(function(e){button.disabled=false;button.textContent='Approve';alert(e&&e.message?e.message:String(e));}).prepareApprovedCalendarSyncAndOpenJobCenter();}
 </script></body></html>`).setWidth(860).setHeight(650);
 
   SpreadsheetApp.getUi().showModalDialog(html, 'Calendar Sync Preview');
