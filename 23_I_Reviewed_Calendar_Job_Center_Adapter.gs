@@ -1,4 +1,25 @@
 /** Job Center adapter for the reviewed Calendar Sync queue worker. */
+
+/** Public HTML-service endpoint. */
+function getReviewedCalendarSyncJobCenterStatus() {
+  return getReviewedCalendarSyncJobCenterStatus_();
+}
+
+/** Public HTML-service endpoint. */
+function startReviewedCalendarSyncJobCenterExecution() {
+  return startReviewedCalendarSyncJobCenterExecution_();
+}
+
+/** Public HTML-service endpoint. */
+function pauseReviewedCalendarSyncJobCenterExecution() {
+  return pauseReviewedCalendarSyncJobCenterExecution_();
+}
+
+/** Public HTML-service endpoint. */
+function resumeReviewedCalendarSyncJobCenterExecution() {
+  return resumeReviewedCalendarSyncJobCenterExecution_();
+}
+
 function getReviewedCalendarSyncJobCenterStatus_() {
   const detailed = typeof getReviewedCalendarSyncDetailedStatus === 'function'
     ? getReviewedCalendarSyncDetailedStatus()
@@ -25,9 +46,8 @@ function getReviewedCalendarSyncJobCenterStatus_() {
 }
 
 function startReviewedCalendarSyncJobCenterExecution_() {
-  return normalizeReviewedCalendarJobCenterResult_(
-    startReviewedCalendarSyncExecution()
-  );
+  startReviewedCalendarSyncExecution();
+  return getReviewedCalendarSyncJobCenterStatus_();
 }
 
 function pauseReviewedCalendarSyncJobCenterExecution_() {
@@ -57,10 +77,6 @@ function resumeReviewedCalendarSyncJobCenterExecution_() {
     writeReviewedCalendarSyncState_(state);
   }
   return startReviewedCalendarSyncJobCenterExecution_();
-}
-
-function normalizeReviewedCalendarJobCenterResult_(state) {
-  return getReviewedCalendarSyncJobCenterStatus_();
 }
 
 function buildReviewedCalendarJobCenterSummary_(state) {
