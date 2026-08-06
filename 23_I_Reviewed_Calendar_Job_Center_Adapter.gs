@@ -2,22 +2,51 @@
 
 /** Public HTML-service endpoint. */
 function getReviewedCalendarSyncJobCenterStatus() {
-  return getReviewedCalendarSyncJobCenterStatus_();
+  return runReviewedCalendarJobCenterEndpoint_(
+    'getReviewedCalendarSyncJobCenterStatus',
+    function () { return getReviewedCalendarSyncJobCenterStatus_(); }
+  );
 }
 
 /** Public HTML-service endpoint. */
 function startReviewedCalendarSyncJobCenterExecution() {
-  return startReviewedCalendarSyncJobCenterExecution_();
+  return runReviewedCalendarJobCenterEndpoint_(
+    'startReviewedCalendarSyncJobCenterExecution',
+    function () { return startReviewedCalendarSyncJobCenterExecution_(); }
+  );
 }
 
 /** Public HTML-service endpoint. */
 function pauseReviewedCalendarSyncJobCenterExecution() {
-  return pauseReviewedCalendarSyncJobCenterExecution_();
+  return runReviewedCalendarJobCenterEndpoint_(
+    'pauseReviewedCalendarSyncJobCenterExecution',
+    function () { return pauseReviewedCalendarSyncJobCenterExecution_(); }
+  );
 }
 
 /** Public HTML-service endpoint. */
 function resumeReviewedCalendarSyncJobCenterExecution() {
-  return resumeReviewedCalendarSyncJobCenterExecution_();
+  return runReviewedCalendarJobCenterEndpoint_(
+    'resumeReviewedCalendarSyncJobCenterExecution',
+    function () { return resumeReviewedCalendarSyncJobCenterExecution_(); }
+  );
+}
+
+function runReviewedCalendarJobCenterEndpoint_(name, callback) {
+  try {
+    return {
+      ok: true,
+      endpoint: String(name || ''),
+      result: callback()
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      endpoint: String(name || ''),
+      error: String(error && error.message ? error.message : error),
+      stack: String(error && error.stack ? error.stack : '')
+    };
+  }
 }
 
 function getReviewedCalendarSyncJobCenterStatus_() {
