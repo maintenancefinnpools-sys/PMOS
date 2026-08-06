@@ -36,7 +36,10 @@ function getReviewedCalendarSyncStatus() {
 
 function runReviewedCalendarSyncWorker_() {
   const lock = LockService.getDocumentLock();
-  if (!lock.tryLock(1000)) return;
+  if (!lock.tryLock(1000)) {
+    ensureReviewedCalendarSyncTrigger_();
+    return;
+  }
 
   try {
     let state = readReviewedCalendarSyncState_();
@@ -50,6 +53,7 @@ function runReviewedCalendarSyncWorker_() {
       throw new Error('The active Calendar Review Session changed before synchronization completed.');
     }
 
+    state = reconcileReviewedCalendarSyncState_(state);
     state.status = 'Running';
     state.phase = 'Applying reviewed Calendar operations';
     state.updatedAt = new Date().toISOString();
@@ -68,6 +72,13 @@ function runReviewedCalendarSyncWorker_() {
       const queueItem = readReviewedCalendarSyncQueueItem_(state.cursor);
       if (!queueItem || !queueItem.operation) {
         throw new Error('Calendar Sync queue item ' + state.cursor + ' is missing.');
+      }
+      if (queueItem.status !== 'Pending') {
+        throw new Error(
+          'Calendar Sync queue item ' + state.cursor +
+          ' is ' + String(queueItem.status || 'blank') +
+          ' instead of Pending. PMOS stopped to prevent replaying a Calendar mutation.'
+        );
       }
 
       const operation = queueItem.operation;
@@ -153,6 +164,76 @@ function runReviewedCalendarSyncWorker_() {
   } finally {
     lock.releaseLock();
   }
+}
+
+function reconcileReviewedCalendarSyncState_(state) {
+  const total = Number(state && state.total || 0);
+  if (total <= 0) throw new Error('Calendar Sync queue has no reviewed operations.');
+
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  if (sheet.getLastRow() < total + 1) {
+    throw new Error('Calendar Sync queue is missing one or more expected rows.');
+  }
+
+  const rows = sheet.getRange(
+    2,
+    1,
+    total,
+    PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length
+  ).getValues();
+  const counts = {CREATE: 0, UPDATE: 0, DELETE: 0};
+  let completedPrefix = 0;
+  let encounteredIncomplete = false;
+
+  for (let index = 0; index < rows.length; index++) {
+    if (Number(rows[index][0]) !== index) {
+      throw new Error('Calendar Sync queue index mismatch at row ' + (index + 2) + '.');
+    }
+
+    const status = String(rows[index][4] || '');
+    if (status === 'Complete') {
+      if (encounteredIncomplete) {
+        throw new Error(
+          'Calendar Sync queue contains a Complete row after an incomplete row. ' +
+          'PMOS stopped because the execution ledger is out of sequence.'
+        );
+      }
+      completedPrefix++;
+      const action = String(rows[index][2] || '').toUpperCase();
+      if (Object.prototype.hasOwnProperty.call(counts, action)) counts[action]++;
+      continue;
+    }
+
+    encounteredIncomplete = true;
+    if (status === 'Running') {
+      throw new Error(
+        'Calendar Sync queue item ' + index +
+        ' was left Running by an interrupted execution. PMOS paused rather than replaying a mutation whose outcome is uncertain.'
+      );
+    }
+    if (status === 'Error') {
+      throw new Error(
+        'Calendar Sync queue item ' + index + ' is Error: ' + String(rows[index][7] || 'Unknown error')
+      );
+    }
+    if (status !== 'Pending') {
+      throw new Error(
+        'Calendar Sync queue item ' + index +
+        ' has invalid status ' + String(status || 'blank') + '.'
+      );
+    }
+  }
+
+  state.cursor = completedPrefix;
+  state.processed = completedPrefix;
+  state.remaining = Math.max(0, total - completedPrefix);
+  state.created = counts.CREATE;
+  state.updated = counts.UPDATE;
+  state.deleted = counts.DELETE;
+  state.failed = 0;
+  state.currentOperation = '';
+  state.lastError = '';
+  return state;
 }
 
 function verifyReviewedCalendarSyncCompletion_(state) {
