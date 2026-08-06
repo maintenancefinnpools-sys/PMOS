@@ -44,7 +44,15 @@ const $=id=>document.getElementById(id);
 function server(name,...args){
   return new Promise((resolve,reject)=>{
     const runner=google.script.run
-      .withSuccessHandler(resolve)
+      .withSuccessHandler(payload=>{
+        if(payload&&payload.ok===false){
+          const details=[payload.endpoint||name,payload.error||'Unknown server error'];
+          if(payload.stack)details.push(payload.stack);
+          reject(new Error(details.join('\n')));
+          return;
+        }
+        resolve(payload&&payload.ok===true?payload.result:payload);
+      })
       .withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));
     switch(name){
       case 'rememberPmosJobType': return runner.rememberPmosJobType(args[0]);
