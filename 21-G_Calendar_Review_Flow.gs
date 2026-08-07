@@ -25,6 +25,14 @@ function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
     throw new Error('The Calendar review step was not saved.');
   }
 
+  // The durable audit snapshot contains the planner result from before this
+  // review decision was saved. Reusing it would preserve stale warning
+  // operations and a stale canExecute=false value even after every review item
+  // has a final disposition. Clear only the audit snapshot; the persistent
+  // Review Session and its decisions remain intact. The next audit rebuild
+  // resolves those decisions into the executable Calendar plan.
+  clearPmosCalendarAuditSnapshot_();
+
   const next = continuePmosCalendarReviewFlow();
   return {
     saved: true,
