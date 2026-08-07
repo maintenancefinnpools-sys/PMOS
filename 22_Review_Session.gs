@@ -19,23 +19,15 @@ function getOrBeginPmosReviewSession_(scope, sourceVersion) {
   if (!normalizedScope || !normalizedSource) {
     throw new Error('Review session requires a scope and source version.');
   }
-
   migrateLegacyPmosReviewDecisions_();
-
   const properties = PropertiesService.getDocumentProperties();
   let session = loadPmosReviewSession_();
-  const needsNewSession = !session ||
-    session.scope !== normalizedScope ||
-    session.status !== 'ACTIVE';
-
+  const needsNewSession = !session || session.scope !== normalizedScope || session.status !== 'ACTIVE';
   if (needsNewSession) {
     session = {
-      id: Utilities.getUuid(),
-      scope: normalizedScope,
-      sourceVersion: normalizedSource,
-      latestPlannerVersion: normalizedSource,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
+      id: Utilities.getUuid(), scope: normalizedScope,
+      sourceVersion: normalizedSource, latestPlannerVersion: normalizedSource,
+      status: 'ACTIVE', createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     properties.setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(session));
@@ -44,21 +36,17 @@ function getOrBeginPmosReviewSession_(scope, sourceVersion) {
     session.updatedAt = new Date().toISOString();
     properties.setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(session));
   }
-
   session.decisions = loadPmosReviewSessionDecisions_(session.id);
   return clonePmosReviewSession_(session);
 }
 
 function loadPmosReviewSession_() {
-  const raw = PropertiesService.getDocumentProperties()
-    .getProperty(PMOS_REVIEW_SESSION_PROPERTY);
+  const raw = PropertiesService.getDocumentProperties().getProperty(PMOS_REVIEW_SESSION_PROPERTY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (error) {
-    return null;
-  }
+  } catch (error) { return null; }
 }
 
 function requireActivePmosReviewSession_(scope) {
@@ -76,24 +64,18 @@ function loadPmosReviewSessionDecisions_(sessionId) {
   const id = String(sessionId || '').trim();
   const decisions = {};
   if (!id) return decisions;
-
   const sheet = getPmosReviewDecisionSheet_();
   if (!sheet || sheet.getLastRow() < 2) return decisions;
-
-  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1,
-    PMOS_REVIEW_DECISION_HEADERS.length).getValues();
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, PMOS_REVIEW_DECISION_HEADERS.length).getValues();
   rows.forEach(function (row) {
     if (String(row[0] || '') !== id) return;
     const decisionKey = String(row[1] || '').trim();
     if (!decisionKey) return;
     let payload = {};
-    try { payload = row[6] ? JSON.parse(String(row[6])) : {}; }
-    catch (error) { payload = {}; }
+    try { payload = row[6] ? JSON.parse(String(row[6])) : {}; } catch (error) { payload = {}; }
     const record = {
-      reviewType: String(row[2] || ''),
-      itemKey: String(row[3] || ''),
-      decision: String(row[4] || ''),
-      updatedAt: normalizePmosReviewLedgerDate_(row[5])
+      reviewType: String(row[2] || ''), itemKey: String(row[3] || ''),
+      decision: String(row[4] || ''), updatedAt: normalizePmosReviewLedgerDate_(row[5])
     };
     if (payload && Object.keys(payload).length) record.payload = payload;
     decisions[decisionKey] = record;
@@ -103,10 +85,7 @@ function loadPmosReviewSessionDecisions_(sessionId) {
 
 function savePmosReviewSessionDecision_(scope, sourceVersion, reviewType, itemKey, decision, payload) {
   const saved = savePmosReviewSessionDecisions_(scope, sourceVersion, [{
-    reviewType: reviewType,
-    itemKey: itemKey,
-    decision: decision,
-    payload: payload
+    reviewType: reviewType, itemKey: itemKey, decision: decision, payload: payload
   }]);
   return saved.decisions[0];
 }
@@ -116,7 +95,6 @@ function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
   return writePmosReviewSessionDecisions_(session, records);
 }
 
-/** Saves one complete review step without rebuilding the planner or audit. */
 function savePmosReviewStep_(scope, reviewType, records) {
   const session = requireActivePmosReviewSession_(scope);
   const normalizedType = String(reviewType || '').trim().toUpperCase();
@@ -129,18 +107,12 @@ function savePmosReviewStep_(scope, reviewType, records) {
     };
   });
   const saved = writePmosReviewSessionDecisions_(session, normalizedRecords);
-  return {
-    saved: true,
-    sessionId: saved.sessionId,
-    decisionCount: saved.decisions.length,
-    reviewType: normalizedType
-  };
+  return {saved:true, sessionId:saved.sessionId, decisionCount:saved.decisions.length, reviewType:normalizedType};
 }
 
 function writePmosReviewSessionDecisions_(session, records) {
   const now = new Date().toISOString();
   const normalized = [];
-
   (records || []).forEach(function (record) {
     const reviewType = String(record && record.reviewType || '').trim().toUpperCase();
     const itemKey = String(record && record.itemKey || '').trim();
@@ -148,41 +120,23 @@ function writePmosReviewSessionDecisions_(session, records) {
     if (!reviewType || !itemKey || !decision) {
       throw new Error('Review decision is missing its type, item key, or decision.');
     }
-    const compact = {
-      reviewType: reviewType,
-      itemKey: itemKey,
-      decision: decision,
-      updatedAt: now,
-      payload: compactPmosReviewPayload_(record && record.payload)
-    };
-    compact.decisionKey = buildPmosReviewDecisionKey_(reviewType, itemKey);
-    normalized.push(compact);
+    normalized.push({
+      decisionKey: buildPmosReviewDecisionKey_(reviewType, itemKey),
+      reviewType: reviewType, itemKey: itemKey, decision: decision,
+      updatedAt: now, payload: compactPmosReviewPayload_(record && record.payload)
+    });
   });
-
   upsertPmosReviewDecisionRows_(session.id, normalized);
-
   const metadata = {
-    id: session.id,
-    scope: session.scope,
-    sourceVersion: session.sourceVersion,
-    latestPlannerVersion: String(session.latestPlannerVersion || session.sourceVersion || ''),
-    status: session.status,
-    createdAt: session.createdAt,
-    updatedAt: now
+    id:session.id, scope:session.scope, sourceVersion:session.sourceVersion,
+    latestPlannerVersion:String(session.latestPlannerVersion || session.sourceVersion || ''),
+    status:session.status, createdAt:session.createdAt, updatedAt:now
   };
-  PropertiesService.getDocumentProperties().setProperty(
-    PMOS_REVIEW_SESSION_PROPERTY,
-    JSON.stringify(metadata)
-  );
+  PropertiesService.getDocumentProperties().setProperty(PMOS_REVIEW_SESSION_PROPERTY, JSON.stringify(metadata));
   return {
     sessionId: session.id,
     decisions: normalized.map(function (record) {
-      const saved = {
-        reviewType: record.reviewType,
-        itemKey: record.itemKey,
-        decision: record.decision,
-        updatedAt: record.updatedAt
-      };
+      const saved = {reviewType:record.reviewType,itemKey:record.itemKey,decision:record.decision,updatedAt:record.updatedAt};
       if (Object.keys(record.payload).length) saved.payload = record.payload;
       return saved;
     })
@@ -192,37 +146,26 @@ function writePmosReviewSessionDecisions_(session, records) {
 function upsertPmosReviewDecisionRows_(sessionId, records) {
   if (!(records || []).length) return;
   const sheet = ensurePmosReviewDecisionSheet_();
-  const lastRow = sheet.getLastRow();
   const rowByKey = {};
-  if (lastRow >= 2) {
-    const existing = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-    existing.forEach(function (row, index) {
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(function (row, index) {
       if (String(row[0] || '') !== String(sessionId || '')) return;
       const key = String(row[1] || '').trim();
       if (key) rowByKey[key] = index + 2;
     });
   }
-
-  const updates = [];
-  const appends = [];
+  const updates = [], appends = [];
   records.forEach(function (record) {
-    const row = [
-      String(sessionId || ''), record.decisionKey, record.reviewType,
-      record.itemKey, record.decision, record.updatedAt,
-      Object.keys(record.payload).length ? JSON.stringify(record.payload) : ''
-    ];
+    const row = [String(sessionId || ''),record.decisionKey,record.reviewType,record.itemKey,
+      record.decision,record.updatedAt,Object.keys(record.payload).length ? JSON.stringify(record.payload) : ''];
     const existingRow = rowByKey[record.decisionKey];
-    if (existingRow) updates.push({row: existingRow, values: row});
-    else appends.push(row);
+    if (existingRow) updates.push({row:existingRow,values:row}); else appends.push(row);
   });
-
   updates.forEach(function (update) {
-    sheet.getRange(update.row, 1, 1, PMOS_REVIEW_DECISION_HEADERS.length)
-      .setValues([update.values]);
+    sheet.getRange(update.row, 1, 1, PMOS_REVIEW_DECISION_HEADERS.length).setValues([update.values]);
   });
   if (appends.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, appends.length,
-      PMOS_REVIEW_DECISION_HEADERS.length).setValues(appends);
+    sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, PMOS_REVIEW_DECISION_HEADERS.length).setValues(appends);
   }
   if (!sheet.isSheetHidden()) sheet.hideSheet();
 }
@@ -236,28 +179,21 @@ function ensurePmosReviewDecisionSheet_() {
   let sheet = spreadsheet.getSheetByName(PMOS_REVIEW_DECISION_SHEET);
   if (!sheet) sheet = spreadsheet.insertSheet(PMOS_REVIEW_DECISION_SHEET);
   if (sheet.getMaxColumns() < PMOS_REVIEW_DECISION_HEADERS.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(),
-      PMOS_REVIEW_DECISION_HEADERS.length - sheet.getMaxColumns());
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), PMOS_REVIEW_DECISION_HEADERS.length - sheet.getMaxColumns());
   }
-  sheet.getRange(1, 1, 1, PMOS_REVIEW_DECISION_HEADERS.length)
-    .setValues([PMOS_REVIEW_DECISION_HEADERS.slice()]);
+  sheet.getRange(1, 1, 1, PMOS_REVIEW_DECISION_HEADERS.length).setValues([PMOS_REVIEW_DECISION_HEADERS.slice()]);
   if (!sheet.isSheetHidden()) sheet.hideSheet();
   return sheet;
 }
 
-/**
- * One-time migration for decisions written by the former property-based model.
- * Rows are written first; legacy properties are deleted only after success.
- */
 function migrateLegacyPmosReviewDecisions_() {
   const properties = PropertiesService.getDocumentProperties();
   const all = properties.getProperties();
   const legacyKeys = Object.keys(all).filter(function (key) {
     return key.indexOf(PMOS_REVIEW_DECISION_PREFIX) === 0;
   });
-  if (!legacyKeys.length) return {migrated: 0};
-
-  const grouped = {};
+  if (!legacyKeys.length) return {migrated:0};
+  const grouped = {}, migratedKeys = [];
   legacyKeys.forEach(function (propertyKey) {
     const suffix = propertyKey.slice(PMOS_REVIEW_DECISION_PREFIX.length);
     const divider = suffix.indexOf('::');
@@ -271,23 +207,18 @@ function migrateLegacyPmosReviewDecisions_() {
       if (!sessionId || !reviewType || !itemKey || !decision) return;
       if (!grouped[sessionId]) grouped[sessionId] = [];
       grouped[sessionId].push({
-        decisionKey: buildPmosReviewDecisionKey_(reviewType, itemKey),
-        reviewType: reviewType,
-        itemKey: itemKey,
-        decision: decision,
-        updatedAt: String(record.updatedAt || new Date().toISOString()),
-        payload: compactPmosReviewPayload_(record.payload)
+        decisionKey:buildPmosReviewDecisionKey_(reviewType,itemKey),reviewType:reviewType,
+        itemKey:itemKey,decision:decision,updatedAt:String(record.updatedAt || new Date().toISOString()),
+        payload:compactPmosReviewPayload_(record.payload)
       });
-    } catch (error) {
-      // Leave malformed legacy records untouched for manual recovery.
-    }
+      migratedKeys.push(propertyKey);
+    } catch (error) {}
   });
-
   Object.keys(grouped).forEach(function (sessionId) {
     upsertPmosReviewDecisionRows_(sessionId, grouped[sessionId]);
   });
-  properties.deleteProperties(legacyKeys);
-  return {migrated: legacyKeys.length};
+  migratedKeys.forEach(function (propertyKey) { properties.deleteProperty(propertyKey); });
+  return {migrated:migratedKeys.length};
 }
 
 function normalizePmosReviewLedgerDate_(value) {
@@ -295,60 +226,42 @@ function normalizePmosReviewLedgerDate_(value) {
   return String(value || '');
 }
 
-/** Keeps only small scalar fields required by later planners and executors. */
 function compactPmosReviewPayload_(payload) {
   const source = payload && typeof payload === 'object' ? payload : {};
-  const allowed = [
-    'customerId', 'customerName', 'customerTitle', 'customerAddress',
-    'eventId', 'seriesId', 'seriesKey', 'operationId',
-    'title', 'start', 'end', 'location'
-  ];
+  const allowed = ['customerId','customerName','customerTitle','customerAddress','eventId','seriesId','seriesKey','operationId','title','start','end','location'];
   const compact = {};
   allowed.forEach(function (key) {
     const value = source[key];
     if (value === '' || value == null) return;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      compact[key] = String(value).slice(0, 500);
-    }
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') compact[key] = String(value).slice(0,500);
   });
   return compact;
 }
 
 function readPmosReviewSessionDecision_(session, reviewType, itemKey) {
   if (!session || !session.decisions) return null;
-  return session.decisions[buildPmosReviewDecisionKey_(reviewType, itemKey)] || null;
+  return session.decisions[buildPmosReviewDecisionKey_(reviewType,itemKey)] || null;
 }
 
 function invalidatePmosReviewSession_(reason) {
   const session = loadPmosReviewSession_();
-  if (!session) return {invalidated: false};
-  session.status = 'INVALIDATED';
-  session.invalidatedAt = new Date().toISOString();
-  session.invalidationReason = String(reason || 'Underlying data changed.');
-  session.updatedAt = session.invalidatedAt;
-  PropertiesService.getDocumentProperties().setProperty(
-    PMOS_REVIEW_SESSION_PROPERTY,
-    JSON.stringify(session)
-  );
-  return {invalidated: true, sessionId: session.id};
+  if (!session) return {invalidated:false};
+  session.status='INVALIDATED'; session.invalidatedAt=new Date().toISOString();
+  session.invalidationReason=String(reason || 'Underlying data changed.'); session.updatedAt=session.invalidatedAt;
+  PropertiesService.getDocumentProperties().setProperty(PMOS_REVIEW_SESSION_PROPERTY,JSON.stringify(session));
+  return {invalidated:true,sessionId:session.id};
 }
 
 function completePmosReviewSession_() {
   const session = loadPmosReviewSession_();
-  if (!session) return {completed: false};
-  session.status = 'COMPLETE';
-  session.completedAt = new Date().toISOString();
-  session.updatedAt = session.completedAt;
-  PropertiesService.getDocumentProperties().setProperty(
-    PMOS_REVIEW_SESSION_PROPERTY,
-    JSON.stringify(session)
-  );
-  return {completed: true, sessionId: session.id};
+  if (!session) return {completed:false};
+  session.status='COMPLETE'; session.completedAt=new Date().toISOString(); session.updatedAt=session.completedAt;
+  PropertiesService.getDocumentProperties().setProperty(PMOS_REVIEW_SESSION_PROPERTY,JSON.stringify(session));
+  return {completed:true,sessionId:session.id};
 }
 
-function buildPmosReviewDecisionKey_(reviewType, itemKey) {
-  return String(reviewType || '').trim().toUpperCase() + '::' +
-    String(itemKey || '').trim();
+function buildPmosReviewDecisionKey_(reviewType,itemKey) {
+  return String(reviewType || '').trim().toUpperCase() + '::' + String(itemKey || '').trim();
 }
 
 function clonePmosReviewSession_(value) {
