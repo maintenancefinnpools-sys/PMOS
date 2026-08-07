@@ -1,4 +1,6 @@
 /** Job Center adapter for the reviewed Calendar Sync queue worker. */
+const PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER = 'runReviewedCalendarSyncWorker';
+const PMOS_REVIEWED_SYNC_STALE_SCHEDULE_MS = 20000;
 
 /** Public HTML-service endpoint. */
 function getReviewedCalendarSyncJobCenterStatus() {
@@ -32,6 +34,11 @@ function resumeReviewedCalendarSyncJobCenterExecution() {
   );
 }
 
+/** Public installable-trigger entry point. */
+function runReviewedCalendarSyncWorker() {
+  return runReviewedCalendarSyncWorker_();
+}
+
 function runReviewedCalendarJobCenterEndpoint_(name, callback) {
   try {
     return {
@@ -50,6 +57,7 @@ function runReviewedCalendarJobCenterEndpoint_(name, callback) {
 }
 
 function getReviewedCalendarSyncJobCenterStatus_() {
+  repairStaleReviewedCalendarSyncSchedule_();
   const detailed = typeof getReviewedCalendarSyncDetailedStatus === 'function'
     ? getReviewedCalendarSyncDetailedStatus()
     : getReviewedCalendarSyncStatus();
@@ -58,6 +66,7 @@ function getReviewedCalendarSyncJobCenterStatus_() {
     type: 'CALENDAR_SYNC',
     label: 'Calendar Sync',
     status: status,
+    phase: String(detailed && detailed.phase || ''),
     originalTotal: Number(detailed && detailed.total || 0),
     remaining: Number(detailed && detailed.remaining || 0),
     processedItems: Number(detailed && detailed.processed || 0),
@@ -70,12 +79,16 @@ function getReviewedCalendarSyncJobCenterStatus_() {
     lastError: String(detailed && detailed.lastError || ''),
     lastSummary: buildReviewedCalendarJobCenterSummary_(detailed || {}),
     calendarName: String(detailed && detailed.calendarName || ''),
+    startedAt: String(detailed && detailed.startedAt || ''),
+    updatedAt: String(detailed && detailed.updatedAt || ''),
+    completedAt: String(detailed && detailed.completedAt || ''),
     reviewedQueue: true
   };
 }
 
 function startReviewedCalendarSyncJobCenterExecution_() {
   startReviewedCalendarSyncExecution();
+  armReviewedCalendarSyncPublicTrigger_();
   return getReviewedCalendarSyncJobCenterStatus_();
 }
 
@@ -92,6 +105,7 @@ function pauseReviewedCalendarSyncJobCenterExecution_() {
   state.updatedAt = new Date().toISOString();
   writeReviewedCalendarSyncState_(state);
   removeReviewedCalendarSyncTriggers_();
+  removeReviewedCalendarSyncPublicTriggers_();
   return getReviewedCalendarSyncJobCenterStatus_();
 }
 
@@ -106,6 +120,48 @@ function resumeReviewedCalendarSyncJobCenterExecution_() {
     writeReviewedCalendarSyncState_(state);
   }
   return startReviewedCalendarSyncJobCenterExecution_();
+}
+
+function repairStaleReviewedCalendarSyncSchedule_() {
+  const state = readReviewedCalendarSyncState_();
+  if (!state || String(state.status || '') !== 'Scheduled') return false;
+
+  const updatedAt = new Date(state.updatedAt || state.startedAt || 0).getTime();
+  const stale = !Number.isFinite(updatedAt) ||
+    Date.now() - updatedAt >= PMOS_REVIEWED_SYNC_STALE_SCHEDULE_MS;
+  const hasTrigger = ScriptApp.getProjectTriggers().some(function (trigger) {
+    const handler = trigger.getHandlerFunction();
+    return handler === PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER ||
+      handler === PMOS_REVIEWED_SYNC_TRIGGER;
+  });
+
+  if (!hasTrigger || stale) {
+    armReviewedCalendarSyncPublicTrigger_();
+    state.phase = stale
+      ? 'Restarting delayed execution worker'
+      : 'Starting execution worker';
+    state.updatedAt = new Date().toISOString();
+    writeReviewedCalendarSyncState_(state);
+    return true;
+  }
+  return false;
+}
+
+function armReviewedCalendarSyncPublicTrigger_() {
+  removeReviewedCalendarSyncTriggers_();
+  removeReviewedCalendarSyncPublicTriggers_();
+  ScriptApp.newTrigger(PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER)
+    .timeBased()
+    .after(1000)
+    .create();
+}
+
+function removeReviewedCalendarSyncPublicTriggers_() {
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (trigger.getHandlerFunction() === PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
 }
 
 function buildReviewedCalendarJobCenterSummary_(state) {
