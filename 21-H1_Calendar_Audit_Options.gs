@@ -64,7 +64,7 @@ function getPmosCalendarAuditLaunchOptions_() {
   return {
     calendarNames: names,
     calendarName: settings.calendarName,
-    startDate: Utilities.formatDate(settings.seasonStart, PMOS.TIMEZONE, 'yyyy-MM-dd'),
+    startDate: Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd'),
     endDate: Utilities.formatDate(settings.seasonEnd, PMOS.TIMEZONE, 'yyyy-MM-dd'),
     includeStartedToday: false
   };
