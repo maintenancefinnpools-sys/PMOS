@@ -25,14 +25,11 @@ function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
     throw new Error('The Calendar review step was not saved.');
   }
 
-  // The durable audit snapshot contains the planner result from before this
-  // review decision was saved. Reusing it would preserve stale warning
-  // operations and a stale canExecute=false value even after every review item
-  // has a final disposition. Clear only the audit snapshot; the persistent
-  // Review Session and its decisions remain intact. The next audit rebuild
-  // resolves those decisions into the executable Calendar plan.
-  clearPmosCalendarAuditSnapshot_();
-
+  // Keep the original Calendar snapshot throughout review progression. The
+  // snapshot is rebuilt against the persistent Review Session decisions, so
+  // moving between stages does not reread the Calendar or rebuild the planner.
+  // A single fresh planner rebuild is performed only after the last review
+  // item receives a final disposition.
   const next = continuePmosCalendarReviewFlow();
   return {
     saved: true,
@@ -46,7 +43,7 @@ function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
 
 /** Advance to the next unresolved Calendar review stage. */
 function continuePmosCalendarReviewFlow() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  let audit = runVerifiedCalendarPlanAuditReadOnly_();
 
   if (audit.hasErrors) {
     showCalendarAuditErrorsReview();
@@ -70,12 +67,44 @@ function continuePmosCalendarReviewFlow() {
   }
 
   if (audit.reviewComplete === true) {
-    openReviewedCalendarSyncPreview();
-    return {
-      opened: 'CALENDAR_SYNC_PREVIEW',
-      reviewComplete: true,
-      canSync: audit.canSync === true
-    };
+    // The stored snapshot reflects Calendar and planner state from the start
+    // of this Review Session. Its pre-review canExecute value may still be
+    // false because review warnings existed at that time. Rebuild exactly once
+    // now, with all saved decisions applied, before opening synchronization.
+    if (audit.canSync !== true) {
+      clearPmosCalendarAuditSnapshot_();
+      audit = runVerifiedCalendarPlanAuditReadOnly_({forceFresh: true});
+    }
+
+    if (audit.hasErrors) {
+      showCalendarAuditErrorsReview();
+      return {opened: 'ERRORS'};
+    }
+    if (audit.hasWarnings) {
+      showCalendarAuditWarningsReview();
+      return {opened: 'WARNINGS'};
+    }
+    if (audit.hasSuggestedMatches) {
+      showCalendarSuggestedMatchesReview();
+      return {opened: 'SUGGESTED_MATCHES'};
+    }
+    if (audit.hasUnclassifiedEvents) {
+      showCalendarUnclassifiedExceptionsReview();
+      return {opened: 'UNCLASSIFIED_EVENTS'};
+    }
+    if (Number(audit.deletionCandidateCount || 0) > 0) {
+      showCalendarDeletionExceptionsReview();
+      return {opened: 'SUGGESTED_DELETIONS'};
+    }
+
+    if (audit.reviewComplete === true) {
+      openReviewedCalendarSyncPreview();
+      return {
+        opened: 'CALENDAR_SYNC_PREVIEW',
+        reviewComplete: true,
+        canSync: audit.canSync === true
+      };
+    }
   }
 
   return {
