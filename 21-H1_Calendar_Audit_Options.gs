@@ -70,13 +70,38 @@ function getPmosCalendarAuditLaunchOptions_() {
   };
 }
 
-function setPmosCalendarNameFromAudit_(calendarName) {
+/**
+ * Resolves a Calendar name without silently choosing among ambiguous targets.
+ * When duplicate visible names exist, the sole Calendar owned by the current
+ * user is the authoritative target. Multiple owned copies still require a
+ * rename because a name-only App Setting cannot distinguish them safely.
+ */
+function resolvePmosCalendarByName_(calendarName) {
   const name = String(calendarName || '').trim();
   if (!name) throw new Error('Select a Calendar before running the audit.');
+
   const matches = CalendarApp.getCalendarsByName(name);
-  if (matches.length !== 1) {
-    throw new Error('Calendar selection must resolve to exactly one Calendar: ' + name);
+  if (!matches.length) {
+    throw new Error('No Calendar was found with this name: ' + name + '.');
   }
+  if (matches.length === 1) return matches[0];
+
+  const owned = matches.filter(function (calendar) {
+    try { return calendar.isOwnedByMe(); }
+    catch (error) { return false; }
+  });
+  if (owned.length === 1) return owned[0];
+
+  throw new Error(
+    'Found ' + matches.length + ' Calendars named "' + name + '"' +
+    (owned.length ? ', including ' + owned.length + ' owned Calendars' : '') +
+    '. Rename the intended Calendar so its name is unique, then run the audit again.'
+  );
+}
+
+function setPmosCalendarNameFromAudit_(calendarName) {
+  const name = String(calendarName || '').trim();
+  resolvePmosCalendarByName_(name);
   const sheet = ensureAppSettingsSheet_();
   const values = sheet.getDataRange().getValues();
   let row = 0;
