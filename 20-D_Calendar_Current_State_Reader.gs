@@ -46,6 +46,10 @@ function readPmosCalendarCurrentState_(settings, registry, options) {
 function getExistingConfiguredPmosCalendar_(calendarName) {
   const name = String(calendarName || '').trim();
   if (!name) throw new Error('Calendar Name is blank in App Settings.');
+  if (typeof resolvePmosCalendarByName_ === 'function') {
+    return resolvePmosCalendarByName_(name);
+  }
+
   const matches = CalendarApp.getCalendarsByName(name);
   if (!matches.length) {
     throw new Error('Configured Calendar does not exist: ' + name + '. Create it through PMOS setup before running Calendar Preview.');
