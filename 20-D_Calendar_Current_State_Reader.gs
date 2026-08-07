@@ -68,8 +68,8 @@ function normalizePmosCalendarReadRange_(settings, options) {
   const now = new Date();
   const today = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const configuredEnd = settings && settings.seasonEnd instanceof Date ? new Date(settings.seasonEnd) : today;
-  const requestedStart = source.startDate instanceof Date ? new Date(source.startDate) : today;
-  const requestedEnd = source.endDate instanceof Date ? new Date(source.endDate) : configuredEnd;
+  const requestedStart = parsePmosCalendarReadDate_(source.startDate, today);
+  const requestedEnd = parsePmosCalendarReadDate_(source.endDate, configuredEnd);
   requestedStart.setHours(0,0,0,0);
   requestedEnd.setHours(23,59,59,999);
   const includeStartedToday = source.includeStartedToday === true;
@@ -79,6 +79,24 @@ function normalizePmosCalendarReadRange_(settings, options) {
     throw new Error('Calendar Sync end date must not be before its start date.');
   }
   return {start:effectiveStart,end:requestedEnd,includeStartedToday:includeStartedToday};
+}
+
+/** Parse Date objects and yyyy-MM-dd values without silently replacing them. */
+function parsePmosCalendarReadDate_(value, fallback) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return new Date(value.getTime());
+  }
+
+  const text = String(value == null ? '' : value).trim();
+  if (text) {
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text)
+      ? new Date(text + 'T00:00:00')
+      : new Date(text);
+    if (Number.isFinite(parsed.getTime())) return parsed;
+    throw new Error('Invalid Calendar Audit date: ' + text);
+  }
+
+  return new Date(fallback.getTime());
 }
 
 /**
