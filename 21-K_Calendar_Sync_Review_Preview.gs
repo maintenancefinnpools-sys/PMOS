@@ -11,7 +11,7 @@ function openReviewedCalendarSyncPreview() {
   }
 
   const preview = audit.preview || previewPmosCalendarSyncPlan();
-  const reviewed = (preview.reviewedActions || []).slice();
+  const reviewed = getPmosReviewedCalendarPreviewActions_(preview);
   const counts = countPmosReviewedCalendarActions_(reviewed);
   const resolutionErrors = Number(preview.reviewResolutionErrors || 0);
   const executorPending = Boolean(preview.reviewExecutorPending);
@@ -70,6 +70,39 @@ function approveSync(button){button.disabled=true;button.textContent='Preparing 
     executorPending: executorPending,
     resolutionErrors: resolutionErrors
   };
+}
+
+/**
+ * The audit snapshot can contain an empty reviewedActions summary after the
+ * final resolved plan replaces review warnings with executable operations.
+ * The authoritative plan still contains those operations, so recover the
+ * Preview rows from it rather than displaying zero reviewed actions.
+ */
+function getPmosReviewedCalendarPreviewActions_(preview) {
+  const summarized = preview && Array.isArray(preview.reviewedActions)
+    ? preview.reviewedActions.filter(Boolean)
+    : [];
+  if (summarized.length) return summarized.slice();
+
+  const operations = preview && preview.plan && Array.isArray(preview.plan.operations)
+    ? preview.plan.operations
+    : [];
+  return operations.filter(function (operation) {
+    return Boolean(operation && operation.metadata && operation.metadata.reviewOperation);
+  }).map(function (operation) {
+    const formatted = formatPmosCalendarPreviewOperation_(operation);
+    const rawAction = String(formatted.reviewAction || '').toUpperCase();
+    const reviewAction = rawAction === 'MATCH'
+      ? 'LINK_CUSTOMER'
+      : rawAction === 'TEMPORARY'
+        ? 'REGISTER_TEMPORARY_VISIT'
+        : rawAction === 'KEEP'
+          ? 'PRESERVE_EVENT'
+          : rawAction === 'DELETE'
+            ? 'DELETE_APPROVED_EVENT'
+            : rawAction;
+    return Object.assign({}, formatted, {reviewAction: reviewAction});
+  });
 }
 
 /**
