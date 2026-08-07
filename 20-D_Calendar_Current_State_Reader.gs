@@ -16,8 +16,19 @@ function readPmosCalendarCurrentState_(settings, registry, options) {
   const records = registry || readExistingPmosCalendarRegistry_();
   const range = normalizePmosCalendarReadRange_(configuration,options);
   const calendar = getExistingConfiguredPmosCalendar_(configuration.calendarName);
-  const registered = readRegisteredPmosCalendarSeriesState_(calendar,records);
-  const events = readPmosCalendarEventsInRange_(calendar,range);
+
+  // Fetch the audit range exactly once. The same snapshot is used both to
+  // classify Calendar events and to verify registered recurring series.
+  const rawEvents = calendar.getEvents(range.start,range.end);
+  const observedSeries = indexObservedPmosCalendarSeries_(rawEvents);
+  const registered = readRegisteredPmosCalendarSeriesState_(
+    calendar,
+    records,
+    observedSeries,
+    range
+  );
+  const events = readPmosCalendarEventsInRange_(calendar,range,rawEvents);
+
   return freezePmosCalendarPlannerValue_({
     calendarName:calendar.getName(),calendarId:calendar.getId(),
     range:{start:range.start.toISOString(),end:range.end.toISOString(),includeStartedToday:range.includeStartedToday},
@@ -66,42 +77,78 @@ function normalizePmosCalendarReadRange_(settings, options) {
   return {start:effectiveStart,end:requestedEnd,includeStartedToday:includeStartedToday};
 }
 
-function readRegisteredPmosCalendarSeriesState_(calendar, registry) {
+/**
+ * Index recurring occurrences from the one range snapshot.
+ * CalendarEvent#getId() is the recurring iCal identity used by
+ * Calendar#getEventSeriesById(), so no getEventSeries() round trip is needed.
+ */
+function indexObservedPmosCalendarSeries_(events) {
+  const bySeriesId = {};
+  (events || []).forEach(function(event) {
+    let recurring = false;
+    try { recurring = event.isRecurringEvent(); }
+    catch (error) { recurring = false; }
+    if (!recurring) return;
+
+    const seriesId = String(event.getId() || '');
+    if (seriesId && !bySeriesId[seriesId]) bySeriesId[seriesId] = event;
+  });
+  return bySeriesId;
+}
+
+function readRegisteredPmosCalendarSeriesState_(calendar, registry, observedSeries, range) {
   const records = [];
   let presentCount = 0;
   let missingCount = 0;
+  const observed = observedSeries || {};
+  const rangeDays = Math.max(
+    0,
+    (range.end.getTime() - range.start.getTime()) / (24 * 60 * 60 * 1000)
+  );
+
+  // PMOS maintenance recurrence is weekly, biweekly, or monthly. In an audit
+  // window of at least 35 days, an active PMOS series must have an occurrence
+  // in the single Calendar snapshot. Shorter windows retain exact ID lookup.
+  const canVerifyFromSnapshot = rangeDays >= 35;
+
   Object.keys(registry || {}).sort().forEach(function(seriesKey){
     const record = registry[seriesKey] || {};
+    const seriesId = String(record.seriesId || '');
+    let representative = seriesId ? observed[seriesId] || null : null;
     let series = null;
     let error = '';
-    if (record.seriesId) {
-      try { series = calendar.getEventSeriesById(record.seriesId); }
+
+    if (!representative && seriesId && !canVerifyFromSnapshot) {
+      try { series = calendar.getEventSeriesById(seriesId); }
       catch (caught) { error = String(caught || ''); }
     }
-    const present = Boolean(series);
+
+    const present = Boolean(representative || series);
     if (present) presentCount++; else missingCount++;
-    const actualDescription = present ? safePmosCalendarRead_(series,'getDescription') : '';
+    const source = representative || series;
+    const actualDescription = present ? safePmosCalendarRead_(source,'getDescription') : '';
     const metadata = parsePmosCalendarMetadata_(actualDescription);
     records.push({
       state:present ? PMOS_CALENDAR_STATE.REGISTERED_PRESENT : PMOS_CALENDAR_STATE.REGISTERED_MISSING,
-      seriesKey:seriesKey,seriesId:String(record.seriesId || ''),
+      seriesKey:seriesKey,seriesId:seriesId,
       customerId:String(record.customerId || ''),layer:String(record.layer || ''),
       calendarName:String(record.calendarName || ''),signature:String(record.signature || ''),
       status:String(record.status || ''),objectId:String(record.objectId || metadata.PMOS_OBJECT_ID || ''),
       objectVersion:Number(record.currentVersion || metadata.PMOS_OBJECT_VERSION || 0),
       lastVerified:String(record.lastVerified || ''),
       lastTransactionId:String(record.lastTransactionId || ''),
-      actualTitle:present ? safePmosCalendarRead_(series,'getTitle') : '',
+      actualTitle:present ? safePmosCalendarRead_(source,'getTitle') : '',
       actualDescription:actualDescription,
-      actualLocation:present ? safePmosCalendarRead_(series,'getLocation') : '',
+      actualLocation:present ? safePmosCalendarRead_(source,'getLocation') : '',
       readError:error
     });
   });
   return {records:records,presentCount:presentCount,missingCount:missingCount};
 }
 
-function readPmosCalendarEventsInRange_(calendar, range) {
-  return calendar.getEvents(range.start,range.end).map(function(event){
+function readPmosCalendarEventsInRange_(calendar, range, rawEvents) {
+  const events = rawEvents || calendar.getEvents(range.start,range.end);
+  return events.map(function(event){
     const description = String(event.getDescription() || '');
     const metadata = parsePmosCalendarMetadata_(description);
     const eventType = classifyPmosCalendarEventType_(metadata);
@@ -145,9 +192,7 @@ function classifyPmosCalendarEventType_(metadata) {
 
 function readPmosCalendarEventSeriesId_(event) {
   try {
-    if (!event.isRecurringEvent()) return '';
-    const series = event.getEventSeries();
-    return series ? String(series.getId() || '') : '';
+    return event.isRecurringEvent() ? String(event.getId() || '') : '';
   } catch (error) { return ''; }
 }
 
