@@ -48,7 +48,7 @@ function server(name,...args){
         if(payload&&payload.ok===false){
           const details=[payload.endpoint||name,payload.error||'Unknown server error'];
           if(payload.stack)details.push(payload.stack);
-          reject(new Error(details.join('\n')));
+          reject(new Error(details.join('\\n')));
           return;
         }
         resolve(payload&&payload.ok===true?payload.result:payload);
