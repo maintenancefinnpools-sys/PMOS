@@ -106,20 +106,17 @@ function getPmosReviewedCalendarPreviewActions_(preview) {
 }
 
 /**
- * Legacy public entry retained as a thin wrapper. Calendar Sync no longer uses
- * the old Job Center or its operation queue.
+ * Approves the Preview by preparing the authoritative resolved queue. The
+ * queue preparer rebuilds the reviewed plan, validates it, and reports exact
+ * blockers. A cached audit canSync flag is not an execution authority.
  */
 function prepareApprovedCalendarSyncAndOpenJobCenter() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (!audit.canSync) {
-    throw new Error('Calendar review is no longer ready for synchronization. Reopen Calendar Plan Audit.');
-  }
   const prepared = openSafeReviewedCalendarSyncPreview_();
   return {
     opened: true,
     prepared: true,
-    planId: String(prepared && prepared.planId || audit.planId || ''),
-    reviewSessionId: String(prepared && prepared.sessionId || audit.reviewSessionId || ''),
+    planId: String(prepared && prepared.planId || ''),
+    reviewSessionId: String(prepared && prepared.sessionId || ''),
     executor: 'REVIEWED_QUEUE_WORKER'
   };
 }
