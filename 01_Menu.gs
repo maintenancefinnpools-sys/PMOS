@@ -3,17 +3,13 @@
  * Move-only refactor: public names and operational behavior are preserved.
  */
 
-/**
- * Compatibility entry retained for older menu installations and callers.
- * The Add Maintenance Client workflow is now enabled.
- */
+/** Compatibility entry retained for older menu installations and callers. */
 function showNewMaintenanceClientNotice() {
   return showAddMaintenanceClientV2();
 }
 
 function onOpen() {
   const initialized = isPmosInitialized_();
-
   const menu = SpreadsheetApp.getUi().createMenu('PMOS');
 
   if (!initialized) {
@@ -24,7 +20,7 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClientV2')
+          .addItem('Add Maintenance Customer', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
