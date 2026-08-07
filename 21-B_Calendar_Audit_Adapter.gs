@@ -111,7 +111,6 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
   const reviewComplete = errors.length === 0 && warnings.length === 0 &&
     suggestedMatches.length === 0 && unclassifiedEvents.length === 0 &&
     deletionCandidates.length === 0;
-  const canSync = preview.canExecute === true && reviewComplete;
 
   const reviewedActions = [];
   approvedMatches.forEach(function (item) {
@@ -150,11 +149,13 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
     'Suggested deletions: ' + deletionCandidates.length,
     'Registered series missing: ' + Number(preview.registeredMissing || 0)
   ];
-  if (!preview.canExecute) lines.push('Calendar Sync remains blocked until the errors are resolved.');
-  else if (!reviewComplete) lines.push('Complete the remaining review items before opening Calendar Sync.');
+  if (!reviewComplete) {
+    lines.push('Complete the remaining review items before opening Calendar Sync.');
+  } else {
+    lines.push('Review complete. Calendar Sync Preview will validate and prepare the execution queue.');
+  }
 
   return {
-    canSync: canSync,
     reviewComplete: reviewComplete,
     planId: preview.planId || '',
     sourceVersion: sourceVersion,
@@ -213,7 +214,11 @@ function applyPmosCalendarMatchReviewSession_(matching, session) {
     else if (value === 'KEEP' || value === 'MATCH') approved.push(item);
     else pending.push(item);
   });
-  return Object.freeze({suggestedMatches:Object.freeze(pending),approvedMatches:Object.freeze(approved),unclassifiedEvents:Object.freeze(unclassified)});
+  return Object.freeze({
+    suggestedMatches: Object.freeze(pending),
+    approvedMatches: Object.freeze(approved),
+    unclassifiedEvents: Object.freeze(unclassified)
+  });
 }
 
 function applyPmosCalendarUnclassifiedReviewSession_(items, session) {
@@ -226,7 +231,11 @@ function applyPmosCalendarUnclassifiedReviewSession_(items, session) {
     else if (value === 'IGNORE') ignored.push(item);
     else pending.push(item);
   });
-  return Object.freeze({pending:Object.freeze(pending),temporaryVisits:Object.freeze(temporaryVisits),ignored:Object.freeze(ignored)});
+  return Object.freeze({
+    pending: Object.freeze(pending),
+    temporaryVisits: Object.freeze(temporaryVisits),
+    ignored: Object.freeze(ignored)
+  });
 }
 
 function applyPmosCalendarDeletionReviewSession_(items, session) {
@@ -239,58 +248,134 @@ function applyPmosCalendarDeletionReviewSession_(items, session) {
     else if (value === 'KEEP') kept.push(item);
     else pending.push(item);
   });
-  return Object.freeze({pending:Object.freeze(pending),approved:Object.freeze(approved),kept:Object.freeze(kept)});
+  return Object.freeze({
+    pending: Object.freeze(pending),
+    approved: Object.freeze(approved),
+    kept: Object.freeze(kept)
+  });
 }
 
 function buildPmosCalendarAuditReviewItems_(validationIssues, warningOperations) {
   const items = [];
   (validationIssues || []).forEach(function (issue, index) {
-    const item = {id:String(issue.operationId || issue.code || 'VALIDATION_' + index),severity:String(issue.severity || 'INFO').toUpperCase(),code:String(issue.code || ''),title:String(issue.code || 'Validation issue').replace(/_/g,' '),details:String(issue.message || 'Calendar validation issue.'),operationId:String(issue.operationId || ''),path:String(issue.path || ''),reviewType:'VALIDATION'};
-    item.resolution = recommendPmosCalendarAuditResolution_(item); items.push(item);
+    const item = {
+      id: String(issue.operationId || issue.code || 'VALIDATION_' + index),
+      severity: String(issue.severity || 'INFO').toUpperCase(),
+      code: String(issue.code || ''),
+      title: String(issue.code || 'Validation issue').replace(/_/g, ' '),
+      details: String(issue.message || 'Calendar validation issue.'),
+      operationId: String(issue.operationId || ''),
+      path: String(issue.path || ''),
+      reviewType: 'VALIDATION'
+    };
+    item.resolution = recommendPmosCalendarAuditResolution_(item);
+    items.push(item);
   });
   (warningOperations || []).forEach(function (operation) {
     const current = operation.payload && operation.payload.current || {};
     const desired = operation.payload && operation.payload.desired || {};
-    const item = {id:String(operation.id || operation.entityId || ''),severity:'WARNING',code:'CALENDAR_REVIEW',title:String(desired.title || current.title || operation.entityId || 'Calendar item'),details:String(operation.reason || 'Calendar item requires review.'),operationId:String(operation.id || ''),seriesKey:String(operation.entityId || ''),layer:String(desired.layer || current.layer || ''),reviewType:'WARNING'};
-    item.resolution = recommendPmosCalendarAuditResolution_(item); items.push(item);
+    const item = {
+      id: String(operation.id || operation.entityId || ''),
+      severity: 'WARNING',
+      code: 'CALENDAR_REVIEW',
+      title: String(desired.title || current.title || operation.entityId || 'Calendar item'),
+      details: String(operation.reason || 'Calendar item requires review.'),
+      operationId: String(operation.id || ''),
+      seriesKey: String(operation.entityId || ''),
+      layer: String(desired.layer || current.layer || ''),
+      reviewType: 'WARNING'
+    };
+    item.resolution = recommendPmosCalendarAuditResolution_(item);
+    items.push(item);
   });
   return items;
 }
 
 function recommendPmosCalendarAuditResolution_(item) {
-  const text = [item.code,item.title,item.details,item.path].join(' ').toLowerCase();
-  if (/customer id|customer database|customer record|customer match/.test(text)) return {type:'CUSTOMER_SYNC',label:'Open Customer Database Sync',explanation:'Synchronize customer IDs and route records, then run Calendar Plan Audit again.'};
-  if (/registry|support sheet|schema|missing required column|initialize pmos|update pmos/.test(text)) return {type:'UPDATE_PMOS',label:'Open Update PMOS',explanation:'Repair or migrate the required PMOS support structures, then rerun the audit.'};
-  if (/transaction|recovery|interrupted|ambiguous/.test(text)) return {type:'TRANSACTION_RECOVERY',label:'Open Transaction Recovery',explanation:'Review the interrupted Calendar operation before synchronization continues.'};
-  if (/route template|stop order|layer|route row/.test(text)) return {type:'ROUTES_SHEET',label:'Open 4-Week Route Template',explanation:'Open the affected source sheet and correct the referenced route information.'};
-  if (/calendar name|season start|season end|app settings|effective date/.test(text)) return {type:'SETTINGS_SHEET',label:'Open App Settings',explanation:'Open App Settings and correct the referenced Calendar configuration.'};
+  const text = [item.code, item.title, item.details, item.path].join(' ').toLowerCase();
+  if (/customer id|customer database|customer record|customer match/.test(text)) {
+    return {type:'CUSTOMER_SYNC',label:'Open Customer Database Sync',explanation:'Synchronize customer IDs and route records, then run Calendar Plan Audit again.'};
+  }
+  if (/registry|support sheet|schema|missing required column|initialize pmos|update pmos/.test(text)) {
+    return {type:'UPDATE_PMOS',label:'Open Update PMOS',explanation:'Repair or migrate the required PMOS support structures, then rerun the audit.'};
+  }
+  if (/transaction|recovery|interrupted|ambiguous/.test(text)) {
+    return {type:'TRANSACTION_RECOVERY',label:'Open Transaction Recovery',explanation:'Review the interrupted Calendar operation before synchronization continues.'};
+  }
+  if (/route template|stop order|layer|route row/.test(text)) {
+    return {type:'ROUTES_SHEET',label:'Open 4-Week Route Template',explanation:'Open the affected source sheet and correct the referenced route information.'};
+  }
+  if (/calendar name|season start|season end|app settings|effective date/.test(text)) {
+    return {type:'SETTINGS_SHEET',label:'Open App Settings',explanation:'Open App Settings and correct the referenced Calendar configuration.'};
+  }
   return {type:'NONE',label:'',explanation:'Review the details shown here.'};
 }
 
 function formatPmosCalendarDeletionCandidate_(operation) {
   const current = operation.payload && operation.payload.current || {};
-  return {operationId:String(operation.id || ''),seriesKey:String(operation.entityId || ''),title:String(current.title || operation.entityId || ''),layer:String(current.layer || ''),seriesId:String(current.seriesId || ''),reason:String(operation.reason || 'Series is not present in the current source of truth.')};
+  return {
+    operationId: String(operation.id || ''),
+    seriesKey: String(operation.entityId || ''),
+    title: String(current.title || operation.entityId || ''),
+    layer: String(current.layer || ''),
+    seriesId: String(current.seriesId || ''),
+    reason: String(operation.reason || 'Series is not present in the current source of truth.')
+  };
 }
 
 function formatPmosIgnoredEventDeletionCandidate_(item) {
   const eventKey = String(item.eventId || item.seriesId || item.operationId || '');
-  return {operationId:String(item.operationId || ''),seriesKey:eventKey,title:String(item.title || 'Unclassified Calendar event'),layer:'',seriesId:String(item.seriesId || item.eventId || ''),eventId:String(item.eventId || ''),start:String(item.start || ''),location:String(item.location || ''),reason:'This event was excluded from matching and Temporary Visit conversion. Choose whether to keep or delete it.'};
+  return {
+    operationId: String(item.operationId || ''),
+    seriesKey: eventKey,
+    title: String(item.title || 'Unclassified Calendar event'),
+    layer: '',
+    seriesId: String(item.seriesId || item.eventId || ''),
+    eventId: String(item.eventId || ''),
+    start: String(item.start || ''),
+    location: String(item.location || ''),
+    reason: 'This event was excluded from matching and Temporary Visit conversion. Choose whether to keep or delete it.'
+  };
 }
 
 function formatPmosCalendarUnclassifiedEvent_(operation) {
   const current = operation.payload && operation.payload.current || {};
-  return {operationId:String(operation.id || ''),eventId:String(current.eventId || operation.entityId || ''),seriesId:String(current.seriesId || ''),title:String(current.title || 'Unclassified Calendar event'),start:String(current.start || ''),end:String(current.end || ''),location:String(current.location || ''),description:String(current.description || ''),recurring:Boolean(current.seriesId),reason:String(operation.reason || 'Calendar event has no PMOS classification metadata.')};
+  return {
+    operationId: String(operation.id || ''),
+    eventId: String(current.eventId || operation.entityId || ''),
+    seriesId: String(current.seriesId || ''),
+    title: String(current.title || 'Unclassified Calendar event'),
+    start: String(current.start || ''),
+    end: String(current.end || ''),
+    location: String(current.location || ''),
+    description: String(current.description || ''),
+    recurring: Boolean(current.seriesId),
+    reason: String(operation.reason || 'Calendar event has no PMOS classification metadata.')
+  };
 }
 
+/**
+ * Audit owns review completion only. It does not determine execution readiness.
+ * Calendar Sync Preview approval delegates that decision to queue preparation.
+ */
 function openVerifiedCalendarSyncFromAudit() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (!audit.canSync) throw new Error('Calendar Plan Audit still has unresolved review items or errors. Complete the review before opening Calendar Sync.');
+  if (!audit.reviewComplete) {
+    throw new Error(
+      'Calendar Plan Audit still has unresolved review items. Complete the review before opening Calendar Sync.'
+    );
+  }
   openReviewedCalendarSyncPreview();
-  return {opened:true,started:false,selectedType:'CALENDAR_SYNC',planId:audit.planId};
+  return {
+    opened: true,
+    started: false,
+    selectedType: 'CALENDAR_SYNC',
+    planId: audit.planId
+  };
 }
 
 function formatPmosCalendarAuditRange_(startValue, endValue) {
-  const start = startValue ? String(startValue).slice(0,10) : 'Today';
-  const end = endValue ? String(endValue).slice(0,10) : 'Season End';
+  const start = startValue ? String(startValue).slice(0, 10) : 'Today';
+  const end = endValue ? String(endValue).slice(0, 10) : 'Season End';
   return start + ' through ' + end;
 }
