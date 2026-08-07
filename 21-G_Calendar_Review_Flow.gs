@@ -25,25 +25,21 @@ function saveAndAdvancePmosCalendarReview(reviewType, items, selectedIndexes) {
     throw new Error('The Calendar review step was not saved.');
   }
 
-  // Keep the original Calendar snapshot throughout review progression. The
-  // snapshot is rebuilt against the persistent Review Session decisions, so
-  // moving between stages does not reread the Calendar or rebuild the planner.
-  // A single fresh planner rebuild is performed only after the last review
-  // item receives a final disposition.
+  // Review progression reuses the original read-only audit snapshot. It does
+  // not rebuild the planner or determine execution readiness between stages.
   const next = continuePmosCalendarReviewFlow();
   return {
     saved: true,
     reviewType: type,
     decisionCount: Number(saved.decisionCount || 0),
     nextStep: String(next && next.opened || ''),
-    reviewComplete: Boolean(next && next.reviewComplete),
-    canSync: Boolean(next && next.canSync)
+    reviewComplete: Boolean(next && next.reviewComplete)
   };
 }
 
 /** Advance to the next unresolved Calendar review stage. */
 function continuePmosCalendarReviewFlow() {
-  let audit = runVerifiedCalendarPlanAuditReadOnly_();
+  const audit = runVerifiedCalendarPlanAuditReadOnly_();
 
   if (audit.hasErrors) {
     showCalendarAuditErrorsReview();
@@ -67,49 +63,15 @@ function continuePmosCalendarReviewFlow() {
   }
 
   if (audit.reviewComplete === true) {
-    // The stored snapshot reflects Calendar and planner state from the start
-    // of this Review Session. Its pre-review canExecute value may still be
-    // false because review warnings existed at that time. Rebuild exactly once
-    // now, with all saved decisions applied, before opening synchronization.
-    if (audit.canSync !== true) {
-      clearPmosCalendarAuditSnapshot_();
-      audit = runVerifiedCalendarPlanAuditReadOnly_({forceFresh: true});
-    }
-
-    if (audit.hasErrors) {
-      showCalendarAuditErrorsReview();
-      return {opened: 'ERRORS'};
-    }
-    if (audit.hasWarnings) {
-      showCalendarAuditWarningsReview();
-      return {opened: 'WARNINGS'};
-    }
-    if (audit.hasSuggestedMatches) {
-      showCalendarSuggestedMatchesReview();
-      return {opened: 'SUGGESTED_MATCHES'};
-    }
-    if (audit.hasUnclassifiedEvents) {
-      showCalendarUnclassifiedExceptionsReview();
-      return {opened: 'UNCLASSIFIED_EVENTS'};
-    }
-    if (Number(audit.deletionCandidateCount || 0) > 0) {
-      showCalendarDeletionExceptionsReview();
-      return {opened: 'SUGGESTED_DELETIONS'};
-    }
-
-    if (audit.reviewComplete === true) {
-      openReviewedCalendarSyncPreview();
-      return {
-        opened: 'CALENDAR_SYNC_PREVIEW',
-        reviewComplete: true,
-        canSync: audit.canSync === true
-      };
-    }
+    openReviewedCalendarSyncPreview();
+    return {
+      opened: 'CALENDAR_SYNC_PREVIEW',
+      reviewComplete: true
+    };
   }
 
   return {
     opened: '',
-    reviewComplete: false,
-    canSync: false
+    reviewComplete: false
   };
 }
