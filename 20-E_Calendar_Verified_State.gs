@@ -11,6 +11,7 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
   const records = [];
   const missingRegistrySeries = [];
   const seenSeriesIdentities = {};
+  const registeredSeriesKeys = {};
 
   (state.registeredSeries || []).forEach(function (observed) {
     const key = String(observed.seriesKey || '').trim();
@@ -26,6 +27,13 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
       });
       return;
     }
+
+    // A registered series key is the authoritative identity. Google Calendar
+    // may expose the same series ID in different forms when it is read through
+    // the registry and through an occurrence. Keep one canonical current record
+    // for the registered key rather than manufacturing a planner duplicate.
+    if (registeredSeriesKeys[key]) return;
+    registeredSeriesKeys[key] = true;
 
     const record = registryRecords[key] || observed;
     const seriesId = String(observed.seriesId || record.seriesId || '').trim();
@@ -56,6 +64,11 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
     const key = String(event.seriesKey || '').trim();
     const seriesId = String(event.seriesId || '').trim();
     if (!key || !seriesId) return;
+
+    // The registered record above already represents this managed series. Do
+    // not add its event-snapshot representation a second time merely because
+    // Google returned a differently formatted series ID.
+    if (registeredSeriesKeys[key]) return;
 
     const identity = key + '::' + seriesId;
     if (seenSeriesIdentities[identity]) return;
