@@ -34,6 +34,18 @@ function resumeReviewedCalendarSyncJobCenterExecution() {
   );
 }
 
+/**
+ * Explicit retry endpoint for a queue paused on error. Recovery is analyzed
+ * first; ambiguous transaction state remains blocked. Only then are failed
+ * queue rows returned to Pending for idempotent replay.
+ */
+function retryReviewedCalendarSyncJobCenterExecution() {
+  return runReviewedCalendarJobCenterEndpoint_(
+    'retryReviewedCalendarSyncJobCenterExecution',
+    function () { return retryReviewedCalendarSyncJobCenterExecution_(); }
+  );
+}
+
 /** Public installable-trigger entry point. */
 function runReviewedCalendarSyncWorker() {
   return runReviewedCalendarSyncWorker_();
@@ -82,11 +94,18 @@ function getReviewedCalendarSyncJobCenterStatus_() {
     startedAt: String(detailed && detailed.startedAt || ''),
     updatedAt: String(detailed && detailed.updatedAt || ''),
     completedAt: String(detailed && detailed.completedAt || ''),
-    reviewedQueue: true
+    reviewedQueue: true,
+    canRetry: status === 'Paused on error'
   };
 }
 
 function startReviewedCalendarSyncJobCenterExecution_() {
+  const state = readReviewedCalendarSyncState_();
+  if (state && String(state.status || '') === 'Paused on error') {
+    throw new Error(
+      'Calendar Sync is paused on an error. Use Retry After Recovery so PMOS can verify transaction state before replaying the operation.'
+    );
+  }
   startReviewedCalendarSyncExecution();
   armReviewedCalendarSyncPublicTrigger_();
   return getReviewedCalendarSyncJobCenterStatus_();
@@ -111,7 +130,17 @@ function pauseReviewedCalendarSyncJobCenterExecution_() {
 
 function resumeReviewedCalendarSyncJobCenterExecution_() {
   const state = readReviewedCalendarSyncState_();
-  if (!state) throw new Error('Calendar Sync has not been prepared. Approve the Calendar Sync Preview first.');
+  if (!state) {
+    throw new Error(
+      'Calendar Sync has not been prepared. Complete Calendar Plan Audit and approve the Sync Preview first.'
+    );
+  }
+  if (String(state.status || '') === 'Paused on error') {
+    throw new Error(
+      'Calendar Sync is paused on an error. Use Retry After Recovery instead of Resume.'
+    );
+  }
+
   state.pauseRequested = false;
   if (String(state.status || '') === 'Paused') {
     state.status = 'Prepared';
@@ -120,6 +149,99 @@ function resumeReviewedCalendarSyncJobCenterExecution_() {
     writeReviewedCalendarSyncState_(state);
   }
   return startReviewedCalendarSyncJobCenterExecution_();
+}
+
+function retryReviewedCalendarSyncJobCenterExecution_() {
+  let state = readReviewedCalendarSyncState_();
+  if (!state || !state.planId) {
+    throw new Error(
+      'Calendar Sync has no prepared reviewed queue. Run Calendar Plan Audit again.'
+    );
+  }
+  if (String(state.status || '') !== 'Paused on error') {
+    throw new Error('Calendar Sync is not paused on an error.');
+  }
+
+  const session = requireActivePmosReviewSession_('CALENDAR');
+  if (String(session.id || '') !== String(state.sessionId || '')) {
+    throw new Error(
+      'The Calendar Review Session changed after this queue was prepared. Run Calendar Plan Audit again.'
+    );
+  }
+
+  const recovery = recoverPmosCalendarRegistryTransactions_();
+  assertNoAmbiguousPmosCalendarRecovery_(recovery);
+
+  const reset = resetReviewedCalendarErrorRowsForRetry_(state);
+  if (!reset) {
+    throw new Error(
+      'No failed queue operation was available to retry. Run Calendar Plan Audit again if the queue is inconsistent.'
+    );
+  }
+
+  state = readReviewedCalendarSyncState_() || state;
+  state.status = 'Prepared';
+  state.phase = 'Recovery verified; ready to retry';
+  state.pauseRequested = false;
+  state.failed = 0;
+  state.lastError = '';
+  state.currentOperation = '';
+  state.updatedAt = new Date().toISOString();
+  writeReviewedCalendarSyncState_(state);
+
+  startReviewedCalendarSyncExecution();
+  armReviewedCalendarSyncPublicTrigger_();
+  return getReviewedCalendarSyncJobCenterStatus_();
+}
+
+function resetReviewedCalendarErrorRowsForRetry_(state) {
+  const total = Number(state && state.total || 0);
+  if (total <= 0) return 0;
+
+  const sheet = ensureReviewedCalendarSyncQueueSheet_();
+  if (sheet.getLastRow() < total + 1) {
+    throw new Error('Calendar Sync queue is missing one or more expected rows.');
+  }
+
+  const rows = sheet.getRange(
+    2,
+    1,
+    total,
+    PMOS_REVIEWED_SYNC_QUEUE_HEADERS.length
+  ).getValues();
+  let reset = 0;
+  let encounteredIncomplete = false;
+
+  for (let index = 0; index < rows.length; index++) {
+    const status = String(rows[index][4] || '');
+    if (status === 'Complete') {
+      if (encounteredIncomplete) {
+        throw new Error(
+          'Calendar Sync queue contains a Complete row after incomplete work. ' +
+          'PMOS will not rewrite the queue automatically.'
+        );
+      }
+      continue;
+    }
+
+    encounteredIncomplete = true;
+    if (status === 'Running') {
+      throw new Error(
+        'Calendar Sync queue still contains a Running operation. Run transaction recovery again before retrying.'
+      );
+    }
+    if (status === 'Error') {
+      sheet.getRange(index + 2, 5, 1, 4).setValues([[
+        'Pending',
+        Number(rows[index][5] || 0),
+        new Date(),
+        'Retry authorized after deterministic recovery analysis.'
+      ]]);
+      reset++;
+    }
+  }
+
+  return reset;
 }
 
 function repairStaleReviewedCalendarSyncSchedule_() {
@@ -180,5 +302,8 @@ function buildReviewedCalendarJobCenterSummary_(state) {
   );
   if (state.currentOperation) lines.push('Current: ' + state.currentOperation);
   if (state.retries) lines.push('Retries: ' + Number(state.retries || 0));
+  if (String(state.status || '') === 'Paused on error') {
+    lines.push('Use Retry After Recovery after correcting the reported problem.');
+  }
   return lines.join('\n');
 }
