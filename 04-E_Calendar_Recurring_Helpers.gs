@@ -203,28 +203,63 @@ function compareSeriesPlanToRegistry_(plan, registry, calendar) {
   return actions;
 }
 
+/**
+ * Canonical registry upsert. A matching Calendar Series ID is treated as the
+ * same PMOS object even when the series key changed during approved identity
+ * reconciliation, preventing duplicate active registry rows.
+ */
 function upsertSeriesRegistry_(plan, seriesId, calendarName, status, transactionId) {
   const sheet = ensureRecurringSeriesRegistry_();
   const registry = getSeriesRegistry_();
-  const existing = registry[plan.seriesKey] || null;
-  const identity = resolvePmosRegistryIdentity_(existing, plan, seriesId);
+  const targetSeriesId = String(seriesId || '').trim();
+  let existing = registry[plan.seriesKey] || null;
+
+  if (!existing && targetSeriesId) {
+    Object.keys(registry).some(function(key) {
+      const candidate = registry[key];
+      if (String(candidate.seriesId || '').trim() !== targetSeriesId) return false;
+      existing = candidate;
+      return true;
+    });
+  }
+
+  const identity = resolvePmosRegistryIdentity_(existing, plan, targetSeriesId);
   plan.objectId = identity.objectId;
   plan.currentVersion = identity.currentVersion;
   const now = new Date();
   const row = [
-    plan.seriesKey, plan.customerId, plan.layer, seriesId, calendarName,
+    plan.seriesKey, plan.customerId, plan.layer, targetSeriesId, calendarName,
     plan.signature, now, status, '', identity.objectId,
     identity.currentVersion, now, String(transactionId || '')
   ];
+
+  let targetRow = 0;
   if (existing) {
-    sheet.getRange(existing.row, 1, 1, row.length).setValues([row]);
+    targetRow = existing.row;
+    sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
   } else {
     sheet.appendRow(row);
+    targetRow = sheet.getLastRow();
   }
+
+  if (targetSeriesId && sheet.getLastRow() > 2) {
+    const refreshed = sheet.getDataRange().getValues();
+    for (let index = refreshed.length - 1; index >= 1; index--) {
+      const rowNumber = index + 1;
+      if (rowNumber === targetRow) continue;
+      const rowSeriesId = String(refreshed[index][3] || '').trim();
+      if (rowSeriesId === targetSeriesId) {
+        sheet.deleteRow(rowNumber);
+        if (rowNumber < targetRow) targetRow--;
+      }
+    }
+  }
+
   return {
     objectId: identity.objectId,
     currentVersion: identity.currentVersion,
-    seriesId: String(seriesId || '')
+    seriesId: targetSeriesId,
+    row: targetRow
   };
 }
 
