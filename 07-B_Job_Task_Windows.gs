@@ -55,11 +55,13 @@ function runPmosTask(taskType) {
 }
 
 function runPmosTask_(taskType) {
+  if (taskType === 'CALENDAR_AUDIT') {
+    showFreshCalendarAuditTaskWindow();
+    return {summary:'Opened the reviewed Calendar Plan Audit window.'};
+  }
+
   return withSpreadsheetServiceRetry_(function () {
     switch (taskType) {
-      case 'CALENDAR_AUDIT':
-        throw new Error('Calendar Plan Audit must be opened through the reviewed Audit window.');
-
       case 'CALENDAR_STATUS': {
         const preview = previewPmosCalendarSyncPlan();
         return {summary:[
