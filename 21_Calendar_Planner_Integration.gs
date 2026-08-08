@@ -14,9 +14,13 @@ function buildValidatedPmosCalendarSyncPlan_(options) {
     currentRegistry,
     options || {}
   );
-  const verifiedState = buildVerifiedPmosCalendarSeriesState_(
+  const rawVerifiedState = buildVerifiedPmosCalendarSeriesState_(
     currentState,
     currentRegistry
+  );
+  const verifiedState = reconcilePmosCalendarSeriesIdentities_(
+    desiredSeries,
+    rawVerifiedState
   );
 
   const basePlan = buildPmosCalendarSyncPlan(
@@ -273,6 +277,7 @@ function previewPmosCalendarSyncPlan(options) {
     includeStartedToday: Boolean(result.currentState.range.includeStartedToday),
     syncStart: result.currentState.range.start,
     syncEnd: result.currentState.range.end,
+    identityReconciliations: Number(result.verifiedState.identityReconciliationCount || 0),
     details: plan.operations.slice(0, 30).map(formatPmosCalendarPreviewOperation_),
     validation: result.validation,
     plan: plan
