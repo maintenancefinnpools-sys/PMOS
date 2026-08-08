@@ -1,9 +1,9 @@
 /**
  * Authoritative Calendar Repair executor.
  *
- * Repair combines surviving PMOS events and reviewed repair items into one
- * ordered day, applies the normal route-time semi-stagger, and checkpoints at
- * day boundaries so large repair ranges can resume safely.
+ * Repair combines surviving PMOS/route events and reviewed repair items into
+ * one ordered day, applies the repair semi-stagger from 6:00 AM, and
+ * checkpoints at day boundaries so large repair ranges can resume safely.
  */
 
 function repairCalendarDayBounds_(dateText) {
@@ -15,9 +15,13 @@ function repairCalendarDayBounds_(dateText) {
 
 function repairCalendarManagedDayEvents_(calendar, dateText) {
   const bounds = repairCalendarDayBounds_(dateText);
+  const identities = repairRouteIdentityPool_();
   return calendar.getEvents(bounds.start, bounds.end)
     .filter(function(event) { return !event.isAllDayEvent(); })
-    .filter(isPmosManagedCalendarEvent_)
+    .filter(function(event) {
+      return isPmosManagedCalendarEvent_(event) ||
+        repairEventMatchesRoute_(event, identities);
+    })
     .sort(function(a, b) {
       return a.getStartTime().getTime() - b.getStartTime().getTime();
     });
@@ -52,6 +56,17 @@ function repairCalendarEventAlreadyRepresentsItem_(event, item) {
   return normalize_(event.getTitle()) === normalize_(item.title);
 }
 
+/** Preserve normal alternating route intervals while anchoring Repair at 6 AM. */
+function repairCalendarSixAmTimeForOrder_(visitDate, order, settings) {
+  const normalFirst = routeTimeForOrder_(visitDate, 1, settings);
+  const normalTarget = routeTimeForOrder_(visitDate, order, settings);
+  const sixAm = new Date(visitDate);
+  sixAm.setHours(6, 0, 0, 0);
+  return new Date(
+    sixAm.getTime() + (normalTarget.getTime() - normalFirst.getTime())
+  );
+}
+
 function repairCalendarApplyDay_(calendar, dateText, repairItems, settings) {
   let existingEvents = repairCalendarManagedDayEvents_(calendar, dateText);
   const pendingItems = [];
@@ -77,7 +92,11 @@ function repairCalendarApplyDay_(calendar, dateText, repairItems, settings) {
 
   sequence.forEach(function(entry, index) {
     const combinedOrder = index + 1;
-    const targetStart = routeTimeForOrder_(visitDate, combinedOrder, settings);
+    const targetStart = repairCalendarSixAmTimeForOrder_(
+      visitDate,
+      combinedOrder,
+      settings
+    );
     const targetEnd = new Date(
       targetStart.getTime() + settings.eventDurationMinutes * 60000
     );
@@ -273,7 +292,7 @@ function calendarRepairCombinedStatus_(checkpoint, plan, dateKeys, status) {
       'Date range: ' + plan.start + ' through ' + plan.end,
       'Repair days processed: ' + processedDays + ' of ' + totalDays,
       'Visits created: ' + Number(checkpoint.created || 0),
-      'Existing PMOS visits repositioned: ' +
+      'Existing PMOS/route visits repositioned: ' +
         Number(checkpoint.repositioned || 0),
       'Already present and skipped: ' + Number(checkpoint.skipped || 0),
       'Errors: ' + errors.length,
