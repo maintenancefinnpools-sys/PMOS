@@ -46,10 +46,7 @@ function createMaintenanceCustomer(input) {
       request.email
     );
 
-    const customerId = 'CUS-' + Utilities.getUuid()
-      .replace(/-/g, '')
-      .slice(0, 12)
-      .toUpperCase();
+    const customerId = generateNextPmosCustomerId_();
     const sharedValues = buildMaintenanceCustomerSharedValues_(request, customerId);
 
     appendMappedMaintenanceRow_(customersSheet, customerTable, sharedValues);
