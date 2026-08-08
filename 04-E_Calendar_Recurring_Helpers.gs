@@ -99,6 +99,20 @@ function recurringSeriesSignature_(plan) {
   ));
 }
 
+/**
+ * Safe recurring-series lookup shared by synchronization, versioning and
+ * transaction recovery. Missing/deleted series resolve to null.
+ */
+function readPmosRecurringSeriesById_(calendar, seriesId) {
+  const id = String(seriesId || '').trim();
+  if (!calendar || !id) return null;
+  try {
+    return calendar.getEventSeriesById(id) || null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function getSeriesRegistry_() {
   const sheet = ensureRecurringSeriesRegistry_();
   const values = sheet.getDataRange().getValues();
@@ -127,9 +141,7 @@ function compareSeriesPlanToRegistry_(plan, registry, calendar) {
       actions.push({action:'CREATE',seriesKey:item.seriesKey,layer:item.layer,title:item.title,plan:item});
       return;
     }
-    let series = null;
-    try { series = calendar.getEventSeriesById(record.seriesId); }
-    catch (error) { console.warn('Could not read recurring series ' + record.seriesId + ': ' + error); }
+    const series = readPmosRecurringSeriesById_(calendar, record.seriesId);
     if (!series || record.signature !== item.signature) {
       actions.push({action:'UPDATE',seriesKey:item.seriesKey,layer:item.layer,title:item.title,plan:item,series:series});
     }
@@ -137,9 +149,7 @@ function compareSeriesPlanToRegistry_(plan, registry, calendar) {
   Object.keys(registry).forEach(function(key){
     if (expected[key]) return;
     const record = registry[key];
-    let series = null;
-    try { series = calendar.getEventSeriesById(record.seriesId); }
-    catch (error) { console.warn('Could not read obsolete recurring series ' + record.seriesId + ': ' + error); }
+    const series = readPmosRecurringSeriesById_(calendar, record.seriesId);
     actions.push({action:'DELETE',seriesKey:key,layer:record.layer,title:key,series:series});
   });
   return actions;
