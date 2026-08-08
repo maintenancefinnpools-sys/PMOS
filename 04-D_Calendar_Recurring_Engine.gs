@@ -155,5 +155,52 @@ function buildRecurringSeriesPlan_(routeReader) {
     a.row.order - b.row.order
   );
 
-  return plans;
+  return collapseEquivalentPmosRecurringPlans_(plans);
+}
+
+/**
+ * Repairs the specific duplicate shape produced by the old Customer Sync bug:
+ * two route rows resolve to the same Customer ID + layer and carry the same
+ * customer/calendar content, but have different physical Stop Order values.
+ *
+ * We collapse only equivalent rows. If two records share a series key but have
+ * materially different customer data, both are retained so the planner still
+ * raises a blocking duplicate-key error rather than guessing.
+ */
+function collapseEquivalentPmosRecurringPlans_(plans) {
+  const result = [];
+  const firstByKey = {};
+
+  (plans || []).forEach(function (plan) {
+    const key = String(plan && plan.seriesKey || '').trim();
+    if (!key || !firstByKey[key]) {
+      if (key) firstByKey[key] = plan;
+      result.push(plan);
+      return;
+    }
+
+    const first = firstByKey[key];
+    if (!areEquivalentPmosRecurringRouteRows_(first.row, plan.row)) {
+      result.push(plan);
+    }
+  });
+
+  return result;
+}
+
+function areEquivalentPmosRecurringRouteRows_(left, right) {
+  const a = left || {};
+  const b = right || {};
+  const textFields = [
+    'customerId', 'layer', 'title', 'fullName', 'address', 'frequency',
+    'entry', 'notes', 'phone', 'secondaryPhone', 'email', 'sanitization',
+    'automation'
+  ];
+
+  for (let index = 0; index < textFields.length; index++) {
+    const field = textFields[index];
+    if (normalize_(a[field]) !== normalize_(b[field])) return false;
+  }
+
+  return Boolean(a.yearRound) === Boolean(b.yearRound);
 }
