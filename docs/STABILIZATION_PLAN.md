@@ -10,10 +10,7 @@
 - Calendar events not represented by a source record are preserved by default and presented for review before any deletion.
 - Manually created one-time maintenance events are temporary-visit candidates. PMOS may suggest a customer match, but the user must approve inferred customer links.
 - Calendar Repair is a separate explicit recovery workflow. It is not a normal synchronization path.
-- Permanent Optimization updates the route template.
-- Temporary Optimization creates date-range-specific schedule overrides without changing the route template.
-- Optimizer results are approved planning records. Calendar Sync remains the only normal Calendar writer.
-- The Job Center uses resumable execution and durable state; legacy Calendar Auto-Continue is retired.
+- The Job Center uses the reviewed resumable Calendar worker; legacy generic Job Engine and Auto Continue execution are retired.
 
 ## Authoritative Calendar flow
 
@@ -33,42 +30,69 @@ Validated immutable Sync plan
 Reviewed Calendar Sync Queue
             |
             v
-Job Center / resumable worker
+Reviewed resumable worker
             |
-            v
-Google Calendar + Series Registry
+            +------------------+
+            |                  |
+            v                  v
+      Google Calendar   Series Registry
+            \                  /
+             \                /
+              v              v
+          Transaction History / Verification
 ```
 
-No Route Manager, customer-creation, legacy task window, or compatibility pathway may bypass this sequence to mutate Calendar.
+No Route Manager, customer-creation, legacy task window, compatibility pathway, or alternate reconciliation job may bypass this sequence to perform normal Calendar synchronization.
 
 ## Cleanup completed on `pmos-development`
 
-- Retired the old Calendar Sync modal and direct mutation executor.
+- Retired the old Calendar Sync modal and direct Calendar mutation executor.
 - Retired legacy Calendar Auto-Continue execution; only legacy-trigger cleanup remains.
 - Removed retired/duplicate Job Center and generic Calendar Sync provider pathways.
-- Removed obsolete compatibility placeholders and the unused alternate Job Engine registry.
+- Removed the obsolete generic Job runtime worker, operation-provider framework, and runtime activation override.
+- Retired both future delete-and-recreate Calendar reconciliation implementations.
+- Removed the destructive Calendar Rebuild pathway.
 - Removed duplicate address suggestion implementation.
 - Removed the legacy Add Maintenance Client path that could automatically launch Calendar synchronization.
 - Removed direct Calendar mutation paths from Route Manager.
 - Routed all Calendar Plan Audit entry points to the current reviewed Audit window.
 - Reduced generic task windows to immediate non-review operations only.
-- Restored recurring-series lookup/recovery helpers to the canonical recurring Calendar helper module after provider cleanup.
+- Integrated the authoritative reviewed recurring-series worker with Calendar Registry Transaction History and recovery.
+- Added deterministic replay of interrupted `Running` queue rows after transaction recovery.
+- Added an explicit **Retry After Recovery** path for jobs paused on an operation error; ambiguous transaction state remains blocked.
+- Consolidated recurring-series create/update/lookup/registry logic into the canonical recurring Calendar helpers.
+- Made canonical registry upsert preserve PMOS object identity when an approved series-key migration keeps the same Calendar Series ID.
+- Consolidated Calendar Repair ownership: safety/planning in `15-B`, editor persistence in `16`, combined-board UI in `19`, resumable combined-day execution in `18`.
+- Removed duplicate Calendar Repair safety/UI implementations.
 - Standardized new customer creation on the canonical PMOS customer-ID scheme.
+- Rewrote architecture documentation around the reviewed queue / transaction model.
 
 ## Remaining merge blockers
 
-1. **Reviewed worker transaction integration** — recurring CREATE/UPDATE/DELETE operations executed by the reviewed Calendar worker must participate in Calendar Registry Transaction History so interruption recovery covers the authoritative sync path, not only retired providers.
-2. **Executor consolidation** — reviewed recurring-series mutation helpers should reuse the canonical recurring Calendar helpers where possible so recurrence, metadata, registry and identity logic cannot drift.
-3. **Reference sweep** — run a final repository-wide symbol/reference audit after the deleted legacy modules are fully removed.
-4. **Documentation sweep** — update architecture documentation and comments that still describe removed Job Engine / Calendar Rebuild behavior.
-5. **End-to-end test** — validate Audit → Review → Sync Preview → Queue Preparation → Job Center → Calendar mutation → Registry verification → completion on a disposable Calendar.
-6. **Interruption test** — interrupt synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic recovery.
+1. **Final repository reference sweep** — verify there are no remaining calls to deleted legacy functions or duplicate global function definitions.
+2. **Repair-path verification** — exercise Preview → combined board → Save → Apply → continuation on a disposable date range after the Repair module consolidation.
+3. **End-to-end Calendar Sync test** — validate Audit → Review → Sync Preview → Queue Preparation → Job Center → Calendar mutation → Registry verification → completion on a disposable Calendar.
+4. **Interruption test** — interrupt recurring synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic transaction recovery and queue replay.
+5. **Retry-on-error test** — force a recoverable Calendar operation error, correct the cause, use **Retry After Recovery**, and confirm the same immutable operation resumes without duplication.
+6. **Legacy-trigger cleanup test** — confirm old Auto Continue, generic Job Engine, and reconciliation triggers only remove themselves and never mutate Calendar.
 7. **Merge-base reconciliation** — `main` has one independent compatibility commit. Preserve the canonical recurring-series signature implementation when reconciling branches; do not resurrect the removed compatibility module.
 
 ## Function ownership rule
 
 Every public function, private helper, trigger handler, and browser callback must have one implementation and one functional home. Compatibility modules may delegate to authoritative implementations but may not contain fallback copies of internal logic.
 
+Current Calendar ownership:
+
+- recurring planning/settings: `04-D` / `04-E`
+- recurring registry identity/versioning: `04-E` / `04-F` / `04-G`
+- reviewed audit/review: `20`–`22`
+- transaction history/recovery: `07-F`–`07-H`
+- reviewed Sync preparation/execution/status/Job Center adapter: `23_A`–`23_J`
+- Calendar Repair safety/plan: `15-B`
+- Calendar Repair editor persistence: `16_Calendar_Repair_Editor.gs`
+- Calendar Repair combined execution: `18_Calendar_Repair_Combined_Stagger.gs`
+- Calendar Repair combined board UI: `19_Calendar_Repair_Existing_Visits_Editor.gs`
+
 ## Merge gate
 
-`pmos-development` is not ready to merge until all remaining blockers above are resolved or explicitly accepted, and the disposable-Calendar end-to-end test passes without an alternate mutation pathway.
+`pmos-development` is not ready to merge until the remaining reference sweep and disposable-Calendar tests pass. No legacy Calendar writer should remain reachable before merge.
