@@ -113,6 +113,54 @@ function readPmosRecurringSeriesById_(calendar, seriesId) {
   }
 }
 
+/**
+ * Resolve one PMOS recurring series without guessing. Registry identity wins;
+ * when that identity is missing/stale, metadata may recover exactly one series.
+ */
+function findExistingPmosRecurringSeries_(calendar, plan, registryRecord) {
+  const fromRegistry = readPmosRecurringSeriesById_(
+    calendar,
+    registryRecord && registryRecord.seriesId
+  );
+  if (fromRegistry) return fromRegistry;
+
+  if (!calendar || !plan || !plan.seriesKey || !(plan.start instanceof Date)) {
+    return null;
+  }
+
+  const searchStart = new Date(plan.start.getTime());
+  searchStart.setDate(searchStart.getDate() - 1);
+  searchStart.setHours(0, 0, 0, 0);
+  const searchEnd = new Date(plan.start.getTime());
+  searchEnd.setDate(searchEnd.getDate() + 35);
+  searchEnd.setHours(23, 59, 59, 999);
+
+  const matchesBySeriesId = {};
+  calendar.getEvents(searchStart, searchEnd).forEach(function(event) {
+    let recurring = false;
+    try { recurring = event.isRecurringEvent(); } catch (error) { recurring = false; }
+    if (!recurring) return;
+
+    const metadata = parsePmosCalendarMetadata_(event.getDescription());
+    if (String(metadata.PMOS_SERIES_KEY || '') !== String(plan.seriesKey || '')) return;
+
+    const seriesId = readPmosCalendarEventSeriesId_(event);
+    if (seriesId) matchesBySeriesId[seriesId] = true;
+  });
+
+  const seriesIds = Object.keys(matchesBySeriesId);
+  if (seriesIds.length > 1) {
+    throw new Error(
+      'More than one recurring Calendar series has PMOS series key ' +
+      plan.seriesKey + '. Resolve the duplicate before synchronization continues.'
+    );
+  }
+
+  return seriesIds.length
+    ? readPmosRecurringSeriesById_(calendar, seriesIds[0])
+    : null;
+}
+
 function getSeriesRegistry_() {
   const sheet = ensureRecurringSeriesRegistry_();
   const values = sheet.getDataRange().getValues();
