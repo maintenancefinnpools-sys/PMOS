@@ -1,8 +1,10 @@
 /**
- * PMOS Calendar safety and historical repair support.
+ * PMOS Calendar safety and repair planning foundation.
  *
- * Historical Calendar records are protected by an explicit effective date.
- * Repair application is resumable and runs until the shared runtime deadline.
+ * This module owns protected-date parsing, Calendar mutation guards, repair
+ * plan construction and repair-plan persistence. The editable Repair UI lives
+ * in 16_Calendar_Repair_Editor.gs and execution lives in
+ * 18_Calendar_Repair_Combined_Stagger.gs.
  */
 
 const PMOS_CALENDAR_EFFECTIVE_DATE_KEY = 'PMOS_CALENDAR_EFFECTIVE_DATE';
@@ -36,8 +38,7 @@ function parseCalendarEffectiveDate_(value) {
   today.setHours(0, 0, 0, 0);
   if (date.getTime() < today.getTime()) {
     throw new Error(
-      'The effective date cannot be earlier than today. ' +
-      'Historical Calendar records are protected.'
+      'The effective date cannot be earlier than today. Historical Calendar records are protected.'
     );
   }
   return date;
@@ -85,12 +86,16 @@ function assertCalendarMutationIsSafe_(date, allowHistoricalRepair) {
 }
 
 function isPmosManagedCalendarEvent_(event) {
-  const description = String(event && event.getDescription
-    ? event.getDescription() || ''
-    : '');
-  return description.indexOf('PMOS_SERIES_KEY=') >= 0 ||
+  const description = String(
+    event && typeof event.getDescription === 'function'
+      ? event.getDescription() || ''
+      : ''
+  );
+  return description.indexOf('PMOS_MANAGED=true') >= 0 ||
+    description.indexOf('PMOS_SERIES_KEY=') >= 0 ||
     description.indexOf('PMOS_CUSTOMER_ID=') >= 0 ||
-    description.indexOf('PMOS_TEMP_VISIT=') >= 0 ||
+    description.indexOf('PMOS_TEMP_VISIT_ID=') >= 0 ||
+    description.indexOf(PMOS_TEMP_VISIT_MARKER) >= 0 ||
     description.indexOf('PMOS_HISTORY_REPAIR=true') >= 0;
 }
 
@@ -108,7 +113,7 @@ function buildExpectedRepairVisits_(startDate, endDate) {
   };
   const visits = [];
 
-  routes.forEach(function (row) {
+  routes.forEach(function(row) {
     const parsed = parseLayer_(row.layer);
     if (offsets[parsed.day] == null) return;
 
@@ -137,7 +142,11 @@ function buildExpectedRepairVisits_(startDate, endDate) {
         title: row.title,
         layer: row.layer,
         order: Number(row.order || 1),
-        date: Utilities.formatDate(visitDate, PMOS.TIMEZONE, 'yyyy-MM-dd'),
+        date: Utilities.formatDate(
+          visitDate,
+          PMOS.TIMEZONE,
+          'yyyy-MM-dd'
+        ),
         start: start.toISOString(),
         end: end.toISOString(),
         address: row.address || '',
@@ -155,7 +164,7 @@ function buildExpectedRepairVisits_(startDate, endDate) {
 }
 
 function repairVisitExists_(events, visit) {
-  return events.some(function (event) {
+  return (events || []).some(function(event) {
     const eventDate = Utilities.formatDate(
       event.getStartTime(),
       PMOS.TIMEZONE,
@@ -175,6 +184,13 @@ function repairVisitExists_(events, visit) {
 }
 
 function buildCalendarRepairPlan_(start, end) {
+  if (!(start instanceof Date) || !(end instanceof Date)) {
+    throw new Error('Calendar Repair requires valid begin and end dates.');
+  }
+  if (end.getTime() < start.getTime()) {
+    throw new Error('End date must be on or after begin date.');
+  }
+
   const calendar = getRecurringCalendar_();
   const queryEnd = new Date(end);
   queryEnd.setDate(queryEnd.getDate() + 1);
@@ -186,7 +202,7 @@ function buildCalendarRepairPlan_(start, end) {
     createdAt: new Date().toISOString(),
     start: Utilities.formatDate(start, PMOS.TIMEZONE, 'yyyy-MM-dd'),
     end: Utilities.formatDate(end, PMOS.TIMEZONE, 'yyyy-MM-dd'),
-    items: expected.filter(function (visit) {
+    items: expected.filter(function(visit) {
       return !repairVisitExists_(existing, visit);
     })
   };
@@ -209,6 +225,12 @@ function readRepairPlan_() {
   }
 }
 
+function clearCalendarRepairPlan_() {
+  PropertiesService.getDocumentProperties()
+    .deleteProperty(PMOS_CALENDAR_REPAIR_PLAN_KEY);
+  clearPmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION);
+}
+
 function previewCalendarRepairPlan(startValue, endValue) {
   const start = parseRepairDate_(startValue, 'Begin date');
   const end = parseRepairDate_(endValue, 'End date');
@@ -219,7 +241,7 @@ function previewCalendarRepairPlan(startValue, endValue) {
   const plan = saveRepairPlan_(buildCalendarRepairPlan_(start, end));
   clearPmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION);
 
-  const sample = plan.items.slice(0, 12).map(function (item) {
+  const sample = plan.items.slice(0, 12).map(function(item) {
     return item.date + ' — ' + item.title +
       ' (' + item.layer + ', stop ' + item.order + ')';
   });
@@ -229,212 +251,12 @@ function previewCalendarRepairPlan(startValue, endValue) {
     summary: [
       'Repair range: ' + plan.start + ' through ' + plan.end,
       'Missing visits found: ' + plan.items.length,
-      sample.length ? '\nPreview:\n' + sample.join('\n') : '\nNo repair is required.'
+      sample.length
+        ? '\nPreview:\n' + sample.join('\n')
+        : '\nNo repair is required.',
+      plan.items.length
+        ? '\nOpen the editable preview before applying if route order needs adjustment.'
+        : ''
     ].join('\n')
   };
-}
-
-function saveCalendarRepairBoardPlan(changes) {
-  if (!Array.isArray(changes)) {
-    throw new Error('Edited repair data is missing.');
-  }
-  const plan = readRepairPlan_();
-  if (!plan) throw new Error('Run Calendar Repair Preview first.');
-
-  const byId = {};
-  changes.forEach(function (change) {
-    byId[String(change.id)] = change;
-  });
-  const settings = getRecurringCalendarSettings_();
-
-  plan.items = plan.items.map(function (item) {
-    const change = byId[String(item.id)];
-    if (!change) return item;
-
-    const date = parseRepairDate_(change.date, 'Repair date');
-    const order = Math.max(1, Number(change.order || 1));
-    const start = routeTimeForOrder_(date, order, settings);
-
-    item.date = Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd');
-    item.order = order;
-    item.start = start.toISOString();
-    item.end = new Date(
-      start.getTime() + settings.eventDurationMinutes * 60000
-    ).toISOString();
-    return item;
-  });
-
-  saveRepairPlan_(plan);
-  clearPmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION);
-  return {
-    summary: 'Edited repair preview saved. ' +
-      plan.items.length + ' visit(s) are ready to apply.'
-  };
-}
-
-function applyCalendarRepairPlan(startValue, endValue) {
-  const start = parseRepairDate_(startValue, 'Begin date');
-  const end = parseRepairDate_(endValue, 'End date');
-  const startText = Utilities.formatDate(start, PMOS.TIMEZONE, 'yyyy-MM-dd');
-  const endText = Utilities.formatDate(end, PMOS.TIMEZONE, 'yyyy-MM-dd');
-
-  let plan = readRepairPlan_();
-  if (!plan || plan.start !== startText || plan.end !== endText) {
-    plan = saveRepairPlan_(buildCalendarRepairPlan_(start, end));
-  }
-
-  savePmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION, {
-    index: 0,
-    created: 0,
-    skipped: 0,
-    errors: [],
-    start: startText,
-    end: endText
-  });
-
-  return runCalendarRepairRuntime_();
-}
-
-function runCalendarRepairContinuation() {
-  return runCalendarRepairRuntime_();
-}
-
-function runCalendarRepairRuntime_() {
-  const plan = readRepairPlan_();
-  if (!plan) throw new Error('No Calendar repair plan is available.');
-
-  const context = createPmosRuntimeContext_(PMOS_CALENDAR_REPAIR_OPERATION);
-  const lock = acquirePmosRuntimeLock_(context, 1000);
-
-  try {
-    const calendar = getRecurringCalendar_();
-    const start = parseRepairDate_(plan.start, 'Begin date');
-    const end = parseRepairDate_(plan.end, 'End date');
-    const queryEnd = new Date(end);
-    queryEnd.setDate(queryEnd.getDate() + 1);
-    const existing = calendar.getEvents(start, queryEnd);
-
-    const checkpoint = readPmosRuntimeCheckpoint_(
-      PMOS_CALENDAR_REPAIR_OPERATION
-    ) || {
-      index: 0,
-      created: 0,
-      skipped: 0,
-      errors: [],
-      start: plan.start,
-      end: plan.end
-    };
-
-    while (
-      checkpoint.index < plan.items.length &&
-      !pmosRuntimeShouldYield_(context)
-    ) {
-      const item = plan.items[checkpoint.index];
-
-      if (repairVisitExists_(existing, item)) {
-        checkpoint.skipped++;
-      } else {
-        try {
-          const visitDate = parseRepairDate_(item.date, 'Repair date');
-          assertCalendarMutationIsSafe_(visitDate, true);
-
-          const description = [
-            item.description,
-            '',
-            'PMOS_HISTORY_REPAIR=true',
-            item.customerId
-              ? 'PMOS_CUSTOMER_ID=' + item.customerId
-              : '',
-            'PMOS_REPAIR_ORIGINAL_LAYER=' + item.layer,
-            'PMOS_REPAIR_APPLIED_DATE=' + item.date,
-            'PMOS_REPAIR_STOP_ORDER=' + item.order
-          ].filter(Boolean).join('\n');
-
-          const event = calendar.createEvent(
-            item.title,
-            new Date(item.start),
-            new Date(item.end),
-            {
-              description: description,
-              location: item.address || ''
-            }
-          );
-          if (item.color) event.setColor(item.color);
-          existing.push(event);
-          checkpoint.created++;
-        } catch (error) {
-          checkpoint.errors.push(
-            item.date + ' ' + item.title + ': ' + String(error)
-          );
-        }
-      }
-
-      checkpoint.index++;
-      savePmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION, checkpoint);
-      heartbeatPmosRuntimeOperation_(context);
-    }
-
-    if (checkpoint.index < plan.items.length) {
-      scheduleCalendarRepairContinuation_(2000);
-      releasePmosRuntimeLock_(lock, context);
-      return calendarRepairStatus_(checkpoint, plan, 'Waiting');
-    }
-
-    removeCalendarRepairContinuation_();
-    PropertiesService.getDocumentProperties()
-      .deleteProperty(PMOS_CALENDAR_REPAIR_PLAN_KEY);
-    completePmosRuntimeOperation_(
-      PMOS_CALENDAR_REPAIR_OPERATION,
-      lock,
-      context
-    );
-    return calendarRepairStatus_(checkpoint, plan, 'Complete');
-  } catch (error) {
-    abandonPmosRuntimeOperation_(lock, context);
-    throw error;
-  }
-}
-
-function calendarRepairStatus_(checkpoint, plan, status) {
-  const errors = Array.isArray(checkpoint.errors)
-    ? checkpoint.errors
-    : [];
-  return {
-    status: status,
-    created: Number(checkpoint.created || 0),
-    skipped: Number(checkpoint.skipped || 0),
-    errors: errors.length,
-    remaining: Math.max(0, plan.items.length - Number(checkpoint.index || 0)),
-    summary: [
-      status === 'Complete'
-        ? 'Calendar repair complete.'
-        : 'Calendar repair saved and will continue automatically.',
-      'Date range: ' + plan.start + ' through ' + plan.end,
-      'Visits created: ' + Number(checkpoint.created || 0),
-      'Already present and skipped: ' + Number(checkpoint.skipped || 0),
-      'Remaining: ' +
-        Math.max(0, plan.items.length - Number(checkpoint.index || 0)),
-      'Errors: ' + errors.length,
-      errors.length ? 'First error: ' + errors[0] : ''
-    ].filter(Boolean).join('\n')
-  };
-}
-
-function scheduleCalendarRepairContinuation_(delayMs) {
-  removeCalendarRepairContinuation_();
-  ScriptApp.newTrigger(PMOS_CALENDAR_REPAIR_TRIGGER_HANDLER)
-    .timeBased()
-    .after(Math.max(1000, Number(delayMs || 0)))
-    .create();
-}
-
-function removeCalendarRepairContinuation_() {
-  ScriptApp.getProjectTriggers()
-    .filter(function (trigger) {
-      return trigger.getHandlerFunction() ===
-        PMOS_CALENDAR_REPAIR_TRIGGER_HANDLER;
-    })
-    .forEach(function (trigger) {
-      ScriptApp.deleteTrigger(trigger);
-    });
 }
