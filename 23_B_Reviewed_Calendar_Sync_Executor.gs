@@ -452,23 +452,41 @@ function reviveReviewedCalendarSeriesPlan_(plan) {
   return copy;
 }
 
+/**
+ * Upserts by current key first, then by Calendar Series ID. The Series ID
+ * fallback is what turns a reconciled UPDATE into an identity migration rather
+ * than appending a second registry row with the new key.
+ */
 function upsertReviewedSeriesRegistry_(plan, seriesId, calendarName, status) {
   const sheet = ensureRecurringSeriesRegistry_();
   const values = sheet.getDataRange().getValues();
+  const targetKey = String(plan && plan.seriesKey || '').trim();
+  const targetSeriesId = String(seriesId || '').trim();
   let rowNumber = 0;
 
+  // Prefer an already-current key.
   for (let index = 1; index < values.length; index++) {
-    if (String(values[index][0] || '') === String(plan.seriesKey || '')) {
+    if (String(values[index][0] || '').trim() === targetKey) {
       rowNumber = index + 1;
       break;
     }
   }
 
+  // Identity migration: same real Calendar series, new PMOS series key.
+  if (!rowNumber && targetSeriesId) {
+    for (let index = 1; index < values.length; index++) {
+      if (String(values[index][3] || '').trim() === targetSeriesId) {
+        rowNumber = index + 1;
+        break;
+      }
+    }
+  }
+
   const row = [
-    plan.seriesKey,
+    targetKey,
     plan.customerId || '',
     plan.layer || '',
-    seriesId,
+    targetSeriesId,
     calendarName,
     plan.signature || '',
     new Date(),
@@ -476,8 +494,26 @@ function upsertReviewedSeriesRegistry_(plan, seriesId, calendarName, status) {
     ''
   ];
 
-  if (rowNumber) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
-  else sheet.appendRow(row);
+  if (rowNumber) {
+    // Write only operational columns so PMOS Object ID/version/history columns
+    // survive an identity migration on the same registry row.
+    sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet.appendRow(row);
+  }
+
+  // Defensive cleanup: if legacy execution previously appended a duplicate row
+  // for this same Calendar Series ID, keep the row with the current key only.
+  if (targetSeriesId && sheet.getLastRow() > 2) {
+    const refreshed = sheet.getDataRange().getValues();
+    for (let index = refreshed.length - 1; index >= 1; index--) {
+      const rowKey = String(refreshed[index][0] || '').trim();
+      const rowSeriesId = String(refreshed[index][3] || '').trim();
+      if (rowSeriesId === targetSeriesId && rowKey !== targetKey) {
+        sheet.deleteRow(index + 1);
+      }
+    }
+  }
 }
 
 function deleteReviewedSeriesRegistryRow_(seriesKey) {
