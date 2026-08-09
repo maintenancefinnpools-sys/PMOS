@@ -90,21 +90,6 @@ function diffPmosRecords(before, after, options) {
   });
 }
 
-function diffPmosCustomers(before, after, options) {
-  if (before != null && before.type && before.type !== 'CUSTOMER') {
-    throw new Error('Before record is not a canonical CUSTOMER.');
-  }
-  if (after != null && after.type && after.type !== 'CUSTOMER') {
-    throw new Error('After record is not a canonical CUSTOMER.');
-  }
-  return diffPmosRecords(before, after, options);
-}
-
-function arePmosValuesEqual(left, right, options) {
-  const settings = normalizePmosDiffOptions_(options);
-  return pmosDiffValuesEqual_(left, right, settings, '');
-}
-
 function normalizePmosDiffOptions_(options) {
   const source = options || {};
   const includeFields = normalizePmosDiffPathList_(source.includeFields);
