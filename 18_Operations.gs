@@ -25,14 +25,6 @@ const PMOS_OPERATION_PRIORITY = Object.freeze({
   CRITICAL: 'CRITICAL'
 });
 
-const PMOS_OPERATION_STATUS = Object.freeze({
-  PENDING: 'PENDING',
-  COMPLETED: 'COMPLETED',
-  FAILED: 'FAILED',
-  BLOCKED: 'BLOCKED',
-  SKIPPED: 'SKIPPED'
-});
-
 /**
  * Creates one immutable operation.
  *
