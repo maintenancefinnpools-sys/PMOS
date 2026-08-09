@@ -101,13 +101,6 @@ function validatePmosPlan(plan, options) {
   return buildPmosValidationReport_(plan, issues, operationReports);
 }
 
-/** Validates one operation independently. */
-function validatePmosOperation(operation, options) {
-  const settings = normalizePmosValidationOptions_(options);
-  const issues = validatePmosOperation_(operation, 0, null, settings);
-  return buildPmosOperationValidationReport_(operation, 0, issues);
-}
-
 function validatePmosOperation_(operation, index, plan, settings) {
   const issues = [];
   const reference = operation && operation.id ? operation.id : 'operation[' + index + ']';
