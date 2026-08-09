@@ -105,12 +105,14 @@ Test with a deliberately instrumented/disposable setup.
 - [ ] Calendar Rebuild entry points fail/redirect safely and cannot delete/recreate the Calendar.
 - [ ] future/date-based reconciliation entry points fail/redirect safely and cannot delete/recreate future Calendar state.
 
-## 12. Merge-base reconciliation
+## 12. Baseline promotion
 
-- [ ] Reconcile the one `main`-only commit without restoring `13_Compatibility.gs`.
-- [ ] Keep the canonical `recurringSeriesSignature_` implementation in `04-E_Calendar_Recurring_Helpers.gs`.
-- [ ] Re-run this checklist after the final merge-base reconciliation commit.
+- [x] Remove the accidental independent `main` compatibility commit.
+- [x] Confirm `main` is no longer ahead of `pmos-development`.
+- [ ] Confirm the canonical `recurringSeriesSignature_` remains owned only by `04-E_Calendar_Recurring_Helpers.gs`.
+- [ ] Complete the final duplicate/reference sweep on `pmos-development`.
+- [ ] After all runtime checks pass, promote the cleaned `pmos-development` commit directly as the new `main` baseline without restoring retired compatibility code.
 
 ## Merge gate
 
-Merge to `main` only when the repository loads successfully in Apps Script, the duplicate/reference sweep is clean, and all Calendar Sync safety tests above pass on disposable data.
+Promote `pmos-development` to `main` only when the repository loads successfully in Apps Script, the duplicate/reference sweep is clean, and all Calendar Sync safety tests above pass on disposable data.
