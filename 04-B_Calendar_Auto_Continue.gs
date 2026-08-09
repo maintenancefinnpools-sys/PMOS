@@ -32,10 +32,6 @@ function runPmosJobTrigger_() {
   retireLegacyCalendarExecutionState_();
 }
 
-function retireLegacyCalendarAutoContinue_() {
-  return retireLegacyCalendarExecutionState_();
-}
-
 function retireLegacyCalendarExecutionState_() {
   const legacyHandlers = {
     runCalendarAutoContinueTrigger: true,
