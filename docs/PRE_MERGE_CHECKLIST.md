@@ -77,15 +77,29 @@ Test with a deliberately instrumented/disposable setup.
 
 ## 9. Customer creation / Route Manager boundaries
 
-- [ ] Create a maintenance customer.
+- [ ] Create a maintenance customer using the currently supported workflow.
 - [ ] Confirm Customers and route-template rows are created correctly.
-- [ ] Confirm customer creation does not directly mutate Calendar or auto-start Calendar Sync.
-- [ ] Confirm the new Calendar change appears in the next Plan Audit.
+- [ ] Confirm current baseline behavior remains unchanged during stabilization.
+- [ ] Confirm the resulting future Calendar changes are discoverable by Calendar Plan Audit.
 - [ ] Reorder a route in Route Manager.
 - [ ] Confirm Stop Order / Map Label and pending-change state update.
 - [ ] Confirm Route Manager does not directly mutate Calendar.
 
-## 10. Calendar Repair
+Future Add Maintenance Customer work is intentionally separate from this stabilization merge: its final approval should eventually update the authoritative customer/route data and then start the required safe future Calendar synchronization automatically, without a second manual Sync action.
+
+## 10. Temporary Visits
+
+Temporary Visit redesign is deferred until optimizer-backed placement work. Preserve the currently functioning one-day workflow during stabilization.
+
+- [ ] Schedule a temporary visit on disposable Calendar data.
+- [ ] Confirm only the selected service day is changed.
+- [ ] Confirm the visit is created exactly once with Temporary Visit metadata.
+- [ ] Confirm the day's event order/times are adjusted as expected.
+- [ ] Confirm the temporary visit remains recognizable by the later Audit/Review flow.
+
+Do not require the Temporary Visit scheduler to use the recurring reviewed Sync engine for this merge. Its direct one-day writer is a documented temporary exception and will be redesigned with the optimizer workflow.
+
+## 11. Calendar Repair
 
 - [ ] Preview a disposable repair range.
 - [ ] Open the combined repair board.
@@ -96,16 +110,15 @@ Test with a deliberately instrumented/disposable setup.
 - [ ] Confirm repair items are created once and are recognized on retry.
 - [ ] Test a repair range large enough to require continuation and confirm checkpoint/resume at day boundaries.
 
-## 11. Legacy pathways
+## 12. Legacy pathways
 
-- [ ] `showCalendarPlanAudit()` opens the current Audit flow.
-- [ ] `previewRouteChangesFromSheet()` opens the current Audit flow.
-- [ ] `applyCalendarChangesFromSheet()` opens the current Audit flow and does not apply Calendar changes.
-- [ ] direct `applyCalendarChanges()` fails explicitly.
-- [ ] Calendar Rebuild entry points fail/redirect safely and cannot delete/recreate the Calendar.
-- [ ] future/date-based reconciliation entry points fail/redirect safely and cannot delete/recreate future Calendar state.
+- [ ] Confirm no current menu or web-app control references deleted Calendar Audit/Sync compatibility functions.
+- [ ] Confirm remaining stale-trigger handlers only clean obsolete state and never mutate Calendar.
+- [ ] Confirm Calendar Rebuild entry points are gone or fail/redirect safely and cannot delete/recreate the Calendar.
+- [ ] Confirm future/date-based reconciliation entry points are gone or fail/redirect safely and cannot delete/recreate future Calendar state.
+- [ ] Confirm no alternate customer-sync engine creates competing Customer ID formats.
 
-## 12. Baseline promotion
+## 13. Baseline promotion
 
 - [x] Remove the accidental independent `main` compatibility commit.
 - [x] Confirm `main` is no longer ahead of `pmos-development`.
@@ -115,4 +128,4 @@ Test with a deliberately instrumented/disposable setup.
 
 ## Merge gate
 
-Promote `pmos-development` to `main` only when the repository loads successfully in Apps Script, the duplicate/reference sweep is clean, and all Calendar Sync safety tests above pass on disposable data.
+Promote `pmos-development` to `main` only when the repository loads successfully in Apps Script, the duplicate/reference sweep is clean, and all recurring Calendar Sync safety tests above pass on disposable data. The current Temporary Visit one-day mutation workflow is an explicit deferred exception, not a merge blocker, provided its existing behavior still passes its focused smoke test.
