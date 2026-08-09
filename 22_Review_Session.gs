@@ -83,11 +83,6 @@ function loadPmosReviewSessionDecisions_(sessionId) {
   return decisions;
 }
 
-function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
-  const session = getOrBeginPmosReviewSession_(scope, sourceVersion);
-  return writePmosReviewSessionDecisions_(session, records);
-}
-
 function savePmosReviewStep_(scope, reviewType, records) {
   const session = requireActivePmosReviewSession_(scope);
   const normalizedType = String(reviewType || '').trim().toUpperCase();
