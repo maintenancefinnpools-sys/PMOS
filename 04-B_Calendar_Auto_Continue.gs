@@ -56,7 +56,9 @@ function retireLegacyCalendarExecutionState_() {
     'PMOS_CALENDAR_REBUILD_STATE',
     'PMOS_RECONCILE_BATCH_JOB_V1',
     'PMOS_CALENDAR_SYNC_EFFECTIVE_DATE',
-    'PMOS_ACTIVE_JOB_V1'
+    'PMOS_ACTIVE_JOB_V1',
+    'PMOS_RUNTIME_ACTIVE_OPERATION_V1',
+    'PMOS_RUNTIME_CHECKPOINT_V1_CALENDAR_RECONCILE'
   ].forEach(function(key) {
     properties.deleteProperty(key);
   });
@@ -69,7 +71,6 @@ function retireLegacyCalendarExecutionState_() {
   }
   properties.deleteProperty(partsKey);
 
-  clearPmosRuntimeCheckpoint_('CALENDAR_RECONCILE');
   return true;
 }
 
