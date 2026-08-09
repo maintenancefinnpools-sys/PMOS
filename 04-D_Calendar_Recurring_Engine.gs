@@ -57,18 +57,6 @@ function getRecurringCalendarSettings_() {
   };
 }
 
-function parseSettingDate_(value, fallback) {
-  const fallbackDate = fallback instanceof Date
-    ? new Date(fallback)
-    : new Date();
-
-  return parseSettingDateForYear_(
-    value,
-    fallbackDate.getFullYear(),
-    fallbackDate
-  );
-}
-
 /**
  * Builds the desired recurring-series plan.
  *
