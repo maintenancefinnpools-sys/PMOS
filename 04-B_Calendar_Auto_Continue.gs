@@ -35,7 +35,8 @@ function retireLegacyCalendarExecutionState_() {
   const legacyHandlers = {
     runCalendarAutoContinueTrigger: true,
     runFutureCalendarReconciliationContinuation: true,
-    continueBatchedCalendarReconcile: true
+    continueBatchedCalendarReconcile: true,
+    runPmosJobTrigger_: true
   };
 
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -45,9 +46,15 @@ function retireLegacyCalendarExecutionState_() {
   });
 
   const properties = PropertiesService.getDocumentProperties();
-  properties.deleteProperty('PMOS_CALENDAR_AUTO_JOB');
-  properties.deleteProperty('PMOS_RECONCILE_BATCH_JOB_V1');
-  properties.deleteProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE');
+  [
+    'PMOS_CALENDAR_AUTO_JOB',
+    'PMOS_CALENDAR_REBUILD_STATE',
+    'PMOS_RECONCILE_BATCH_JOB_V1',
+    'PMOS_CALENDAR_SYNC_EFFECTIVE_DATE',
+    'PMOS_ACTIVE_JOB_V1'
+  ].forEach(function(key) {
+    properties.deleteProperty(key);
+  });
 
   const partsKey = 'PMOS_CALENDAR_RECONCILE_PLAN_V2_PARTS';
   const planKey = 'PMOS_CALENDAR_RECONCILE_PLAN_V2';
