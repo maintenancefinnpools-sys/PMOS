@@ -50,14 +50,18 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 - Retired the old Calendar Sync modal and direct mutation executor.
 - Removed the old Calendar Auto-Continue engine; legacy trigger/state cleanup is centralized in one non-mutating retirement shim.
 - Removed retired/duplicate Job Center and generic Calendar Sync provider pathways.
-- Removed the obsolete generic Job runtime worker, operation-provider framework, and runtime activation override.
+- Removed the obsolete generic Job runtime worker, operation-provider framework, runtime activation override, and persisted generic Job state machine. Legacy public Job functions are now stateless redirects/cleanup adapters only.
+- Removed obsolete generic Job constants; the shared Job History sheet remains because current Operations still uses it.
 - Removed both future delete-and-recreate Calendar reconciliation engines. Their old continuation handlers now only clean obsolete trigger/state and cannot mutate Calendar.
-- Removed the destructive Calendar Rebuild pathway; only non-mutating compatibility/cleanup adapters remain where still needed by upgrades.
+- Removed the destructive Calendar Rebuild pathway; only non-mutating compatibility adapters remain where still needed by older callers.
+- Centralized cleanup of old Auto Continue, Rebuild, reconciliation, and generic Job properties/triggers in the legacy execution retirement shim.
 - Removed duplicate address suggestion implementation.
 - Removed the legacy Add Maintenance Client path that could automatically launch Calendar synchronization.
 - Removed direct Calendar mutation paths from Route Manager.
+- Consolidated old Calendar Audit/Sync public navigation names into one redirect-only module and removed the redundant Audit compatibility file.
 - Routed all Calendar Plan Audit entry points to the current reviewed Audit window.
 - Reduced generic task windows to immediate non-review operations only.
+- Updated spreadsheet lifecycle/update messaging and Feature Lab terminology so they no longer advertise retired direct Sync/Rebuild paths.
 - Integrated the authoritative reviewed recurring-series worker with Calendar Registry Transaction History and recovery.
 - Added deterministic replay of interrupted `Running` queue rows after transaction recovery.
 - Added an explicit **Retry After Recovery** path for jobs paused on an operation error; ambiguous transaction state remains blocked.
@@ -88,16 +92,18 @@ Current Calendar ownership:
 
 - recurring planning/settings: `04-D` / `04-E`
 - recurring registry identity/versioning: `04-E` / `04-F` / `04-G`
-- reviewed audit/review: `20`–`22`
-- transaction history/recovery: `07-F`–`07-H`
-- reviewed Sync preparation/execution/status/Job Center adapter: `23_A`–`23_J`
 - legacy Calendar trigger/state retirement: `04-B`
+- legacy Job public adapters + shared history helpers: `07-A`
 - Calendar Repair window: `07-C_Calendar_Repair_Window.gs`
+- transaction history/recovery: `07-F`–`07-H`
 - Calendar Repair safety/plan: `15-B`
 - Calendar Repair editor persistence: `16_Calendar_Repair_Editor.gs`
 - Calendar Repair combined execution: `18_Calendar_Repair_Combined_Stagger.gs`
 - Calendar Repair combined board UI: `19_Calendar_Repair_Existing_Visits_Editor.gs`
+- reviewed audit/review: `20`–`22`
 - maintenance geographic placement: `22_Geographic_Suggestions.gs`
+- reviewed Sync preparation/execution/status/Job Center adapter: `23_A`–`23_J`
+- legacy Audit/Sync navigation redirects: `23_Audit_Sync_And_All_Calendar_Events.gs`
 
 ## Merge gate
 
