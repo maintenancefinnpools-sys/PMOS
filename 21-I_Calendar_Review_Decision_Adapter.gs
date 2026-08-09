@@ -85,23 +85,6 @@ function readActivePmosCalendarReviewDecisions_() {
   return Object.freeze(result);
 }
 
-function hasPmosCalendarReviewDecision_(decisionSet, category, itemKey) {
-  const collection = decisionSet && decisionSet[category];
-  return Boolean(collection && collection[String(itemKey || '').trim()]);
-}
-
-function summarizePmosCalendarReviewDecisions_() {
-  const decisions = readActivePmosCalendarReviewDecisions_();
-  return {
-    sessionId: decisions.sessionId,
-    matched: decisions.counts.match,
-    temporaryVisits: decisions.counts.temporary,
-    ignored: decisions.counts.ignore,
-    kept: decisions.counts.keep,
-    approvedDeletions: decisions.counts.delete
-  };
-}
-
 /**
  * Converts the normalized Review Session into immutable operation intents.
  *
