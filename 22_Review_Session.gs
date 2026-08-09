@@ -83,13 +83,6 @@ function loadPmosReviewSessionDecisions_(sessionId) {
   return decisions;
 }
 
-function savePmosReviewSessionDecision_(scope, sourceVersion, reviewType, itemKey, decision, payload) {
-  const saved = savePmosReviewSessionDecisions_(scope, sourceVersion, [{
-    reviewType: reviewType, itemKey: itemKey, decision: decision, payload: payload
-  }]);
-  return saved.decisions[0];
-}
-
 function savePmosReviewSessionDecisions_(scope, sourceVersion, records) {
   const session = getOrBeginPmosReviewSession_(scope, sourceVersion);
   return writePmosReviewSessionDecisions_(session, records);
@@ -241,15 +234,6 @@ function compactPmosReviewPayload_(payload) {
 function readPmosReviewSessionDecision_(session, reviewType, itemKey) {
   if (!session || !session.decisions) return null;
   return session.decisions[buildPmosReviewDecisionKey_(reviewType,itemKey)] || null;
-}
-
-function invalidatePmosReviewSession_(reason) {
-  const session = loadPmosReviewSession_();
-  if (!session) return {invalidated:false};
-  session.status='INVALIDATED'; session.invalidatedAt=new Date().toISOString();
-  session.invalidationReason=String(reason || 'Underlying data changed.'); session.updatedAt=session.invalidatedAt;
-  PropertiesService.getDocumentProperties().setProperty(PMOS_REVIEW_SESSION_PROPERTY,JSON.stringify(session));
-  return {invalidated:true,sessionId:session.id};
 }
 
 function completePmosReviewSession_() {
