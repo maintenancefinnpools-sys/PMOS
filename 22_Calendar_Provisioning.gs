@@ -25,20 +25,3 @@ function getOrCreateConfiguredPmosCalendar_() {
     timeZone: PMOS.TIMEZONE
   });
 }
-
-/** Public diagnostic/provisioning function for manual testing. */
-function ensureConfiguredPmosCalendarExists() {
-  const settings = getRecurringCalendarSettings_();
-  const matchesBefore = CalendarApp.getCalendarsByName(settings.calendarName);
-  const calendar = getOrCreateConfiguredPmosCalendar_();
-
-  return {
-    calendarName: calendar.getName(),
-    calendarId: calendar.getId(),
-    created: matchesBefore.length === 0,
-    timeZone: calendar.getTimeZone(),
-    summary: matchesBefore.length === 0
-      ? `Created Google Calendar: ${calendar.getName()}`
-      : `Google Calendar already exists: ${calendar.getName()}`
-  };
-}
