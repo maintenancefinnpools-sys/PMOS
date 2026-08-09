@@ -342,14 +342,3 @@ function buildCustomerEntryInformation_(customer) {
 
   return lines.join('\n').trim();
 }
-
-function eventMatchesCustomer_(event, row) {
-  const description = String(event.getDescription() || '');
-
-  if (row.customerId) {
-    const marker = `PMOS_CUSTOMER_ID=${row.customerId}`;
-    if (description.includes(marker)) return true;
-  }
-
-  return normalize_(event.getTitle()) === normalize_(row.title);
-}
