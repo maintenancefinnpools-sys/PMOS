@@ -30,36 +30,7 @@ const PMOS_CHEMISTRY = {
   USAGE_SHEET: 'Chemical Usage'
 };
 
-/** Legacy generic Job Engine state retained only for upgrade compatibility. */
-const PMOS_JOB_STATE_KEY = 'PMOS_ACTIVE_JOB_V1';
-const PMOS_JOB_TRIGGER_HANDLER = 'runPmosJobTrigger_';
+/** Shared history sheet used by current Operations/Job Center views. */
 const PMOS_JOB_HISTORY_SHEET = 'PMOS Job History';
-
-/**
- * Non-destructive compatibility inventory. Calendar Sync itself is executed by
- * the reviewed queue worker, not by the legacy generic Job Engine.
- */
-const PMOS_JOB_TYPES = Object.freeze({
-  CALENDAR_SYNC: {
-    label: 'Calendar Sync',
-    description: 'Reviewed Calendar synchronization.',
-    supportsAuto: false
-  },
-  VERIFY_CALENDAR: {
-    label: 'Verify Calendar',
-    description: 'Compare the verified plan, registry, and Calendar.',
-    supportsAuto: false
-  },
-  CUSTOMER_SYNC: {
-    label: 'Sync Customer Database',
-    description: 'Generate IDs and propagate current customer information into routes and PMOS.',
-    supportsAuto: false
-  },
-  MAP_EXPORT: {
-    label: 'Export Updated Map Layers',
-    description: 'Export the currently affected route layers into a new Drive folder.',
-    supportsAuto: false
-  }
-});
 
 const PMOS_TEMP_VISIT_MARKER = 'PMOS_TEMP_VISIT=true';
