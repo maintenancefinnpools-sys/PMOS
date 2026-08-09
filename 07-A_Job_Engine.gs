@@ -1,13 +1,12 @@
 /**
- * PMOS legacy Job Engine compatibility and history helpers.
+ * PMOS legacy Job Engine compatibility and shared history helpers.
  *
- * Long-running Calendar execution is owned by the reviewed Calendar Sync
- * worker in 23_B. The former generic Job Engine UI/batch executor, Calendar
- * Rebuild, and Auto Continue pathways are retired. This module keeps only
- * stable public adapters, legacy-state cleanup, and shared Job History helpers.
+ * The former generic runtime/state machine is retired. Long-running Calendar
+ * execution belongs exclusively to the reviewed Calendar Sync worker in 23_B.
+ * Public legacy names below either redirect to current UI/task ownership or
+ * clean up obsolete triggers/state without performing Calendar mutation.
  */
 
-/** Older callers now open the authoritative Operations window. */
 function showPmosJobEngine(initialType) {
   return openPmosJobEngine(initialType);
 }
@@ -24,24 +23,17 @@ function rememberPmosJobType_(type) {
   return value;
 }
 
-/**
- * Compatibility entry for older HTML clients.
- * Calendar writes never execute here.
- */
 function startPmosJob(type, autoMode, openEngine) {
   const jobType = String(type || '').trim().toUpperCase();
 
   if (jobType === 'CALENDAR_SYNC') {
     showFreshCalendarAuditTaskWindow();
-    return {
-      type: jobType,
-      label: 'Calendar Sync',
-      status: 'REVIEW_REQUIRED',
-      autoEnabled: false,
-      remaining: null,
-      lastSummary:
-        'Legacy Calendar Sync entry was redirected to the reviewed Calendar Plan Audit.'
-    };
+    return legacyPmosJobStatus_(
+      jobType,
+      'Calendar Sync',
+      'REVIEW_REQUIRED',
+      'Legacy Calendar Sync entry was redirected to the reviewed Calendar Plan Audit.'
+    );
   }
 
   if (jobType === 'CALENDAR_REBUILD') {
@@ -62,107 +54,52 @@ function startPmosJob(type, autoMode, openEngine) {
   throw new Error('Unsupported legacy PMOS job type: ' + (jobType || '(blank)') + '.');
 }
 
+/**
+ * Retired generic pause entry. There is no generic runtime left to pause.
+ * Clear any state/trigger from older installations and return a stable status.
+ */
 function pausePmosJob() {
-  removePmosJobTrigger_();
-  const state = readPmosJobState_();
-  if (state) {
-    state.status = 'Paused';
-    state.autoEnabled = false;
-    state.nextRunAt = '';
-    writePmosJobState_(state);
-  }
+  clearLegacyPmosJobState_();
   return getPmosJobStatus();
 }
 
-/**
- * Legacy generic job status. The authoritative Calendar Sync status is exposed
- * separately by getReviewedCalendarSyncJobCenterStatus().
- */
 function getPmosJobStatus() {
-  const state = readPmosJobState_();
-  if (!state) {
-    return {
-      type: '',
-      label: 'No active legacy job',
-      status: 'Idle',
-      autoEnabled: false,
-      completedBatches: 0,
-      processedItems: 0,
-      originalTotal: 0,
-      remaining: null,
-      lastSummary: '',
-      lastError: '',
-      nextRunAt: ''
-    };
-  }
-
-  return {
-    type: String(state.type || ''),
-    label: String(state.label || state.type || 'Legacy PMOS job'),
-    status: String(state.status || 'Idle'),
-    autoEnabled: false,
-    completedBatches: Number(state.completedBatches || 0),
-    processedItems: Number(state.processedItems || 0),
-    originalTotal: Number(state.originalTotal || 0),
-    remaining: state.remaining == null ? null : Number(state.remaining),
-    lastSummary: String(state.lastSummary || ''),
-    lastError: String(state.lastError || ''),
-    nextRunAt: ''
-  };
+  return legacyPmosJobStatus_(
+    '',
+    'No active legacy job',
+    'Idle',
+    'Generic PMOS job execution is retired. Current operations run through PMOS Operations.'
+  );
 }
 
-function newPmosJobState_(type) {
-  const jobType = String(type || '').trim().toUpperCase();
-  const definition = PMOS_JOB_TYPES[jobType] || {};
+function legacyPmosJobStatus_(type, label, status, summary) {
   return {
-    id: Utilities.getUuid(),
-    type: jobType,
-    label: String(definition.label || jobType),
-    status: 'Ready',
+    type: String(type || ''),
+    label: String(label || 'No active legacy job'),
+    status: String(status || 'Idle'),
     autoEnabled: false,
-    createdAt: new Date().toISOString(),
-    lastRunAt: '',
-    nextRunAt: '',
     completedBatches: 0,
     processedItems: 0,
     originalTotal: 0,
     remaining: null,
-    lastSummary: '',
-    lastError: ''
+    lastSummary: String(summary || ''),
+    lastError: '',
+    nextRunAt: ''
   };
-}
-
-function readPmosJobState_() {
-  const raw = PropertiesService.getDocumentProperties().getProperty(PMOS_JOB_STATE_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    return null;
-  }
-}
-
-function writePmosJobState_(state) {
-  PropertiesService.getDocumentProperties().setProperty(
-    PMOS_JOB_STATE_KEY,
-    JSON.stringify(state || {})
-  );
-  return state;
 }
 
 function clearLegacyPmosJobState_() {
   removePmosJobTrigger_();
-  PropertiesService.getDocumentProperties().deleteProperty(PMOS_JOB_STATE_KEY);
+  PropertiesService.getDocumentProperties().deleteProperty('PMOS_ACTIVE_JOB_V1');
   return true;
 }
 
-/** Retired trigger handler: delete any trigger left by an older installation. */
+/** Old installable-trigger entry: cleanup only, never Calendar mutation. */
 function runPmosJobTrigger_() {
-  removePmosJobTrigger_();
+  clearLegacyPmosJobState_();
   return getPmosJobStatus();
 }
 
-/** Generic Auto Continue is retired and must never create another trigger. */
 function ensurePmosJobTrigger_() {
   removePmosJobTrigger_();
   return false;
@@ -171,7 +108,7 @@ function ensurePmosJobTrigger_() {
 function removePmosJobTrigger_() {
   ScriptApp.getProjectTriggers()
     .filter(function(trigger) {
-      return trigger.getHandlerFunction() === PMOS_JOB_TRIGGER_HANDLER;
+      return trigger.getHandlerFunction() === 'runPmosJobTrigger_';
     })
     .forEach(function(trigger) {
       ScriptApp.deleteTrigger(trigger);
@@ -212,7 +149,6 @@ function appendPmosJobHistory_(state, result, summary) {
   ]);
 }
 
-/** Older callers retain the same public history entry. */
 function showPmosJobHistory() {
   return showPmosJobHistoryWindow();
 }
@@ -223,7 +159,7 @@ function formatJobHistoryDate_(value) {
   return Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd h:mm a');
 }
 
-/** Legacy temporary-visit browser wrappers retained for existing dialogs. */
+/** Public wrappers used by existing Temporary Visit dialogs. */
 function suggestTemporaryVisitPlacement(payload) {
   return suggestTemporaryVisitPlacement_(payload);
 }
