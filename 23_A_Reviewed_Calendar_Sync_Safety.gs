@@ -5,11 +5,6 @@
  * The durable queue prepared in 23_C is authoritative. This module only reads
  * that queue for preview and status display; it does not rebuild planner state.
  */
-function openSafeReviewedCalendarSyncPreview_() {
-  const prepared = prepareReviewedCalendarSyncWindow_();
-  showReviewedCalendarSyncExecutionWindow_(prepared);
-  return prepared;
-}
 
 /** Compatibility helper retained for callers that only need preparation totals. */
 function prepareSafeReviewedCalendarSync_() {
