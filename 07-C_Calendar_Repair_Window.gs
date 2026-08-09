@@ -1,5 +1,5 @@
 /**
- * Calendar Repair window and compatibility entry.
+ * Calendar Repair window.
  *
  * Calendar Sync belongs exclusively to the reviewed Audit -> Review Session ->
  * durable queue -> Job Center workflow. This module owns only the explicit
@@ -7,7 +7,7 @@
  */
 function showIntegratedPmosJobEngine(initialType) {
   if (initialType && String(initialType) !== 'CALENDAR_REPAIR') {
-    return openPmosJobEngine(initialType);
+    throw new Error('This launcher only supports Calendar Repair.');
   }
 
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
