@@ -60,6 +60,9 @@ No Route Manager, legacy task window, compatibility pathway, or alternate reconc
 - Removed the legacy Add Maintenance Client path that could automatically launch the retired direct Calendar synchronization implementation. This does not change the future requirement for the rebuilt Add Maintenance Customer workflow to start its safe synchronization automatically.
 - Removed the obsolete web-app Add Customer pathway that wrote directly to the route template without first creating the authoritative Customers record.
 - Removed direct Calendar mutation paths from Route Manager; remaining legacy route-navigation wrappers are being evaluated for deletion during the final reference sweep.
+- Confirmed the current web-app client uses only `getRouteManagerData`, `saveRouteOrder`, and `restoreRouteVersion` for Route Manager operations and does not call the retired Route Manager Calendar preview/apply entries.
+- Identified `previewRouteChangesFromSheet`, `applyCalendarChangesFromSheet`, `previewCalendarChanges`, and `applyCalendarChanges` in `03_Route_Manager.gs` as final-sweep compatibility candidates; remove them only after the remaining script/menu/reference check confirms no external Apps Script entry-point dependency.
+- Restricted `showIntegratedPmosJobEngine` to Calendar Repair only. It now rejects any non-Repair operation instead of forwarding into the Job Center, so it can no longer serve as an alternate Operations pathway.
 - Removed obsolete Calendar Audit/Sync compatibility redirect files and redundant Audit wrappers.
 - Reduced generic task windows to the immediate Operations dispatcher actually used by the current Job Center.
 - Updated spreadsheet lifecycle/update messaging and Feature Lab terminology so they no longer advertise retired direct Sync/Rebuild paths.
@@ -99,7 +102,7 @@ The implementation may reuse the reviewed Calendar worker internally, but it mus
 
 ## Remaining merge blockers
 
-1. **Final repository reference sweep** — remove remaining dead compatibility wrappers and verify there are no calls to deleted legacy functions or duplicate global function definitions.
+1. **Final repository reference sweep** — remove remaining dead compatibility wrappers and verify there are no calls to deleted legacy functions or duplicate global function definitions. The four Route Manager compatibility candidates above remain intentionally in place until that check is complete.
 2. **Repair-path verification** — exercise Preview → combined board → Save → Apply → continuation on a disposable date range after the Repair module consolidation.
 3. **End-to-end Calendar Sync test** — validate Audit → Review → Sync Preview → Queue Preparation → Job Center → Calendar mutation → Registry verification → completion on a disposable Calendar.
 4. **Interruption test** — interrupt recurring synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic transaction recovery and queue replay.
