@@ -8,9 +8,9 @@ This document describes the stabilized PMOS v1.9.0 architecture on `pmos-develop
 
 The spreadsheet is the operational source of truth. Google Calendar, maps, route-history views, registries, and support sheets are derived operational views or persistence used to apply and verify approved work.
 
-Human review wins over inferred automation. PMOS may propose changes, matches, and deletions, but Calendar mutation follows one reviewed workflow.
+Human review wins over inferred automation. PMOS may propose changes, matches, and deletions. Normal recurring Calendar synchronization follows one reviewed workflow. The currently working Temporary Visit scheduler is a narrow, documented one-day exception pending its optimizer-backed redesign.
 
-## Authoritative data flow
+## Authoritative recurring data flow
 
 ```text
 Customers
@@ -46,7 +46,7 @@ Google Calendar   Calendar Series Registry
    Transaction verification/history
 ```
 
-No Route Manager action, customer-creation action, compatibility entry point, or legacy Job Engine path is allowed to bypass the Audit / Review Session / durable queue boundary for normal Calendar synchronization.
+No Route Manager action, compatibility entry point, or legacy Job Engine path is allowed to bypass the Audit / Review Session / durable queue boundary for normal recurring Calendar synchronization.
 
 ## Routes
 
@@ -65,7 +65,7 @@ Route invariants:
 
 Calendar planning is read-only. The planner combines current PMOS route/customer data with the configured Calendar and registry state to build immutable operations.
 
-The Calendar Plan Audit is the required entry to synchronization. It:
+The Calendar Plan Audit is the required entry to ordinary recurring synchronization. It:
 
 - reads the selected Calendar/date range;
 - compares PMOS desired state with current Calendar state;
@@ -75,8 +75,6 @@ The Calendar Plan Audit is the required entry to synchronization. It:
 - preserves unknown Calendar events by default;
 - requires explicit review for potentially destructive decisions;
 - persists Review Session decisions used to resolve the final Sync plan.
-
-Compatibility audit functions delegate to this implementation; they do not own separate readiness logic.
 
 ## Reviewed Calendar Sync
 
@@ -144,17 +142,23 @@ These adapters verify the exact target after mutation and are designed to be saf
 
 Calendar Repair is intentionally separate from normal Calendar Sync. It is an explicit historical/recovery tool for previewing and repairing missing or damaged visits in a selected date range.
 
-The old Calendar Rebuild and future delete-and-recreate reconciliation workflows are retired. Compatibility entry points either open the current Audit/Repair flow, clean obsolete state/triggers, or fail explicitly; they never perform the retired mutations.
+The old Calendar Rebuild and future delete-and-recreate reconciliation workflows are retired. Remaining retirement handlers clean obsolete state/triggers and never perform those old mutations.
 
 ## Temporary visits
 
-Temporary Visits are one-time Calendar events rather than recurring route-template series. PMOS may recommend dates and insertion positions from geographic route fit. Reviewed conversion of an existing one-time Calendar event preserves its event identity and adds PMOS Temporary Visit metadata.
+Temporary Visits are one-time Calendar events rather than recurring route-template series. PMOS currently recommends dates and insertion positions and, after final user approval, writes the selected visit directly to Calendar and retimes only that selected service day.
+
+That direct one-day writer is intentionally preserved during stabilization because the workflow is functioning and will be redesigned together with the route optimizer. The eventual Temporary Visit architecture should retain the same simple final action while adding optimizer-backed suggestions and an appropriate durable execution/recovery model. It does not need to be forced through the recurring Sync engine if a cleaner purpose-built execution path is preferable.
+
+Reviewed conversion of an already-existing one-time Calendar event remains part of the normal Audit/Review workflow and preserves exact event identity.
 
 ## Customer creation
 
-Creating a maintenance customer writes Customers and route assignments only. It does not launch Calendar Sync. New Calendar work is subsequently discovered by Calendar Plan Audit.
+The authoritative Add Maintenance Customer workflow must write the Customers record and route-template structure first. Customer IDs use the canonical PMOS identity scheme shared with the rest of the customer subsystem.
 
-Customer IDs use the canonical PMOS identity scheme shared with the rest of the customer subsystem.
+The intended user experience is a single final approval. After that approval, PMOS should automatically perform the required future Calendar synchronization without asking the user to launch Calendar Sync separately. The implementation may internally reuse the reviewed recurring worker, provided it preserves the same safety, durability, identity, and recovery guarantees and does not resurrect retired direct-sync/rebuild code.
+
+During stabilization, existing working customer-creation behavior is preserved; the automatic post-create synchronization is deferred feature work.
 
 ## Operations / Job Center
 
@@ -170,9 +174,9 @@ It exposes:
 - Customer Database Sync
 - Map Export
 
-Calendar Sync status/start/pause/resume is routed exclusively to the reviewed queue adapter. Calendar Audit opens the dedicated reviewed Audit window. Calendar Repair opens the dedicated repair-only compatibility window.
+Calendar Sync status/start/pause/resume is routed exclusively to the reviewed queue adapter. Calendar Audit opens the dedicated reviewed Audit window. Calendar Repair opens the dedicated repair-only window.
 
-The old generic Job Engine, generic operation-provider framework, Calendar Auto-Continue, Calendar Rebuild, and future reconciliation executors are retired. Small compatibility shims remain only where necessary to clean state/triggers or redirect older callers safely.
+The old generic Job Engine, generic operation-provider framework, Calendar Auto-Continue, Calendar Rebuild, and future reconciliation executors are retired. Small retirement shims remain only where necessary to clean stale state/triggers.
 
 ## Persistent stores
 
@@ -200,7 +204,7 @@ Internal persistence sheets may be hidden because they are system state, not use
 
 PMOS uses installable spreadsheet triggers for spreadsheet changes and time-driven triggers for resumable operations that still own valid continuation logic.
 
-The authoritative Calendar Sync worker creates only its reviewed-sync continuation trigger. Legacy Auto-Continue, generic Job Engine, and future-reconciliation trigger handlers are retirement shims that remove obsolete triggers rather than execute Calendar mutations.
+The authoritative recurring Calendar Sync worker creates only its reviewed-sync continuation trigger. Calendar Repair owns its repair continuation trigger. Legacy Auto-Continue, generic Job Engine, and future-reconciliation trigger handlers are retirement shims that remove obsolete triggers rather than execute Calendar mutations.
 
 Trigger creation/removal must remain idempotent.
 
@@ -210,18 +214,20 @@ The most important invariants are:
 
 1. Spreadsheet customer/route data remains authoritative.
 2. Planning/audit is read-only.
-3. Calendar Sync requires completed review decisions.
-4. The exact executable plan is persisted before writes begin.
+3. Normal recurring Calendar Sync requires completed review decisions.
+4. The exact recurring executable plan is persisted before writes begin.
 5. Calendar deletions require explicit reviewed identity/approval.
 6. Recurring mutations are transaction-backed and verified.
 7. Ambiguous recovery stops rather than guesses.
 8. One function has one authoritative implementation/home.
-9. Compatibility code delegates or retires; it does not duplicate business logic.
+9. Compatibility/retirement code does not duplicate business logic.
 10. Initialization, updates, migrations, and cleanup must not destroy customer or operational source data.
+11. Temporary Visit direct mutation is limited to its selected day and is an explicit deferred exception, not a general Calendar-sync bypass.
+12. Future Add Maintenance Customer automation must start safe recurring synchronization automatically after final approval rather than requiring a second manual action.
 
 ## Pre-merge validation
 
-Before merging `pmos-development` to `main`, validate on a disposable Calendar:
+Before promoting `pmos-development` to `main`, validate on disposable data:
 
 1. fresh Audit with no changes;
 2. Audit with create/update/delete proposals;
@@ -231,5 +237,6 @@ Before merging `pmos-development` to `main`, validate on a disposable Calendar:
 6. Start/Pause/Resume completes without rebuilding the plan;
 7. interrupt after Calendar mutation but before registry completion and verify transaction recovery;
 8. repeat completed synchronization and confirm idempotency/no duplicate series;
-9. confirm Route Manager/customer creation cannot write Calendar directly;
-10. confirm legacy triggers only self-remove and cannot mutate Calendar.
+9. confirm Route Manager cannot write Calendar directly;
+10. smoke-test the existing Temporary Visit workflow and confirm it changes only the selected day;
+11. confirm legacy triggers only self-remove and cannot mutate Calendar.
