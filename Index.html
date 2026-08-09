@@ -18,7 +18,6 @@
         <nav class="nav" aria-label="Primary navigation">
           <button class="nav-item active" data-view="dashboard">Dashboard</button>
           <button class="nav-item" data-view="routes">Route Manager</button>
-          <button class="nav-item" data-view="customers">Add Customer</button>
           <button class="nav-item" data-view="history">Route History</button>
           <button class="nav-item" data-view="calendar">Calendar</button>
           <button class="nav-item" data-view="chemistry">Chemistry</button>
@@ -80,21 +79,6 @@
               <button class="button primary" id="saveRouteButton" disabled>Save route order</button>
             </div>
             <div id="routeList" class="route-list"></div>
-          </article>
-        </section>
-
-        <section class="view" id="view-customers">
-          <article class="panel narrow-panel">
-            <div class="panel-heading"><div><h2>Add a customer to a route</h2><p>This adds a route row and marks the layer pending. The spreadsheet remains authoritative.</p></div></div>
-            <form id="customerForm" class="form-grid">
-              <label>Route layer<select name="layer" id="customerLayer" required></select></label>
-              <label>Calendar title<input name="title" required></label>
-              <label>Full name(s)<input name="fullName"></label>
-              <label>Full address<input name="address"></label>
-              <label>Frequency<select name="frequency"><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option></select></label>
-              <label>Insert after stop<input name="afterStop" type="number" min="0" value="0"><small>Use 0 to insert at the beginning.</small></label>
-              <div class="form-actions"><button class="button primary" type="submit">Add customer</button></div>
-            </form>
           </article>
         </section>
 
