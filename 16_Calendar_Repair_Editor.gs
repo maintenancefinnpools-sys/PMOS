@@ -114,14 +114,6 @@ function discardCalendarRepairBoardChanges(originalChanges) {
   };
 }
 
-function returnToCalendarRepairJobEngine() {
-  showIntegratedPmosJobEngine('CALENDAR_REPAIR');
-  return {
-    summary:
-      'Returned to Calendar Repair. The most recently saved preview remains available.'
-  };
-}
-
 function saveAndApplyCalendarRepairBoard(changes, startValue, endValue) {
   saveCalendarRepairBoardPlan(changes);
   const result = applyCalendarRepairPlan(startValue, endValue);
