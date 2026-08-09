@@ -95,34 +95,3 @@ renderJobs();renderReady();if(definition().mode==='runtime')refreshRuntime(false
 
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Operations');
 }
-
-function cancelPmosRuntimePauseRequest_(autoMode, options) {
-  return resumeReviewedCalendarSyncJobCenterExecution_();
-}
-
-function showPmosJobEngineFor_(type) {
-  if (type === 'CALENDAR_SYNC') {
-    const state = readReviewedCalendarSyncState_();
-    if (!state || !state.planId) {
-      showFreshCalendarAuditTaskWindow();
-      return;
-    }
-  }
-  openPmosJobEngine(type);
-}
-
-function startCalendarSyncJobFromMenu() {
-  showPmosJobEngineFor_('CALENDAR_SYNC');
-}
-
-function startVerifyCalendarJobFromMenu() {
-  openPmosJobEngine('VERIFY_CALENDAR');
-}
-
-function startCustomerSyncJobFromMenu() {
-  openPmosJobEngine('CUSTOMER_SYNC');
-}
-
-function startMapExportJobFromMenu() {
-  openPmosJobEngine('MAP_EXPORT');
-}
