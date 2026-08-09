@@ -41,13 +41,6 @@ function executeReviewedCalendarMatchOperation_(operation, calendar) {
   return {action:'UPDATE',id:String(target.object.getId() || identity.eventId || identity.seriesId),reviewAction:'MATCH',customerId:customerId};
 }
 
-/** Compatibility helper retained for callers using the former signature. */
-function findReviewedCalendarMatchTarget_(calendar, eventId, seriesId, snapshot) {
-  return resolveReviewedCalendarTarget_(calendar, Object.assign({}, snapshot || {}, {
-    eventId:String(eventId || ''),seriesId:String(seriesId || '')
-  }));
-}
-
 function verifyReviewedCalendarMatchOperation_(calendar, expected) {
   const target = resolveReviewedCalendarTarget_(calendar, expected || {});
   if (!target.object) throw new Error('MATCH verification failed because the Calendar event could not be reloaded.');
