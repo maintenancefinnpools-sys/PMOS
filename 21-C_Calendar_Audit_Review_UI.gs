@@ -1,16 +1,9 @@
 /**
- * Calendar Plan Audit review UI.
+ * Calendar Plan Audit error/warning review UI and shared review styling.
  *
- * The audit remains read-only. These windows open only after the audit and let
- * the user inspect findings. Writes occur only through explicit correction or
- * deletion-approval actions.
+ * The audit remains read-only. Review decisions are owned by the current
+ * Review Session engine and exception review windows.
  */
-
-const PMOS_CALENDAR_REVIEW_SHEET = 'Calendar Review Decisions';
-const PMOS_CALENDAR_REVIEW_HEADERS = [
-  'Review Key', 'Plan ID', 'Review Type', 'Decision', 'Series Key',
-  'Calendar Event ID', 'Title', 'Details', 'Updated At'
-];
 
 function showCalendarAuditErrorsReview() {
   return showPmosCalendarAuditIssueReview_('ERROR');
@@ -18,14 +11,6 @@ function showCalendarAuditErrorsReview() {
 
 function showCalendarAuditWarningsReview() {
   return showPmosCalendarAuditIssueReview_('WARNING');
-}
-
-/** Compatibility entry retained for older callers. */
-function showCalendarAuditIssuesReview() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  return audit.errorCount
-    ? showPmosCalendarAuditIssueReview_('ERROR')
-    : showPmosCalendarAuditIssueReview_('WARNING');
 }
 
 function showPmosCalendarAuditIssueReview_(severity) {
@@ -84,37 +69,10 @@ function showPmosCalendarAuditIssueReview_(severity) {
   return { count: items.length, planId: audit.planId, severity: normalized };
 }
 
-function showCalendarUnclassifiedEventsReview() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  const items = audit.unclassifiedEvents || [];
-  const body = items.length
-    ? '<div class="instructions">These Calendar events have no PMOS identity metadata. PMOS will preserve them and will not treat them as suggested deletions.</div>' +
-      items.map(function (item) {
-        return '<div class="item info">' +
-          '<div class="heading">' + escapePmosAuditReviewHtml_(item.title) + '</div>' +
-          '<div class="details">' + escapePmosAuditReviewHtml_(item.reason) + '</div>' +
-          (item.start ? '<div class="meta">Start: ' + escapePmosAuditReviewHtml_(item.start) + '</div>' : '') +
-          (item.location ? '<div class="meta">Location: ' + escapePmosAuditReviewHtml_(item.location) + '</div>' : '') +
-          '<div class="meta">' + (item.recurring ? 'Recurring series: ' : 'Event: ') +
-            escapePmosAuditReviewHtml_(item.seriesId || item.eventId) + '</div>' +
-          '</div>';
-      }).join('')
-    : '<div class="empty">No unclassified Calendar events require review.</div>';
-
-  const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Unclassified Calendar Events',
-    body,
-    '<button onclick="google.script.host.close()">Close</button>'
-  )).setWidth(800).setHeight(690);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Unclassified Calendar Events');
-  return { count: items.length, planId: audit.planId };
-}
-
 function performPmosCalendarAuditResolution(resolutionType, issue) {
   const type = String(resolutionType || '').toUpperCase();
   if (type === 'DELETIONS') {
-    showCalendarDeletionReview();
+    showCalendarDeletionExceptionsReview();
     return { opened: true, message: 'Suggested Deletions opened.' };
   }
   if (type === 'CUSTOMER_SYNC') {
@@ -147,197 +105,6 @@ function activatePmosAuditSourceSheet_(sheetName, issue) {
     message: String(sheetName) + ' selected. Close this review window to edit it.',
     issueId: String(issue && issue.id || '')
   };
-}
-
-function approveSinglePmosCalendarDeletion(planId, item) {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (String(planId || '') !== String(audit.planId || '')) {
-    throw new Error('Calendar data changed. Run Calendar Plan Audit again before approving deletions.');
-  }
-  const key = String(item && item.seriesKey || '');
-  const candidate = (audit.deletionCandidates || []).find(function (entry) {
-    return String(entry.seriesKey || '') === key;
-  });
-  if (!candidate) throw new Error('This series is not a current deletion candidate.');
-  return savePmosCalendarReviewDecision(
-    audit.planId,
-    'DELETION_CANDIDATE',
-    'DELETE',
-    candidate
-  );
-}
-
-function showCalendarDeletionReview() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  const items = audit.deletionCandidates || [];
-  const decisions = readPmosCalendarReviewDecisions_();
-  const selected = {};
-
-  items.forEach(function (item) {
-    const key = 'DELETION_CANDIDATE::' + String(item.seriesKey || '');
-    selected[item.seriesKey] = Boolean(
-      decisions[key] &&
-      decisions[key].planId === audit.planId &&
-      decisions[key].decision === 'DELETE'
-    );
-  });
-
-  const body = items.length
-    ? '<div class="instructions">All events are kept by default. Select only the recurring series that should be deleted.</div>' +
-      '<div class="bulk-toolbar" id="bulkToolbar">' +
-        '<label class="bulk-toggle" id="bulkToggle" role="button" tabindex="0">' +
-          '<input type="checkbox" id="toggleAll" tabindex="-1"><span id="toggleAllLabel">Select all</span>' +
-        '</label>' +
-        '<span id="selectionCount">0 selected</span>' +
-      '</div>' +
-      items.map(function (item, index) {
-        const checked = selected[item.seriesKey] ? ' checked' : '';
-        return '<label class="item warning selectable" for="delete-' + index + '">' +
-          '<input class="delete-check" type="checkbox" id="delete-' + index + '" data-index="' + index + '"' + checked + '>' +
-          '<span><span class="heading">' + escapePmosAuditReviewHtml_(item.title || item.seriesKey) + '</span>' +
-          '<span class="details">' + escapePmosAuditReviewHtml_(item.reason) + '</span>' +
-          (item.layer ? '<span class="meta">Route: ' + escapePmosAuditReviewHtml_(item.layer) + '</span>' : '') +
-          '<span class="meta">Series: ' + escapePmosAuditReviewHtml_(item.seriesKey) + '</span></span>' +
-          '</label>';
-      }).join('')
-    : '<div class="empty">No Calendar series are currently suggested for deletion.</div>';
-
-  const itemJson = JSON.stringify(items).replace(/</g, '\\u003c');
-  const footer = items.length
-    ? '<button id="approveButton" class="delete" onclick="approveSelected(this)">Approve selected deletions</button>' +
-      '<button onclick="google.script.host.close()">Close</button>'
-    : '<button onclick="google.script.host.close()">Close</button>';
-  const script = '<script>' +
-    'var candidates=' + itemJson + ';' +
-    'function boxes(){return Array.prototype.slice.call(document.querySelectorAll(".delete-check"));}' +
-    'function selectedIndexes(){return boxes().filter(function(x){return x.checked;}).map(function(x){return Number(x.getAttribute("data-index"));});}' +
-    'function allSelected(){var list=boxes();return list.length>0&&list.every(function(x){return x.checked;});}' +
-    'function updateBulkControl(){var list=boxes(),selected=selectedIndexes().length,control=document.getElementById("toggleAll"),label=document.getElementById("toggleAllLabel"),toolbar=document.getElementById("bulkToolbar");if(!control||!label)return;var all=selected===list.length&&list.length>0;control.indeterminate=false;control.checked=all;label.textContent=all?"Clear all":"Select all";document.getElementById("selectionCount").textContent=selected+" selected";if(toolbar){toolbar.classList.toggle("partial",selected>0&&!all);toolbar.classList.toggle("all",all);}}' +
-    'function applyBulkToggle(){var shouldSelect=!allSelected();boxes().forEach(function(x){x.checked=shouldSelect;});updateBulkControl();}' +
-    'boxes().forEach(function(x){x.addEventListener("change",updateBulkControl);});' +
-    'var bulk=document.getElementById("bulkToggle");if(bulk){bulk.addEventListener("click",function(event){event.preventDefault();applyBulkToggle();});bulk.addEventListener("keydown",function(event){if(event.key===" "||event.key==="Enter"){event.preventDefault();applyBulkToggle();}});}updateBulkControl();' +
-    'function approveSelected(button){var indexes=selectedIndexes();if(!indexes.length){alert("No deletions are selected.");return;}' +
-      'if(!confirm("Approve deletion of "+indexes.length+" selected recurring Calendar series?"))return;' +
-      'button.disabled=true;button.classList.add("opening");button.textContent="Approving…";' +
-      'var selectedItems=indexes.map(function(i){return candidates[i];});' +
-      'google.script.run.withSuccessHandler(function(result){button.textContent="Approved "+String(result.approvedCount||0);setTimeout(function(){google.script.host.close();},700);})' +
-      '.withFailureHandler(function(e){button.disabled=false;button.classList.remove("opening");button.textContent="Approve selected deletions";alert(e&&e.message?e.message:String(e));})' +
-      '.saveSelectedPmosCalendarDeletions(' + JSON.stringify(audit.planId) + ',selectedItems);}' +
-    '</script>';
-
-  const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
-    'Suggested Calendar Deletions', body, footer, script
-  )).setWidth(800).setHeight(700);
-
-  SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Calendar Deletions');
-  return { count: items.length, planId: audit.planId };
-}
-
-function saveSelectedPmosCalendarDeletions(planId, selectedItems) {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
-  if (String(planId || '') !== String(audit.planId || '')) {
-    throw new Error('Calendar data changed. Run the Plan Audit again before approving deletions.');
-  }
-
-  const candidates = {};
-  (audit.deletionCandidates || []).forEach(function (item) {
-    candidates[String(item.seriesKey || '')] = item;
-  });
-
-  const selectedKeys = {};
-  (selectedItems || []).forEach(function (item) {
-    const key = String(item && item.seriesKey || '');
-    if (!key || !candidates[key]) {
-      throw new Error('A selected deletion is not part of the current audited plan.');
-    }
-    selectedKeys[key] = true;
-  });
-
-  Object.keys(candidates).forEach(function (seriesKey) {
-    savePmosCalendarReviewDecision(
-      audit.planId,
-      'DELETION_CANDIDATE',
-      selectedKeys[seriesKey] ? 'DELETE' : 'KEEP',
-      candidates[seriesKey]
-    );
-  });
-
-  return {
-    saved: true,
-    approvedCount: Object.keys(selectedKeys).length,
-    keptCount: Object.keys(candidates).length - Object.keys(selectedKeys).length,
-    planId: audit.planId
-  };
-}
-
-function savePmosCalendarReviewDecision(planId, reviewType, decision, item) {
-  const normalizedDecision = String(decision || '').trim().toUpperCase();
-  if (['KEEP', 'DELETE', 'IGNORE'].indexOf(normalizedDecision) < 0) {
-    throw new Error('Unsupported Calendar review decision: ' + normalizedDecision + '.');
-  }
-
-  const record = item || {};
-  const seriesKey = String(record.seriesKey || '').trim();
-  if (!seriesKey) throw new Error('Calendar review decision is missing its series key.');
-
-  const sheet = ensurePmosCalendarReviewSheet_();
-  const reviewKey = String(reviewType || 'REVIEW') + '::' + seriesKey;
-  const values = sheet.getDataRange().getValues();
-  let rowNumber = 0;
-  for (let index = 1; index < values.length; index++) {
-    if (String(values[index][0] || '') === reviewKey) {
-      rowNumber = index + 1;
-      break;
-    }
-  }
-
-  const row = [
-    reviewKey, String(planId || ''), String(reviewType || ''), normalizedDecision,
-    seriesKey, String(record.eventId || record.seriesId || ''),
-    String(record.title || ''), String(record.reason || record.details || ''), new Date()
-  ];
-  if (rowNumber) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
-  else sheet.appendRow(row);
-  return { saved: true, reviewKey: reviewKey, decision: normalizedDecision };
-}
-
-function readPmosCalendarReviewDecisions_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS_CALENDAR_REVIEW_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return {};
-  const values = sheet.getDataRange().getValues();
-  const result = {};
-  values.slice(1).forEach(function (row) {
-    const key = String(row[0] || '');
-    if (!key) return;
-    result[key] = {
-      reviewKey: key, planId: String(row[1] || ''), reviewType: String(row[2] || ''),
-      decision: String(row[3] || ''), seriesKey: String(row[4] || ''),
-      calendarEventId: String(row[5] || ''), title: String(row[6] || ''),
-      details: String(row[7] || ''),
-      updatedAt: row[8] instanceof Date ? row[8].toISOString() : String(row[8] || '')
-    };
-  });
-  return result;
-}
-
-function ensurePmosCalendarReviewSheet_() {
-  const spreadsheet = SpreadsheetApp.getActive();
-  let sheet = spreadsheet.getSheetByName(PMOS_CALENDAR_REVIEW_SHEET);
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet(PMOS_CALENDAR_REVIEW_SHEET);
-    sheet.getRange(1, 1, 1, PMOS_CALENDAR_REVIEW_HEADERS.length)
-      .setValues([PMOS_CALENDAR_REVIEW_HEADERS]);
-    sheet.setFrozenRows(1);
-    sheet.hideSheet();
-    return sheet;
-  }
-  const headers = sheet.getRange(1, 1, 1, PMOS_CALENDAR_REVIEW_HEADERS.length)
-    .getValues()[0].map(function (value) { return String(value || '').trim(); });
-  const valid = PMOS_CALENDAR_REVIEW_HEADERS.every(function (header, index) {
-    return headers[index] === header;
-  });
-  if (!valid) throw new Error(PMOS_CALENDAR_REVIEW_SHEET + ' has an unexpected schema.');
-  return sheet;
 }
 
 function buildPmosAuditReviewHtml_(title, body, footer, extraScript) {
