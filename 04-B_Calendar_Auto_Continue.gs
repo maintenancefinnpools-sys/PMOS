@@ -1,21 +1,78 @@
 /**
- * Legacy Calendar Auto-Continue retirement shim.
+ * Legacy Calendar trigger/state retirement shim.
  *
- * Calendar Sync is now executed only from the reviewed durable queue in 23_B.
- * This handler remains temporarily so an installable trigger created by an
- * older PMOS build can fire once, clean itself up, and never mutate Calendar.
+ * Current Calendar Sync executes only through the reviewed durable queue.
+ * These handlers remain solely so triggers left by older PMOS builds can fire
+ * once, delete themselves, clear obsolete state, and never mutate Calendar.
  */
 function runCalendarAutoContinueTrigger() {
-  retireLegacyCalendarAutoContinue_();
+  retireLegacyCalendarExecutionState_();
+}
+
+function runFutureCalendarReconciliationContinuation() {
+  retireLegacyCalendarExecutionState_();
+  return {
+    status: 'Retired',
+    summary: 'Removed obsolete future Calendar reconciliation continuation state.'
+  };
+}
+
+function continueBatchedCalendarReconcile() {
+  retireLegacyCalendarExecutionState_();
+  return retiredCalendarReconcileStatus_();
+}
+
+function pauseBatchedCalendarReconcile() {
+  retireLegacyCalendarExecutionState_();
+  return retiredCalendarReconcileStatus_();
 }
 
 function retireLegacyCalendarAutoContinue_() {
-  ScriptApp.getProjectTriggers().forEach(function (trigger) {
-    if (trigger.getHandlerFunction() === 'runCalendarAutoContinueTrigger') {
+  return retireLegacyCalendarExecutionState_();
+}
+
+function retireLegacyCalendarExecutionState_() {
+  const legacyHandlers = {
+    runCalendarAutoContinueTrigger: true,
+    runFutureCalendarReconciliationContinuation: true,
+    continueBatchedCalendarReconcile: true
+  };
+
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (legacyHandlers[trigger.getHandlerFunction()]) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  PropertiesService.getDocumentProperties()
-    .deleteProperty('PMOS_CALENDAR_AUTO_JOB');
+  const properties = PropertiesService.getDocumentProperties();
+  properties.deleteProperty('PMOS_CALENDAR_AUTO_JOB');
+  properties.deleteProperty('PMOS_RECONCILE_BATCH_JOB_V1');
+  properties.deleteProperty('PMOS_CALENDAR_SYNC_EFFECTIVE_DATE');
+
+  const partsKey = 'PMOS_CALENDAR_RECONCILE_PLAN_V2_PARTS';
+  const planKey = 'PMOS_CALENDAR_RECONCILE_PLAN_V2';
+  const count = Number(properties.getProperty(partsKey) || 0);
+  for (let index = 0; index < count; index++) {
+    properties.deleteProperty(planKey + '_' + index);
+  }
+  properties.deleteProperty(partsKey);
+
+  clearPmosRuntimeCheckpoint_('CALENDAR_RECONCILE');
+  return true;
+}
+
+function retiredCalendarReconcileStatus_() {
+  return {
+    type: 'RECONCILE_FUTURE',
+    label: 'Reconcile Calendar (retired)',
+    status: 'Retired',
+    phase: 'retired',
+    processedItems: 0,
+    remaining: 0,
+    originalTotal: 0,
+    autoContinue: false,
+    summary:
+      'The destructive future reconciliation pathway is retired. ' +
+      'Use Calendar Plan Audit and reviewed Calendar Sync.'
+  };
 }
