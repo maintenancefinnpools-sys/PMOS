@@ -17,6 +17,9 @@ jobs:
       - name: Check Apps Script global namespace
         run: python3 tools/check_apps_script_globals.py
 
+      - name: Report self-only global candidates
+        run: python3 tools/report_unused_apps_script_globals.py
+
       - name: Check combined Apps Script syntax
         shell: bash
         run: |
