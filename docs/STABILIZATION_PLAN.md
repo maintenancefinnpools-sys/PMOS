@@ -48,11 +48,11 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 ## Cleanup completed on `pmos-development`
 
 - Retired the old Calendar Sync modal and direct mutation executor.
-- Retired legacy Calendar Auto-Continue execution; only legacy-trigger cleanup remains.
+- Removed the old Calendar Auto-Continue engine; legacy trigger/state cleanup is centralized in one non-mutating retirement shim.
 - Removed retired/duplicate Job Center and generic Calendar Sync provider pathways.
 - Removed the obsolete generic Job runtime worker, operation-provider framework, and runtime activation override.
-- Retired both future delete-and-recreate Calendar reconciliation implementations.
-- Removed the destructive Calendar Rebuild pathway.
+- Removed both future delete-and-recreate Calendar reconciliation engines. Their old continuation handlers now only clean obsolete trigger/state and cannot mutate Calendar.
+- Removed the destructive Calendar Rebuild pathway; only non-mutating compatibility/cleanup adapters remain where still needed by upgrades.
 - Removed duplicate address suggestion implementation.
 - Removed the legacy Add Maintenance Client path that could automatically launch Calendar synchronization.
 - Removed direct Calendar mutation paths from Route Manager.
@@ -64,7 +64,9 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 - Consolidated recurring-series create/update/lookup/registry logic into the canonical recurring Calendar helpers.
 - Made canonical registry upsert preserve PMOS object identity when an approved series-key migration keeps the same Calendar Series ID.
 - Consolidated Calendar Repair ownership: safety/planning in `15-B`, editor persistence in `16`, combined-board UI in `19`, resumable combined-day execution in `18`.
+- Renamed the old integrated Job Engine module to a Calendar Repair-specific window module and removed unused integrated-job state.
 - Removed duplicate Calendar Repair safety/UI implementations.
+- Separated geographic placement into its own module; Calendar Repair no longer depends on loading-order overrides from a mixed-purpose geography/repair file.
 - Standardized new customer creation on the canonical PMOS customer-ID scheme.
 - Rewrote architecture documentation around the reviewed queue / transaction model.
 - Removed the accidental independent `main` compatibility commit. `main` now points to the common base and is no longer ahead of `pmos-development`.
@@ -89,10 +91,13 @@ Current Calendar ownership:
 - reviewed audit/review: `20`–`22`
 - transaction history/recovery: `07-F`–`07-H`
 - reviewed Sync preparation/execution/status/Job Center adapter: `23_A`–`23_J`
+- legacy Calendar trigger/state retirement: `04-B`
+- Calendar Repair window: `07-C_Calendar_Repair_Window.gs`
 - Calendar Repair safety/plan: `15-B`
 - Calendar Repair editor persistence: `16_Calendar_Repair_Editor.gs`
 - Calendar Repair combined execution: `18_Calendar_Repair_Combined_Stagger.gs`
 - Calendar Repair combined board UI: `19_Calendar_Repair_Existing_Visits_Editor.gs`
+- maintenance geographic placement: `22_Geographic_Suggestions.gs`
 
 ## Merge gate
 
