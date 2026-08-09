@@ -1,24 +1,4 @@
-/**
- * Calendar settings validation and legacy administration adapters.
- *
- * Calendar Sync is owned by the Review Session + reviewed queue workflow.
- * The destructive legacy rebuild implementation has been retired.
- */
-function rebuildCalendarFromSheet() {
-  showFreshCalendarAuditTaskWindow();
-  return false;
-}
-
-function continueCalendarRebuild_() {
-  throw new Error(
-    'Legacy Calendar Rebuild has been retired. Use Calendar Plan Audit and the reviewed Calendar Sync workflow.'
-  );
-}
-
-function showCalendarStatus() {
-  return openPmosJobEngine('CALENDAR_STATUS');
-}
-
+/** Calendar settings parsing and recurring-series validation helpers. */
 function parseSettingDateForYear_(value, year, fallback) {
   if (value instanceof Date && Number.isFinite(value.getTime())) {
     return new Date(year, value.getMonth(), value.getDate(), 12, 0, 0, 0);
@@ -26,46 +6,20 @@ function parseSettingDateForYear_(value, year, fallback) {
 
   if (typeof value === 'number' && Number.isFinite(value)) {
     const spreadsheetEpoch = new Date(Date.UTC(1899, 11, 30));
-    const serialDate = new Date(
-      spreadsheetEpoch.getTime() + value * 86400000
-    );
-    return new Date(
-      year,
-      serialDate.getUTCMonth(),
-      serialDate.getUTCDate(),
-      12,
-      0,
-      0,
-      0
-    );
+    const serialDate = new Date(spreadsheetEpoch.getTime() + value * 86400000);
+    return new Date(year, serialDate.getUTCMonth(), serialDate.getUTCDate(), 12, 0, 0, 0);
   }
 
   const text = String(value || '').trim();
   if (text) {
     const parsed = new Date(text);
     if (Number.isFinite(parsed.getTime())) {
-      return new Date(
-        year,
-        parsed.getMonth(),
-        parsed.getDate(),
-        12,
-        0,
-        0,
-        0
-      );
+      return new Date(year, parsed.getMonth(), parsed.getDate(), 12, 0, 0, 0);
     }
 
     const numeric = text.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?$/);
     if (numeric) {
-      return new Date(
-        year,
-        Number(numeric[1]) - 1,
-        Number(numeric[2]),
-        12,
-        0,
-        0,
-        0
-      );
+      return new Date(year, Number(numeric[1]) - 1, Number(numeric[2]), 12, 0, 0, 0);
     }
   }
 
@@ -74,15 +28,7 @@ function parseSettingDateForYear_(value, year, fallback) {
       ? fallback
       : new Date(year, 0, 1);
 
-  return new Date(
-    year,
-    safeFallback.getMonth(),
-    safeFallback.getDate(),
-    12,
-    0,
-    0,
-    0
-  );
+  return new Date(year, safeFallback.getMonth(), safeFallback.getDate(), 12, 0, 0, 0);
 }
 
 function parseFlexibleRouteTime_(value) {
@@ -116,7 +62,7 @@ function validateRecurringCalendarSettings_(settings) {
     ['Rotation Week 1 Monday', settings.rotationWeek1Start],
     ['Season Start', settings.seasonStart],
     ['Season End', settings.seasonEnd]
-  ].forEach(function (item) {
+  ].forEach(function(item) {
     if (!(item[1] instanceof Date) || !Number.isFinite(item[1].getTime())) {
       throw new Error(item[0] + ' is not a valid date in App Settings.');
     }
