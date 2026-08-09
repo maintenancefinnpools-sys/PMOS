@@ -27,6 +27,11 @@ function pauseBatchedCalendarReconcile() {
   return retiredCalendarReconcileStatus_();
 }
 
+/** Old generic Job Engine trigger entry: cleanup only. */
+function runPmosJobTrigger_() {
+  retireLegacyCalendarExecutionState_();
+}
+
 function retireLegacyCalendarAutoContinue_() {
   return retireLegacyCalendarExecutionState_();
 }
