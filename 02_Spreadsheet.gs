@@ -282,7 +282,16 @@ function setupSpreadsheetAutomation() {
   protectCalculatedColumns_();
   normalizeRoutesFromPhysicalOrder_(false);
   storeRouteSignatures_();
-  updateSyncStatus_('Everything synchronized', 'No unapplied route changes.');
+
+  const pending = getPendingChanges_();
+  if (pending.length) {
+    updateSyncStatus_(
+      'Route changes pending',
+      pending.length + ' route layer(s) still have unapplied changes.'
+    );
+  } else {
+    updateSyncStatus_('Everything synchronized', 'No unapplied route changes.');
+  }
 
   SpreadsheetApp.getUi().alert(
     'PMOS setup complete',
