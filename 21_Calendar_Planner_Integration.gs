@@ -284,32 +284,6 @@ function previewPmosCalendarSyncPlan(options) {
   });
 }
 
-function previewPmosCalendarChangesLegacyShape_() {
-  const preview = previewPmosCalendarSyncPlan();
-  return {
-    calendarName: preview.calendarName,
-    totalSeries: preview.totalSeries,
-    creates: preview.creates,
-    updates: preview.updates,
-    deletes: preview.deletes,
-    affectedRoutes: preview.affectedRoutes,
-    affectedEvents: preview.affectedEvents,
-    details: preview.details,
-    planId: preview.planId,
-    canExecute: preview.canExecute,
-    validationErrors: preview.validationErrors,
-    validationWarnings: preview.validationWarnings,
-    plannerErrors: preview.plannerErrors,
-    reviewExecutorPending: preview.reviewExecutorPending,
-    reviewOperationCount: preview.reviewOperationCount,
-    reviewedMatches: preview.reviewedMatches,
-    reviewedTemporaryVisits: preview.reviewedTemporaryVisits,
-    reviewedKeeps: preview.reviewedKeeps,
-    reviewedDeletions: preview.reviewedDeletions,
-    reviewedActions: preview.reviewedActions
-  };
-}
-
 function formatPmosCalendarPreviewOperation_(operation) {
   const desired = operation.payload && operation.payload.desired;
   const current = operation.payload && operation.payload.current;
@@ -341,27 +315,6 @@ function countPmosCalendarAffectedRoutes_(operations) {
     if (layer) routes[layer] = true;
   });
   return Object.keys(routes).length;
-}
-
-/** Retained for older callers; new planning uses verified Calendar source state. */
-function buildPmosCalendarSourceVersion_(desiredSeries, currentRegistry) {
-  const desiredSignatures = (desiredSeries || []).map(function (series) {
-    return String(series.seriesKey || '') + ':' + String(series.signature || '');
-  }).sort();
-  const registryValues = Array.isArray(currentRegistry)
-    ? currentRegistry
-    : Object.keys(currentRegistry || {}).sort().map(function (key) {
-        return Object.assign({ seriesKey: key }, currentRegistry[key] || {});
-      });
-  const currentSignatures = registryValues.map(function (series) {
-    return String(series.seriesKey || series['Series Key'] || '') + ':' +
-      String(series.signature || series.Signature || '');
-  }).sort();
-
-  return 'CALENDAR_SOURCE_' + pmosCalendarHash_(JSON.stringify({
-    desired: desiredSignatures,
-    current: currentSignatures
-  }));
 }
 
 function pmosCalendarHeader_(value) {
