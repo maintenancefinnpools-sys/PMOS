@@ -1,53 +1,7 @@
 /**
- * Lightweight PMOS task entry points.
- *
- * Calendar Plan Audit owns its dedicated reviewed flow in
- * 21-H_Calendar_Audit_Fresh_Window.gs. The generic task dispatcher below is
- * reserved for immediate read/maintenance operations that do not own a review
- * session.
+ * Immediate PMOS task dispatcher used by the current Operations / Job Center UI.
+ * Calendar Plan Audit owns its separate reviewed workflow.
  */
-function showCalendarAuditTaskWindow() {
-  return showFreshCalendarAuditTaskWindow();
-}
-
-function showCalendarStatusTaskWindow() {
-  return showPmosTaskWindow_('CALENDAR_STATUS', 'Calendar Status');
-}
-
-function showVerifyCalendarTaskWindow() {
-  return showPmosTaskWindow_('VERIFY_CALENDAR', 'Verify Calendar');
-}
-
-function showCustomerSyncTaskWindow() {
-  return showPmosTaskWindow_('CUSTOMER_SYNC', 'Sync Customer Database');
-}
-
-function showMapExportTaskWindow() {
-  return showPmosTaskWindow_('MAP_EXPORT', 'Export Updated Map Layers');
-}
-
-function showPmosTaskWindow_(taskType, taskTitle) {
-  if (taskType === 'CALENDAR_AUDIT') {
-    return showFreshCalendarAuditTaskWindow();
-  }
-
-  const html = HtmlService.createHtmlOutput(`
-<!DOCTYPE html><html><head><base target="_top"><style>
-body{font-family:Arial,sans-serif;padding:18px;color:#1f2937}h2{margin:0 0 5px}.muted{font-size:13px;color:#6b7280}.stage{margin-top:16px;font-weight:700}.barShell{height:16px;background:#e5e7eb;border-radius:9px;overflow:hidden;margin-top:9px;position:relative}.bar{height:100%;width:35%;background:#2563eb;position:absolute;animation:move 1.25s infinite ease-in-out;border-radius:9px}@keyframes move{0%{left:-35%}100%{left:100%}}.elapsed{text-align:right;font-size:13px;margin-top:5px;color:#4b5563}.result{margin-top:14px;padding:12px;background:#f3f4f6;border-radius:9px;white-space:pre-wrap;max-height:330px;overflow:auto}.buttons{display:flex;gap:8px;margin-top:14px}.primary{border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer;background:#e5e7eb;color:#111827}.complete .bar,.failed .bar{width:100%;left:0;animation:none}
-</style></head><body id="body">
-<h2>${escapeHtml_(taskTitle)}</h2><div class="muted">PMOS is checking the current data.</div><div id="stage" class="stage">Working…</div><div class="barShell"><div class="bar"></div></div><div id="elapsed" class="elapsed">Elapsed: 0s</div><div id="result" class="result">Starting ${escapeHtml_(taskTitle)}…</div><div class="buttons"><button id="closeButton" class="primary">Close</button></div>
-<script>
-(function(){
-var body=document.getElementById('body'),stage=document.getElementById('stage'),elapsed=document.getElementById('elapsed'),result=document.getElementById('result'),started=Date.now(),clock=setInterval(function(){elapsed.textContent='Elapsed: '+Math.floor((Date.now()-started)/1000)+'s';},1000);
-function fail(error){clearInterval(clock);body.className='failed';stage.textContent='Needs attention';result.textContent=error&&error.message?error.message:String(error);}
-function done(response){clearInterval(clock);body.className='complete';stage.textContent='Complete';elapsed.textContent='Duration: '+Math.max(1,Math.round((Date.now()-started)/1000))+'s';result.textContent=response&&response.summary?response.summary:'Task completed.';}
-document.getElementById('closeButton').onclick=function(){google.script.host.close();};
-google.script.run.withSuccessHandler(done).withFailureHandler(fail).runPmosTask('${taskType}');
-})();
-</script></body></html>`).setWidth(650).setHeight(500);
-
-  SpreadsheetApp.getUi().showModalDialog(html, taskTitle);
-}
 
 /** Public HTML-service entry point. */
 function runPmosTask(taskType) {
@@ -55,11 +9,6 @@ function runPmosTask(taskType) {
 }
 
 function runPmosTask_(taskType) {
-  if (taskType === 'CALENDAR_AUDIT') {
-    showFreshCalendarAuditTaskWindow();
-    return {summary:'Opened the reviewed Calendar Plan Audit window.'};
-  }
-
   return withSpreadsheetServiceRetry_(function () {
     switch (taskType) {
       case 'CALENDAR_STATUS': {
@@ -102,10 +51,6 @@ function runPmosTask_(taskType) {
         throw new Error('Unknown PMOS task: ' + taskType);
     }
   }, 'running ' + taskType);
-}
-
-function runCalendarPlanAuditReadOnly_() {
-  return runVerifiedCalendarPlanAuditReadOnly_();
 }
 
 function withSpreadsheetServiceRetry_(operation, operationName) {
