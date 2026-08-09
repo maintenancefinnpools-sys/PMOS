@@ -5,6 +5,22 @@
  * Calendar mutation, Repair overrides, or placement-logic overrides.
  */
 
+function showCalendarPlanAudit() {
+  return showFreshCalendarAuditTaskWindow();
+}
+
+function runCalendarPlanAudit_() {
+  return runVerifiedCalendarPlanAuditReadOnly_();
+}
+
+function openCalendarSyncFromAudit() {
+  return openVerifiedCalendarSyncFromAudit();
+}
+
+function openCalendarSyncFromAudit_() {
+  return openVerifiedCalendarSyncFromAudit();
+}
+
 function openIntegratedCalendarSyncFromAudit() {
   return openVerifiedCalendarSyncFromAudit();
 }
