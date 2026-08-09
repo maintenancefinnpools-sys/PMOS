@@ -225,12 +225,6 @@ function readRepairPlan_() {
   }
 }
 
-function clearCalendarRepairPlan_() {
-  PropertiesService.getDocumentProperties()
-    .deleteProperty(PMOS_CALENDAR_REPAIR_PLAN_KEY);
-  clearPmosRuntimeCheckpoint_(PMOS_CALENDAR_REPAIR_OPERATION);
-}
-
 function previewCalendarRepairPlan(startValue, endValue) {
   const start = parseRepairDate_(startValue, 'Begin date');
   const end = parseRepairDate_(endValue, 'End date');
