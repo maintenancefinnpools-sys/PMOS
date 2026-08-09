@@ -19,12 +19,6 @@ function showCalendarStatus() {
   return openPmosJobEngine('CALENDAR_STATUS');
 }
 
-/** Cleanup retained so Update PMOS can remove state left by older builds. */
-function clearCalendarRebuildState_() {
-  PropertiesService.getDocumentProperties()
-    .deleteProperty('PMOS_CALENDAR_REBUILD_STATE');
-}
-
 function parseSettingDateForYear_(value, year, fallback) {
   if (value instanceof Date && Number.isFinite(value.getTime())) {
     return new Date(year, value.getMonth(), value.getDate(), 12, 0, 0, 0);
