@@ -2,6 +2,7 @@
 
 ## Operating decisions
 
+- `pmos-development` is the behavioral baseline for the next stable release. Cleanup must preserve currently working PMOS behavior unless a defect is explicitly being corrected.
 - Spreadsheet customer and route data are the operational source of truth.
 - Calendar Sync is one reviewed workflow. Its default range is today through Season End.
 - Events that already started today are excluded unless the user deliberately selects **Include events that have already started today**.
@@ -46,7 +47,7 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 
 ## Cleanup completed on `pmos-development`
 
-- Retired the old Calendar Sync modal and direct Calendar mutation executor.
+- Retired the old Calendar Sync modal and direct mutation executor.
 - Retired legacy Calendar Auto-Continue execution; only legacy-trigger cleanup remains.
 - Removed retired/duplicate Job Center and generic Calendar Sync provider pathways.
 - Removed the obsolete generic Job runtime worker, operation-provider framework, and runtime activation override.
@@ -66,6 +67,7 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 - Removed duplicate Calendar Repair safety/UI implementations.
 - Standardized new customer creation on the canonical PMOS customer-ID scheme.
 - Rewrote architecture documentation around the reviewed queue / transaction model.
+- Removed the accidental independent `main` compatibility commit. `main` now points to the common base and is no longer ahead of `pmos-development`.
 
 ## Remaining merge blockers
 
@@ -75,7 +77,6 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 4. **Interruption test** — interrupt recurring synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic transaction recovery and queue replay.
 5. **Retry-on-error test** — force a recoverable Calendar operation error, correct the cause, use **Retry After Recovery**, and confirm the same immutable operation resumes without duplication.
 6. **Legacy-trigger cleanup test** — confirm old Auto Continue, generic Job Engine, and reconciliation triggers only remove themselves and never mutate Calendar.
-7. **Merge-base reconciliation** — `main` has one independent compatibility commit. Preserve the canonical recurring-series signature implementation when reconciling branches; do not resurrect the removed compatibility module.
 
 ## Function ownership rule
 
@@ -95,4 +96,4 @@ Current Calendar ownership:
 
 ## Merge gate
 
-`pmos-development` is not ready to merge until the remaining reference sweep and disposable-Calendar tests pass. No legacy Calendar writer should remain reachable before merge.
+`pmos-development` is not ready to merge until the remaining reference sweep and disposable-Calendar tests pass. No legacy Calendar writer should remain reachable before merge. Once those checks pass, the cleaned `pmos-development` state becomes the new `main` baseline without reintroducing old `main` compatibility code.
