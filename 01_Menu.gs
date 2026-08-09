@@ -1,12 +1,6 @@
 /**
  * PMOS v1.9.0 — Menus and user entry points.
- * Move-only refactor: public names and operational behavior are preserved.
  */
-
-/** Compatibility entry retained for older menu installations and callers. */
-function showNewMaintenanceClientNotice() {
-  return showAddMaintenanceClientV2();
-}
 
 function onOpen() {
   const initialized = isPmosInitialized_();
