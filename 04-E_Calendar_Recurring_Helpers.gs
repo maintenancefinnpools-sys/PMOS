@@ -179,30 +179,6 @@ function getSeriesRegistry_() {
   return map;
 }
 
-function compareSeriesPlanToRegistry_(plan, registry, calendar) {
-  const expected = {};
-  const actions = [];
-  plan.forEach(function(item){
-    expected[item.seriesKey] = true;
-    const record = registry[item.seriesKey];
-    if (!record || !record.seriesId) {
-      actions.push({action:'CREATE',seriesKey:item.seriesKey,layer:item.layer,title:item.title,plan:item});
-      return;
-    }
-    const series = readPmosRecurringSeriesById_(calendar, record.seriesId);
-    if (!series || record.signature !== item.signature) {
-      actions.push({action:'UPDATE',seriesKey:item.seriesKey,layer:item.layer,title:item.title,plan:item,series:series});
-    }
-  });
-  Object.keys(registry).forEach(function(key){
-    if (expected[key]) return;
-    const record = registry[key];
-    const series = readPmosRecurringSeriesById_(calendar, record.seriesId);
-    actions.push({action:'DELETE',seriesKey:key,layer:record.layer,title:key,series:series});
-  });
-  return actions;
-}
-
 /**
  * Canonical registry upsert. A matching Calendar Series ID is treated as the
  * same PMOS object even when the series key changed during approved identity
@@ -267,13 +243,4 @@ function deleteSeriesRegistryRow_(seriesKey) {
   const sheet = ensureRecurringSeriesRegistry_();
   const registry = getSeriesRegistry_();
   if (registry[seriesKey]) sheet.deleteRow(registry[seriesKey].row);
-}
-
-function markSeriesRegistryError_(seriesKey, error) {
-  const registry = getSeriesRegistry_();
-  const sheet = ensureRecurringSeriesRegistry_();
-  if (registry[seriesKey]) {
-    sheet.getRange(registry[seriesKey].row, 8, 1, 2)
-      .setValues([['Error', String(error || '')]]);
-  }
 }
