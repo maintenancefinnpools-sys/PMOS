@@ -386,10 +386,3 @@ function getSettings_() {
     eventDurationMinutes: Number(map['Event Duration Minutes'] || defaults.eventDurationMinutes)
   };
 }
-
-function getCalendar_() {
-  const settings = getSettings_();
-  const matches = CalendarApp.getCalendarsByName(settings.calendarName);
-  if (!matches.length) throw new Error('Calendar not found: ' + settings.calendarName);
-  return matches[0];
-}
