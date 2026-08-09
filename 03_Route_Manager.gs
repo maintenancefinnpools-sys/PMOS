@@ -142,16 +142,6 @@ function showRouteManagerLink() {
   SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Route Manager');
 }
 
-/** Compatibility entry: previewing route changes now opens the authoritative audit. */
-function previewRouteChangesFromSheet() {
-  return showFreshCalendarAuditTaskWindow();
-}
-
-/** Compatibility entry: direct application is retired; all Calendar work is reviewed. */
-function applyCalendarChangesFromSheet() {
-  return showFreshCalendarAuditTaskWindow();
-}
-
 function exportAffectedMapLayers() {
   const pending = getPendingChanges_();
   if (!Array.isArray(pending) || pending.length === 0) {
@@ -217,12 +207,6 @@ function exportAffectedMapLayers() {
   };
 }
 
-function getOrCreatePmosMapExportFolder_() {
-  const folderName = 'PMOS Map Exports';
-  const folders = DriveApp.getFoldersByName(folderName);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
-}
-
 function getRouteManagerData() {
   ensureSupportSheets_();
   normalizeRoutesFromPhysicalOrder_(false);
@@ -278,18 +262,6 @@ function saveRouteOrder(payload) {
   storeRouteSignatures_();
   updateSyncStatus_('Route changes pending', payload.layer + ' changed in the app.');
   return {ok: true, route: getRoute_(payload.layer), pending: getPendingChanges_()};
-}
-
-/** Retired direct Calendar preview. Kept read-only for older web-app callers. */
-function previewCalendarChanges() {
-  return previewPmosCalendarChangesLegacyShape_();
-}
-
-/** Retired direct Calendar mutation. Calendar writes require Review Session approval. */
-function applyCalendarChanges() {
-  throw new Error(
-    'Direct Calendar application has been retired. Run Calendar Plan Audit and approve Calendar Sync Preview.'
-  );
 }
 
 function readRoutesInPhysicalOrder_() {
@@ -420,102 +392,4 @@ function getCalendar_() {
   const matches = CalendarApp.getCalendarsByName(settings.calendarName);
   if (!matches.length) throw new Error('Calendar not found: ' + settings.calendarName);
   return matches[0];
-}
-
-/** Read-only diagnostic retained for route-vs-calendar inspection. */
-function auditCalendarAgainstRoutes_(markPending) {
-  const calendar = getCalendar_();
-  const settings = getSettings_();
-  const year = Number(settings.calendarYear || 2026);
-  const events = calendar.getEvents(new Date(year, 0, 1), new Date(year + 1, 0, 1));
-  const layers = Array.from(new Set(readRoutesInPhysicalOrder_().map(function (row) { return row.layer; })));
-  const mismatched = [];
-
-  layers.forEach(function (layer) {
-    const parsed = parseLayer_(layer);
-    const route = getRoute_(layer);
-    const routeEvents = events.filter(function (event) { return eventMatchesRoute_(event, parsed); });
-    const dates = uniqueRouteDates_(routeEvents);
-    let mismatch = false;
-    dates.forEach(function (date) {
-      const dayEvents = routeEvents.filter(function (event) {
-        return sameLocalDate_(event.getStartTime(), date);
-      });
-      route.forEach(function (row) {
-        const event = dayEvents.find(function (item) {
-          return normalize_(item.getTitle()) === normalize_(row.title);
-        });
-        if (!event) { mismatch = true; return; }
-        const expectedStart = routeTimeForOrder_(date, row.order, settings);
-        if (event.getStartTime().getTime() !== expectedStart.getTime()) mismatch = true;
-        if (String(event.getLocation() || '').trim() !== String(row.address || '').trim()) mismatch = true;
-      });
-      dayEvents.forEach(function (event) {
-        if (!route.some(function (row) {
-          return normalize_(row.title) === normalize_(event.getTitle());
-        })) mismatch = true;
-      });
-    });
-    if (routeEvents.length && !dates.length) mismatch = true;
-    if (mismatch) {
-      mismatched.push(layer);
-      if (markPending) addPendingChange_(layer, 0, 'Calendar audit');
-    }
-  });
-
-  if (markPending && mismatched.length) {
-    updateSyncStatus_(
-      'Route changes pending',
-      mismatched.length + ' route layer(s) differ from Calendar.'
-    );
-  }
-  return mismatched;
-}
-
-function uniqueRouteDates_(events) {
-  const seen = {};
-  events.forEach(function (event) {
-    const date = event.getStartTime();
-    const key = Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd');
-    if (!seen[key]) seen[key] = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  });
-  return Object.keys(seen).sort().map(function (key) { return seen[key]; });
-}
-
-function buildRouteDescription_(row, parsed) {
-  const parts = [];
-  if (row.customerId) parts.push('PMOS_CUSTOMER_ID=' + row.customerId);
-  if (row.fullName) parts.push(row.fullName);
-  if (row.entry) parts.push('', 'ENTRY', row.entry);
-  parts.push('', parsed.day + ' • Rotation Week ' + parsed.week);
-  if (row.frequency) parts.push(row.frequency);
-  if (row.phone) parts.push('', 'PHONE: ' + row.phone);
-  if (row.notes) parts.push('', 'NOTES', row.notes);
-  return parts.join('\n').trim();
-}
-
-function eventMatchesRoute_(event, parsed) {
-  const description = normalize_(event.getDescription());
-  const day = Utilities.formatDate(event.getStartTime(), PMOS.TIMEZONE, 'EEEE');
-  return day === parsed.day && description.includes('rotation week ' + parsed.week);
-}
-
-function routeTimeForOrder_(eventDate, order, settings) {
-  if (!(eventDate instanceof Date) || !Number.isFinite(eventDate.getTime())) {
-    throw new Error('Invalid route date: ' + eventDate);
-  }
-  const time = parseFlexibleRouteTime_(settings.routeStart);
-  const result = new Date(eventDate.getTime());
-  result.setHours(time.hours, time.minutes, 0, 0);
-  const safeOrder = positiveNumberOrDefault_(order, 1);
-  for (let index = 1; index < safeOrder; index++) {
-    result.setMinutes(result.getMinutes() + (index % 2 === 1 ? 45 : 60));
-  }
-  if (!Number.isFinite(result.getTime())) {
-    throw new Error(
-      'Could not calculate a valid start time from ' + eventDate +
-      ', order ' + order + ', and route start ' + settings.routeStart + '.'
-    );
-  }
-  return result;
 }
