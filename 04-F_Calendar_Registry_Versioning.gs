@@ -74,22 +74,3 @@ function resolvePmosRegistryIdentity_(existingRecord, plan, seriesId) {
     currentVersion: changed ? currentVersion + 1 : Math.max(1,currentVersion)
   };
 }
-
-function preparePmosRegistryPlanIdentity_(plan, existingRecord, seriesId) {
-  if (!plan) throw new Error('Calendar series plan is required for registry identity.');
-  if (plan.objectId && Number(plan.currentVersion || 0) >= 1) {
-    return {objectId:String(plan.objectId),currentVersion:Number(plan.currentVersion)};
-  }
-  const identity = resolvePmosRegistryIdentity_(existingRecord,plan,seriesId);
-  plan.objectId = identity.objectId;
-  plan.currentVersion = identity.currentVersion;
-  return identity;
-}
-
-function readPmosRegistryTransactionIdForOperation_(operationId) {
-  if (!operationId) return '';
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS_CALENDAR_TRANSACTION_SHEET);
-  if (!sheet || sheet.getLastRow() < 2) return '';
-  const found = findPmosCalendarTransactionByOperation_(sheet,operationId);
-  return found && found.record ? String(found.record.transactionId || '') : '';
-}
