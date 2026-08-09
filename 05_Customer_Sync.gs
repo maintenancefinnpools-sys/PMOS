@@ -1,56 +1,7 @@
 /**
  * PMOS v1.9.0 — Customer synchronization and identity management.
- * Move-only refactor: public names and operational behavior are preserved.
+ * Customers sheet is authoritative for customer identity and details.
  */
-
-function addCustomerToRoute(payload) {
-  if (!payload || !payload.layer || !payload.title) {
-    throw new Error('Missing customer information.');
-  }
-
-  ensureSupportSheets_();
-  saveRouteVersion_('Before adding customer', snapshotRoutes_());
-
-  const sheet = getRoutesSheet_();
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0].map(v => String(v).trim());
-  const row = new Array(headers.length).fill('');
-
-  setByHeader_(row, headers, 'Layer', payload.layer);
-  setByHeader_(row, headers, 'Calendar Title', payload.title);
-  setByHeader_(row, headers, 'Full Name(s)', payload.fullName || payload.title);
-  setByHeader_(row, headers, 'Full Address', payload.address || '');
-  setByHeader_(row, headers, 'Frequency', payload.frequency || 'weekly');
-  setByHeader_(row, headers, 'Customer ID', payload.customerId || '');
-
-  const layerCol = headers.indexOf('Layer');
-  const routeIndexes = [];
-
-  values.slice(1).forEach((existing, index) => {
-    if (String(existing[layerCol] || '').trim() === payload.layer) {
-      routeIndexes.push(index);
-    }
-  });
-
-  const afterStop = Math.max(0, Number(payload.afterStop || 0));
-  const insertionBodyIndex = routeIndexes.length
-    ? routeIndexes[Math.min(afterStop, routeIndexes.length) - 1] + 1
-    : values.length - 1;
-
-  sheet.insertRowBefore(insertionBodyIndex + 2);
-  sheet.getRange(insertionBodyIndex + 2, 1, 1, headers.length).setValues([row]);
-
-  normalizeRoutesFromPhysicalOrder_(false);
-  addPendingChange_(payload.layer, 1, 'Customer added');
-  storeRouteSignatures_();
-  updateSyncStatus_('Route changes pending', `${payload.title} was added to ${payload.layer}.`);
-
-  return {
-    ok: true,
-    route: getRoute_(payload.layer),
-    pending: getPendingChanges_()
-  };
-}
 
 function syncCustomerDatabaseFromSheet() {
   const result = synchronizeCustomerDatabase_(true);
@@ -64,7 +15,7 @@ function syncCustomerDatabaseFromSheet() {
       `${result.changedLayers.length} route layer(s) marked for Calendar synchronization.`,
       '',
       result.changedLayers.length
-        ? 'Use PMOS → Preview Route Changes, then Apply Calendar Changes.'
+        ? 'Use PMOS → Calendar → Calendar Plan Audit to review the resulting Calendar changes.'
         : 'Everything is already synchronized.'
     ].join('\n'),
     SpreadsheetApp.getUi().ButtonSet.OK
@@ -133,12 +84,9 @@ function synchronizeCustomerDatabase_(markPending) {
   }
 
   /*
-   * IMPORTANT: routeCustomerIds captured inside getCustomerLookup_() may contain
-   * the old legacy IDs that existed before the route rows above were migrated
-   * to the Customers sheet's canonical IDs. Using that stale Set made every
-   * migrated customer look "missing" and appended a second route row for every
-   * rotation slot. Re-read the route IDs only after the canonical IDs have been
-   * written back to the sheet.
+   * Route IDs captured before migration may contain legacy identities. Re-read
+   * the route IDs only after canonical IDs have been written back so migrated
+   * customers are not mistaken for missing customers and duplicated.
    */
   const currentRouteCustomerIds = new Set(
     readRouteCustomerIdsWithoutCustomerLookup_()
