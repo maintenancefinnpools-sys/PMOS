@@ -6,14 +6,15 @@
 - Spreadsheet customer and route data are the operational source of truth.
 - Calendar Sync is one reviewed workflow. Its default range is today through Season End.
 - Events that already started today are excluded unless the user deliberately selects **Include events that have already started today**.
-- Calendar writes require a completed read-only Calendar Plan Audit and Review Session.
-- The approved review plan is serialized into a durable queue before Calendar mutation begins.
+- The approved review plan is serialized into a durable queue before recurring Calendar mutation begins.
 - Calendar events not represented by a source record are preserved by default and presented for review before any deletion.
 - Manually created one-time maintenance events are temporary-visit candidates. PMOS may suggest a customer match, but the user must approve inferred customer links.
 - Calendar Repair is a separate explicit recovery workflow. It is not a normal synchronization path.
 - The Job Center uses the reviewed resumable Calendar worker; legacy generic Job Engine and Auto Continue execution are retired.
+- The current Temporary Visit scheduler is an intentional temporary exception to the recurring Sync boundary. It creates/repositions only the selected service day. Its architecture will be redesigned together with optimizer-backed Temporary Visit planning rather than altered during stabilization.
+- The intended Add Maintenance Customer experience is one final user approval followed by automatic route/customer persistence and automatic execution of the required future Calendar synchronization. The user should not have to launch a separate manual Sync. Whether that automation invokes the standard reviewed worker internally or a purpose-built equivalent will be decided when that workflow is implemented.
 
-## Authoritative Calendar flow
+## Authoritative recurring Calendar flow
 
 ```text
 Customers / 4-Week Route Template
@@ -43,7 +44,7 @@ Reviewed resumable worker
           Transaction History / Verification
 ```
 
-No Route Manager, customer-creation, legacy task window, compatibility pathway, or alternate reconciliation job may bypass this sequence to perform normal Calendar synchronization.
+No Route Manager, legacy task window, compatibility pathway, or alternate reconciliation job may bypass this sequence to perform normal recurring Calendar synchronization. Temporary Visit scheduling remains a narrow, documented one-day exception until its optimizer-backed redesign. Add Maintenance Customer will ultimately initiate its required synchronization automatically after the final user approval.
 
 ## Cleanup completed on `pmos-development`
 
@@ -56,7 +57,7 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 - Removed the destructive Calendar Rebuild pathway.
 - Centralized cleanup of old Auto Continue, Rebuild, reconciliation, and generic Job properties/triggers in the legacy execution retirement shim.
 - Removed duplicate address suggestion implementation.
-- Removed the legacy Add Maintenance Client path that could automatically launch Calendar synchronization.
+- Removed the legacy Add Maintenance Client path that could automatically launch the retired direct Calendar synchronization implementation. This does not change the future requirement for the rebuilt Add Maintenance Customer workflow to start its safe synchronization automatically.
 - Removed the obsolete web-app Add Customer pathway that wrote directly to the route template without first creating the authoritative Customers record.
 - Removed direct Calendar mutation paths from Route Manager; remaining legacy route-navigation wrappers are being evaluated for deletion during the final reference sweep.
 - Removed obsolete Calendar Audit/Sync compatibility redirect files and redundant Audit wrappers.
@@ -78,15 +79,34 @@ No Route Manager, customer-creation, legacy task window, compatibility pathway, 
 - Rewrote architecture documentation around the reviewed queue / transaction model.
 - Removed the accidental independent `main` compatibility commit. `main` now points to the common base and is no longer ahead of `pmos-development`.
 
+## Deferred feature architecture
+
+### Temporary Visits
+
+Do not refactor the currently working Temporary Visit Calendar writer as part of repository cleanup unless a concrete defect is found. The eventual redesign should preserve the one-click scheduling experience while incorporating optimizer-backed date/position suggestions and a durable execution/recovery model appropriate to one-day changes.
+
+### Add Maintenance Customer
+
+When implemented, the final **Add Customer** approval should be the only user action required. PMOS should:
+
+1. create/update the authoritative Customers record;
+2. update the route template and route ordering;
+3. prepare the required future recurring Calendar changes;
+4. start safe execution automatically;
+5. expose progress/recovery without requiring the user to manually start Calendar Sync.
+
+The implementation may reuse the reviewed Calendar worker internally, but it must not resurrect retired direct-sync/rebuild pathways.
+
 ## Remaining merge blockers
 
 1. **Final repository reference sweep** — remove remaining dead compatibility wrappers and verify there are no calls to deleted legacy functions or duplicate global function definitions.
-2. **Temporary Visit Calendar ownership** — the current Temporary Visit scheduler still creates a Calendar event directly and retimes that day's existing events. Decide/refactor this so it cannot bypass the reviewed Calendar mutation architecture while preserving the simple scheduling workflow.
-3. **Repair-path verification** — exercise Preview → combined board → Save → Apply → continuation on a disposable date range after the Repair module consolidation.
-4. **End-to-end Calendar Sync test** — validate Audit → Review → Sync Preview → Queue Preparation → Job Center → Calendar mutation → Registry verification → completion on a disposable Calendar.
-5. **Interruption test** — interrupt recurring synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic transaction recovery and queue replay.
-6. **Retry-on-error test** — force a recoverable Calendar operation error, correct the cause, use **Retry After Recovery**, and confirm the same immutable operation resumes without duplication.
-7. **Legacy-trigger cleanup test** — confirm old Auto Continue, generic Job Engine, and reconciliation triggers only remove themselves and never mutate Calendar.
+2. **Repair-path verification** — exercise Preview → combined board → Save → Apply → continuation on a disposable date range after the Repair module consolidation.
+3. **End-to-end Calendar Sync test** — validate Audit → Review → Sync Preview → Queue Preparation → Job Center → Calendar mutation → Registry verification → completion on a disposable Calendar.
+4. **Interruption test** — interrupt recurring synchronization after Calendar mutation but before registry/final-state persistence and verify deterministic transaction recovery and queue replay.
+5. **Retry-on-error test** — force a recoverable Calendar operation error, correct the cause, use **Retry After Recovery**, and confirm the same immutable operation resumes without duplication.
+6. **Legacy-trigger cleanup test** — confirm old Auto Continue, generic Job Engine, and reconciliation triggers only remove themselves and never mutate Calendar.
+
+Temporary Visit redesign and automatic Add Maintenance Customer synchronization are explicitly deferred feature work and are not stabilization merge blockers unless the existing baseline behavior is broken.
 
 ## Function ownership rule
 
@@ -110,7 +130,8 @@ Current Calendar ownership:
 - reviewed audit/review: `20`–`22`
 - maintenance geographic placement: `22_Geographic_Suggestions.gs`
 - reviewed Sync preparation/execution/status/Job Center adapter: `23_A`–`23_J`
+- current Temporary Visit one-day mutation: `06-B_Temporary_Visit_Scheduler.gs` (documented deferred exception)
 
 ## Merge gate
 
-`pmos-development` is not ready to promote until the remaining reference sweep, Temporary Visit ownership fix, and disposable-Calendar tests pass. No unintended Calendar writer should remain reachable before promotion. Once those checks pass, the cleaned `pmos-development` state becomes the new `main` baseline without reintroducing old `main` compatibility code.
+`pmos-development` is not ready to promote until the remaining reference sweep and disposable-Calendar tests pass. No unintended recurring Calendar writer should remain reachable before promotion. The existing Temporary Visit one-day writer is a known deferred exception. Once the stabilization checks pass, the cleaned `pmos-development` state becomes the new `main` baseline without reintroducing old `main` compatibility code.
