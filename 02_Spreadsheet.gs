@@ -368,14 +368,28 @@ function handlePmosSheetEdit(e) {
 function protectCalculatedColumns_() {
   const sheet = getRoutesSheet_();
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const managedPrefix = 'PMOS calculated column: ';
+  const managedNames = ['Stop Order', 'Map Label'];
+  const protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
 
-  ['Stop Order', 'Map Label'].forEach(name => {
+  // Remove only protections previously created by PMOS for these calculated
+  // columns. User-created protections and protections on unrelated ranges are
+  // deliberately left untouched.
+  protections.forEach(function(protection) {
+    const description = String(protection.getDescription() || '');
+    if (description.indexOf(managedPrefix) !== 0) return;
+    const managedName = description.slice(managedPrefix.length);
+    if (managedNames.indexOf(managedName) < 0) return;
+    protection.remove();
+  });
+
+  managedNames.forEach(function(name) {
     const index = headers.indexOf(name);
     if (index < 0) return;
 
     const range = sheet.getRange(1, index + 1, Math.max(sheet.getMaxRows(), 2), 1);
     const protection = range.protect();
-    protection.setDescription(`PMOS calculated column: ${name}`);
+    protection.setDescription(managedPrefix + name);
     protection.setWarningOnly(true);
   });
 }
