@@ -41,6 +41,7 @@ function retireLegacyCalendarExecutionState_() {
     runCalendarAutoContinueTrigger: true,
     runFutureCalendarReconciliationContinuation: true,
     continueBatchedCalendarReconcile: true,
+    pauseBatchedCalendarReconcile: true,
     runPmosJobTrigger_: true
   };
 
