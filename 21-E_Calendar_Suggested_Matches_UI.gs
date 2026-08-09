@@ -65,29 +65,3 @@ function showCalendarSuggestedMatchesReview() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Suggested Customer Matches');
   return {count: items.length, planId: audit.planId, reviewSessionId: audit.reviewSessionId};
 }
-
-function savePmosCalendarSuggestedMatchDecisions(items, exemptIndexes) {
-  const exempt = {};
-  (exemptIndexes || []).forEach(function (index) { exempt[Number(index)] = true; });
-  const records = [];
-  let approvedCount = 0;
-  let exemptCount = 0;
-
-  (items || []).forEach(function (item, index) {
-    const eventKey = String(item && (item.eventId || item.seriesId) || '');
-    if (!eventKey) throw new Error('A suggested match is missing its Calendar event identity.');
-    const decision = exempt[index] ? 'IGNORE' : 'MATCH';
-    if (decision === 'MATCH') approvedCount++; else exemptCount++;
-    records.push({itemKey: eventKey, decision: decision});
-  });
-
-  const saved = savePmosReviewStep_('CALENDAR', 'SUGGESTED_MATCH', records);
-  if (!saved || saved.decisionCount !== records.length) throw new Error('Not all suggested-match decisions were saved.');
-  return {
-    saved: true,
-    decisionCount: records.length,
-    approvedCount: approvedCount,
-    exemptCount: exemptCount,
-    reviewSessionId: saved.sessionId
-  };
-}
