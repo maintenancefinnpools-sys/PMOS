@@ -6,7 +6,9 @@
  * worker interrupted after marking a row Running can safely verify/replay it.
  */
 const PMOS_REVIEWED_SYNC_STATE = 'PMOS_REVIEWED_CALENDAR_SYNC_STATE_V1';
-const PMOS_REVIEWED_SYNC_TRIGGER = 'runReviewedCalendarSyncWorker_';
+// Every pass uses the public wrapper; private handler triggers have proved
+// unreliable for delayed continuation in deployed Apps Script projects.
+const PMOS_REVIEWED_SYNC_TRIGGER = 'runReviewedCalendarSyncWorker';
 
 function initializeReviewedCalendarSyncExecution_() {
   prepareReviewedCalendarSyncWindow_();
@@ -684,7 +686,11 @@ function ensureReviewedCalendarSyncTrigger_() {
 
 function removeReviewedCalendarSyncTriggers_() {
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
-    if (trigger.getHandlerFunction() === PMOS_REVIEWED_SYNC_TRIGGER) {
+    const handler = trigger.getHandlerFunction();
+    if (
+      handler === PMOS_REVIEWED_SYNC_TRIGGER ||
+      handler === 'runReviewedCalendarSyncWorker_'
+    ) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
