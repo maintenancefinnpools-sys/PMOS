@@ -61,27 +61,39 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
     }
   );
 
-  // Critical pass: pair remaining series for the same customer even when the
-  // route/week/day changed. Weekly/biweekly customers can own several four-week
-  // series, so pair the closest rotation slots rather than treating Customer ID
-  // as a single-series key.
+  // A cross-layer pair represents a move only when the customer owns the same
+  // total number of desired and current series. A lower desired count means a
+  // Route Template row was removed; leave that current series unmatched so it
+  // reaches explicit deletion review.
+  const customerCountParity = buildPmosCalendarIdentityCountParity_(
+    desired,
+    current,
+    function(record) { return effectivePmosCalendarCustomerId_(record); }
+  );
   pairPmosCalendarCustomerSeries_(
     unmatchedDesired,
     unmatchedCurrent,
     remappedCurrentKeys,
     reconciliations,
     'CUSTOMER_ID_SERIES_PAIR',
-    function(record) { return effectivePmosCalendarCustomerId_(record); }
+    function(record) { return effectivePmosCalendarCustomerId_(record); },
+    customerCountParity
   );
 
   // Conservative title fallback for legacy records with no usable Customer ID.
+  const titleCountParity = buildPmosCalendarIdentityCountParity_(
+    desired,
+    current,
+    function(record) { return normalizePmosCalendarIdentityText_(record && record.title); }
+  );
   pairPmosCalendarCustomerSeries_(
     unmatchedDesired,
     unmatchedCurrent,
     remappedCurrentKeys,
     reconciliations,
     'TITLE_SERIES_PAIR',
-    function(record) { return normalizePmosCalendarIdentityText_(record && record.title); }
+    function(record) { return normalizePmosCalendarIdentityText_(record && record.title); },
+    titleCountParity
   );
 
   const records = current.map(function(record) {
@@ -141,7 +153,7 @@ function matchPmosCalendarIdentityPass_(desired, current, mappings, reconciliati
   });
 }
 
-function pairPmosCalendarCustomerSeries_(desired, current, mappings, reconciliations, method, identityBuilder) {
+function pairPmosCalendarCustomerSeries_(desired, current, mappings, reconciliations, method, identityBuilder, eligibleIdentities) {
   const desiredBuckets = {};
   const currentBuckets = {};
   const mappedTargets = buildPmosCalendarMappedTargetIndex_(mappings);
@@ -165,6 +177,7 @@ function pairPmosCalendarCustomerSeries_(desired, current, mappings, reconciliat
   });
 
   Object.keys(desiredBuckets).sort().forEach(function(identity) {
+    if (eligibleIdentities && eligibleIdentities[identity] !== true) return;
     const wanted = desiredBuckets[identity] || [];
     const existing = currentBuckets[identity] || [];
     if (!wanted.length || !existing.length) return;
@@ -213,6 +226,26 @@ function pairPmosCalendarCustomerSeries_(desired, current, mappings, reconciliat
       usedCurrent[currentKey] = true;
     });
   });
+}
+
+function buildPmosCalendarIdentityCountParity_(desired, current, identityBuilder) {
+  const desiredCounts = {};
+  const currentCounts = {};
+
+  (desired || []).forEach(function(record) {
+    const identity = String(identityBuilder(record) || '').trim();
+    if (identity) desiredCounts[identity] = (desiredCounts[identity] || 0) + 1;
+  });
+  (current || []).forEach(function(record) {
+    const identity = String(identityBuilder(record) || '').trim();
+    if (identity) currentCounts[identity] = (currentCounts[identity] || 0) + 1;
+  });
+
+  const parity = {};
+  Object.keys(desiredCounts).forEach(function(identity) {
+    parity[identity] = desiredCounts[identity] === currentCounts[identity];
+  });
+  return parity;
 }
 
 function scorePmosCalendarSeriesPair_(current, desired) {
