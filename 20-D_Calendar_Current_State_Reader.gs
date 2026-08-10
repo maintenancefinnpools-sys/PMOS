@@ -190,15 +190,12 @@ function readRegisteredPmosCalendarSeriesState_(calendar, registry, observedSeri
   let presentCount = 0;
   let missingCount = 0;
   const observed = observedSeries || {};
-  const rangeDays = Math.max(
-    0,
-    (range.end.getTime() - range.start.getTime()) / (24 * 60 * 60 * 1000)
-  );
-
-  // PMOS maintenance recurrence is weekly, biweekly, or monthly. In an audit
-  // window of at least 35 days, an active PMOS series must have an occurrence
-  // in the single Calendar snapshot. Shorter windows retain exact ID lookup.
-  const canVerifyFromSnapshot = rangeDays >= 35;
+  // The range snapshot is only an optimization. Absence from that window does
+  // not prove a registered recurring series is gone: a series may have ended,
+  // have skipped occurrences, or have its next occurrence outside the window.
+  // Fall back to its authoritative registry ID before excluding it from the
+  // verified state, otherwise a removed Route Template row cannot surface as a
+  // deletion candidate for an existing Calendar series.
 
   Object.keys(registry || {}).sort().forEach(function(seriesKey){
     const record = registry[seriesKey] || {};
@@ -207,7 +204,7 @@ function readRegisteredPmosCalendarSeriesState_(calendar, registry, observedSeri
     let series = null;
     let error = '';
 
-    if (!representative && seriesId && !canVerifyFromSnapshot) {
+    if (!representative && seriesId) {
       try { series = calendar.getEventSeriesById(seriesId); }
       catch (caught) { error = String(caught || ''); }
     }
