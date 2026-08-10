@@ -139,23 +139,24 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
     }
   });
   const lines = [
-    'Calendar: ' + String(preview.calendarName || ''),
-    'Range: ' + formatPmosCalendarAuditRange_(preview.syncStart, preview.syncEnd),
+    'CALENDAR',
+    '• Name: ' + String(preview.calendarName || ''),
+    '• Range: ' + formatPmosCalendarAuditRange_(preview.syncStart, preview.syncEnd),
     '',
-    'Recurring series: ' + Number(preview.totalSeries || 0),
-    'Proposed changes: ' +
-      Number(preview.creates || 0) + ' create • ' +
-      Number(preview.updates || 0) + ' update • ' +
-      deletionCandidates.length + ' deletion review',
+    'PROPOSED PLAN',
+    '• Recurring series: ' + Number(preview.totalSeries || 0),
+    '• Creates: ' + Number(preview.creates || 0),
+    '• Updates: ' + Number(preview.updates || 0),
+    '• Deletion review: ' + deletionCandidates.length,
     '',
-    'Review queue: ' +
-      errors.length + ' error • ' +
-      warnings.length + ' warning • ' +
-      suggestedMatches.length + ' match • ' +
-      unclassifiedEvents.length + ' unclassified',
-    'Registry missing: ' + Number(preview.registeredMissing || 0),
+    'REVIEW STATUS',
+    '• Errors: ' + errors.length,
+    '• Warnings: ' + warnings.length,
+    '• Suggested matches: ' + suggestedMatches.length,
+    '• Unclassified events: ' + unclassifiedEvents.length,
+    '• Registry entries missing: ' + Number(preview.registeredMissing || 0),
     '',
-    'Use the searchable series table below for customer-level details.'
+    'Proposed changes are highlighted in the table below.'
   ];
   if (!reviewComplete) {
     lines.push('Complete the remaining review items before opening Calendar Sync.');
