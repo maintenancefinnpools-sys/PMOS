@@ -1,6 +1,5 @@
 /** Job Center adapter for the reviewed Calendar Sync queue worker. */
 const PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER = 'runReviewedCalendarSyncWorker';
-const PMOS_REVIEWED_SYNC_STALE_SCHEDULE_MS = 20000;
 
 /** Public HTML-service endpoint. */
 function getReviewedCalendarSyncJobCenterStatus() {
@@ -248,20 +247,19 @@ function repairStaleReviewedCalendarSyncSchedule_() {
   const state = readReviewedCalendarSyncState_();
   if (!state || String(state.status || '') !== 'Scheduled') return false;
 
-  const updatedAt = new Date(state.updatedAt || state.startedAt || 0).getTime();
-  const stale = !Number.isFinite(updatedAt) ||
-    Date.now() - updatedAt >= PMOS_REVIEWED_SYNC_STALE_SCHEDULE_MS;
   const hasTrigger = ScriptApp.getProjectTriggers().some(function (trigger) {
     const handler = trigger.getHandlerFunction();
     return handler === PMOS_REVIEWED_SYNC_PUBLIC_TRIGGER ||
       handler === PMOS_REVIEWED_SYNC_TRIGGER;
   });
 
-  if (!hasTrigger || stale) {
+  // Apps Script's after() delay is a minimum, not a firing deadline. Status is
+  // polled every two seconds, so replacing an existing trigger on elapsed time
+  // can perpetually postpone the worker. Re-arm only when no worker trigger
+  // exists; one-shot triggers disappear after firing.
+  if (!hasTrigger) {
     armReviewedCalendarSyncPublicTrigger_();
-    state.phase = stale
-      ? 'Restarting delayed execution worker'
-      : 'Starting execution worker';
+    state.phase = 'Starting execution worker';
     state.updatedAt = new Date().toISOString();
     writeReviewedCalendarSyncState_(state);
     return true;
