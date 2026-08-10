@@ -106,7 +106,12 @@ function startReviewedCalendarSyncJobCenterExecution_() {
     );
   }
   startReviewedCalendarSyncExecution();
-  armReviewedCalendarSyncPublicTrigger_();
+
+  // Run the first bounded pass immediately while this authorized HTML-service
+  // request is active. This avoids waiting on Google's best-effort clock
+  // scheduler for ordinary queues. The worker schedules a resumable trigger
+  // itself only when operations remain after its safe pass limit.
+  runReviewedCalendarSyncWorker_();
   return getReviewedCalendarSyncJobCenterStatus_();
 }
 
@@ -189,7 +194,12 @@ function retryReviewedCalendarSyncJobCenterExecution_() {
   writeReviewedCalendarSyncState_(state);
 
   startReviewedCalendarSyncExecution();
-  armReviewedCalendarSyncPublicTrigger_();
+
+  // Run the first bounded pass immediately while this authorized HTML-service
+  // request is active. This avoids waiting on Google's best-effort clock
+  // scheduler for ordinary queues. The worker schedules a resumable trigger
+  // itself only when operations remain after its safe pass limit.
+  runReviewedCalendarSyncWorker_();
   return getReviewedCalendarSyncJobCenterStatus_();
 }
 
