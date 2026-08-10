@@ -4,7 +4,8 @@
 This is intentionally advisory. A declaration is reported only when its name
 appears exactly once across root .gs/.html/.json project files: its declaration.
 That avoids deleting browser/menu/trigger callbacks whose names occur in strings.
-Apps Script special entry points are excluded explicitly.
+Apps Script special entry points and intentionally retained public APIs are
+excluded explicitly.
 """
 
 from __future__ import annotations
@@ -26,6 +27,16 @@ SPECIAL_ENTRY_POINTS = {
     "onOpen",
     "onEdit",
     "onChange",
+}
+
+# These functions are deliberate server-side API boundaries for the Chemistry
+# workspace. The current web UI does not expose Chemistry writes yet, but these
+# entry points are retained so that future UI work does not need to recreate the
+# validated catalog/preview/save contract.
+INTENTIONAL_PUBLIC_APIS = {
+    "previewChemicalDose",
+    "saveChemicalUsage",
+    "addChemicalProduct",
 }
 
 
@@ -55,7 +66,7 @@ def main() -> int:
 
     candidates = []
     for name, filename, line, kind in declarations:
-        if name in SPECIAL_ENTRY_POINTS:
+        if name in SPECIAL_ENTRY_POINTS or name in INTENTIONAL_PUBLIC_APIS:
             continue
         occurrences = len(re.findall(r"\b" + re.escape(name) + r"\b", raw_project))
         if occurrences == 1:
