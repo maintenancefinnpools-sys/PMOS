@@ -271,39 +271,6 @@ function writeUpdateCenterValue_(label, value) {
   }
 }
 
-function setupSpreadsheetAutomation() {
-  if (!isPmosInitialized_()) {
-    initializePmos();
-    return;
-  }
-
-  ensureSupportSheets_();
-  installOrRefreshTriggers_();
-  protectCalculatedColumns_();
-  normalizeRoutesFromPhysicalOrder_(false);
-  storeRouteSignatures_();
-
-  const pending = getPendingChanges_();
-  if (pending.length) {
-    updateSyncStatus_(
-      'Route changes pending',
-      pending.length + ' route layer(s) still have unapplied changes.'
-    );
-  } else {
-    updateSyncStatus_('Everything synchronized', 'No unapplied route changes.');
-  }
-
-  SpreadsheetApp.getUi().alert(
-    'PMOS setup complete',
-    [
-      'Stop Order and Map Label are now calculated from row position.',
-      'Dragging or inserting route rows will be detected.',
-      'Use PMOS → Calendar → Calendar Plan Audit to review Calendar changes.'
-    ].join('\n'),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
-}
-
 function handlePmosSheetChange(e) {
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(20000)) return;
