@@ -1,7 +1,7 @@
 /** Durable immutable Calendar audit snapshot used only during one review flow. */
 const PMOS_CALENDAR_AUDIT_SNAPSHOT_SHEET = 'PMOS Calendar Audit Snapshot';
 const PMOS_CALENDAR_AUDIT_SNAPSHOT_CHUNK = 40000;
-const PMOS_CALENDAR_AUDIT_SNAPSHOT_VERSION = 3;
+const PMOS_CALENDAR_AUDIT_SNAPSHOT_VERSION = 4;
 
 function savePmosCalendarAuditSnapshot_(audit) {
   const sheet = ensurePmosCalendarAuditSnapshotSheet_();
