@@ -117,7 +117,7 @@ function readExistingPmosCalendarRoutes_() {
 
   const routeHeaders = routeValues[0].map(pmosCalendarHeader_);
   const customerHeaders = customerValues[0].map(pmosCalendarHeader_);
-  const requiredRouteHeaders = ['Layer', 'Stop Order', 'Calendar Title'];
+  const requiredRouteHeaders = ['Layer', 'Stop Order'];
   const missingRouteHeaders = requiredRouteHeaders.filter(function (header) {
     return routeHeaders.indexOf(header) < 0;
   });
@@ -125,6 +125,13 @@ function readExistingPmosCalendarRoutes_() {
     throw new Error(
       PMOS.ROUTES_SHEET + ' is missing required column(s): ' +
       missingRouteHeaders.join(', ') + '.'
+    );
+  }
+  if (routeHeaders.indexOf('Customer ID') < 0 &&
+      routeHeaders.indexOf('Calendar Title') < 0) {
+    throw new Error(
+      PMOS.ROUTES_SHEET +
+      ' requires either Customer ID or Calendar Title to identify route rows.'
     );
   }
 
