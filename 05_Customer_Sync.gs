@@ -32,21 +32,24 @@ function synchronizeCustomerDatabase_(markPending) {
 
   for (let index = 1; index < values.length; index++) {
     const routeId = String(values[index][idCol] || '').trim();
-    const routeTitle = readPmosCustomerSyncRouteTitle_(
+    const customer = resolvePmosCustomerSyncRouteCustomer_(
       values[index],
-      titleCol,
-      mapLabelCol
+      {
+        idCol: idCol,
+        titleCol: titleCol,
+        mapLabelCol: mapLabelCol,
+        fullNameCol: fullNameCol,
+        addressCol: addressCol
+      },
+      customerLookup
     );
-    const customer = customerLookup.byId[routeId] ||
-      customerLookup.byTitle[normalize_(routeTitle)];
 
     // Customers is authoritative. A route row carrying a stable Customer ID
     // that no longer exists is an orphan created by customer deletion; remove
     // every occurrence and mark its layer for Calendar reconciliation.
     if (
       routeId &&
-      !customerLookup.byId[routeId] &&
-      !customerLookup.byTitle[normalize_(routeTitle)]
+      !customer
     ) {
       const layer = String(values[index][layerCol] || '').trim();
       if (layer) changedLayers.add(layer);
@@ -170,6 +173,25 @@ function readPmosCustomerSyncRouteTitle_(row, titleCol, mapLabelCol) {
   return mapLabel.replace(/^\s*\d+\s*[\-\u2013\u2014]\s*/, '').trim();
 }
 
+function resolvePmosCustomerSyncRouteCustomer_(row, columns, lookup) {
+  const source = columns || {};
+  const routeId = source.idCol >= 0 ? String(row[source.idCol] || '').trim() : '';
+  const routeTitle = readPmosCustomerSyncRouteTitle_(
+    row,
+    source.titleCol,
+    source.mapLabelCol
+  );
+  const fullName = source.fullNameCol >= 0
+    ? String(row[source.fullNameCol] || '').trim() : '';
+  const address = source.addressCol >= 0
+    ? String(row[source.addressCol] || '').trim() : '';
+  return lookup.byId[routeId] ||
+    lookup.byTitle[normalize_(routeTitle)] ||
+    lookup.byFullName[normalize_(fullName)] ||
+    lookup.byAddress[normalize_(address)] ||
+    null;
+}
+
 /** Group route layers while preserving the human-defined order inside each layer. */
 function groupPmosRouteRowsByLayerPreservingOrder_() {
   const sheet = getRoutesSheet_();
@@ -276,15 +298,24 @@ function ensureCustomerIds_() {
 
 function ensureRouteCustomerIdColumn_() {
   const sheet = getRoutesSheet_();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
     .getValues()[0].map(v => String(v).trim());
 
-  if (headers.includes('Customer ID')) return;
+  let titleCol = headers.indexOf('Calendar Title');
+  if (titleCol < 0) {
+    const mapLabelCol = headers.indexOf('Map Label');
+    const insertAfter = mapLabelCol >= 0 ? mapLabelCol + 1 : sheet.getLastColumn();
+    sheet.insertColumnAfter(insertAfter);
+    sheet.getRange(1, insertAfter + 1).setValue('Calendar Title');
+    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+      .getValues()[0].map(v => String(v).trim());
+    titleCol = headers.indexOf('Calendar Title');
+  }
 
-  const titleCol = headers.indexOf('Calendar Title');
-  sheet.insertColumnAfter(titleCol >= 0 ? titleCol + 1 : sheet.getLastColumn());
-  sheet.getRange(1, titleCol >= 0 ? titleCol + 2 : sheet.getLastColumn())
-    .setValue('Customer ID');
+  if (!headers.includes('Customer ID')) {
+    sheet.insertColumnAfter(titleCol + 1);
+    sheet.getRange(1, titleCol + 2).setValue('Customer ID');
+  }
 }
 
 function getCustomerLookup_() {
@@ -296,6 +327,8 @@ function getCustomerLookup_() {
   const list = [];
   const byId = {};
   const byTitle = {};
+  const byFullName = {};
+  const byAddress = {};
 
   values.slice(1)
     .filter(row => row.some(value => value !== '' && value != null))
@@ -311,13 +344,34 @@ function getCustomerLookup_() {
       list.push(customer);
       if (id) byId[id] = customer;
       if (title) byTitle[normalize_(title)] = customer;
+      indexUniquePmosCustomerSyncValue_(
+        byFullName,
+        customer['Full Name(s)'],
+        customer
+      );
+      indexUniquePmosCustomerSyncValue_(
+        byAddress,
+        customer['Full Address'],
+        customer
+      );
     });
 
   const routeCustomerIds = new Set(
     readRouteCustomerIdsWithoutCustomerLookup_()
   );
 
-  return { list, byId, byTitle, routeCustomerIds };
+  return { list, byId, byTitle, byFullName, byAddress, routeCustomerIds };
+}
+
+function indexUniquePmosCustomerSyncValue_(index, value, customer) {
+  const key = normalize_(value);
+  if (!key) return;
+  if (!Object.prototype.hasOwnProperty.call(index, key)) {
+    index[key] = customer;
+    return;
+  }
+  // Null marks an ambiguous exact value so it can never be used to guess.
+  index[key] = null;
 }
 
 function readRouteCustomerIdsWithoutCustomerLookup_() {
