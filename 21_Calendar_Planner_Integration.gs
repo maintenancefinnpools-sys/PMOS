@@ -302,6 +302,16 @@ function previewPmosCalendarSyncPlan(options) {
     syncStart: result.currentState.range.start,
     syncEnd: result.currentState.range.end,
     identityReconciliations: Number(result.verifiedState.identityReconciliationCount || 0),
+    identityReconciliationDetails: (
+      result.verifiedState.identityReconciliations || []
+    ).map(function(item) {
+      return {
+        fromSeriesKey: String(item.fromSeriesKey || ''),
+        toSeriesKey: String(item.toSeriesKey || ''),
+        customerId: String(item.customerId || ''),
+        method: String(item.method || '')
+      };
+    }),
     details: plan.operations.slice(0, 30).map(formatPmosCalendarPreviewOperation_),
     validation: result.validation,
     plan: plan
