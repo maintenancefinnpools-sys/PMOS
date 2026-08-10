@@ -23,13 +23,26 @@ function synchronizeCustomerDatabase_(markPending) {
   const notesCol = headers.indexOf('Customer Notes');
 
   const changedLayers = new Set();
+  const routeRowsToDelete = [];
   let routeRowsUpdated = 0;
+  let routeRowsRemoved = 0;
 
   for (let index = 1; index < values.length; index++) {
     const routeId = String(values[index][idCol] || '').trim();
     const routeTitle = String(values[index][titleCol] || '').trim();
     const customer = customerLookup.byId[routeId] ||
       customerLookup.byTitle[normalize_(routeTitle)];
+
+    // Customers is authoritative. A route row carrying a stable Customer ID
+    // that no longer exists is an orphan created by customer deletion; remove
+    // every occurrence and mark its layer for Calendar reconciliation.
+    if (routeId && !customerLookup.byId[routeId]) {
+      const layer = String(values[index][layerCol] || '').trim();
+      if (layer) changedLayers.add(layer);
+      routeRowsToDelete.push(index + 1);
+      routeRowsRemoved++;
+      continue;
+    }
 
     if (!customer) continue;
 
@@ -64,6 +77,12 @@ function synchronizeCustomerDatabase_(markPending) {
       .setValues(values.slice(1));
   }
 
+  // Delete bottom-up so stored sheet row numbers remain valid.
+  routeRowsToDelete.sort(function(left, right) { return right - left; })
+    .forEach(function(rowNumber) {
+      routeSheet.deleteRow(rowNumber);
+    });
+
   /*
    * Route IDs captured before migration may contain legacy identities. Re-read
    * the route IDs only after canonical IDs have been written back so migrated
@@ -96,6 +115,7 @@ function synchronizeCustomerDatabase_(markPending) {
   return {
     idsCreated,
     routeRowsUpdated,
+    routeRowsRemoved,
     routeRowsCreated: creationResult.created,
     changedLayers: [...changedLayers]
   };
