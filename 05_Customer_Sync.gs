@@ -36,7 +36,11 @@ function synchronizeCustomerDatabase_(markPending) {
     // Customers is authoritative. A route row carrying a stable Customer ID
     // that no longer exists is an orphan created by customer deletion; remove
     // every occurrence and mark its layer for Calendar reconciliation.
-    if (routeId && !customerLookup.byId[routeId]) {
+    if (
+      routeId &&
+      !customerLookup.byId[routeId] &&
+      !customerLookup.byTitle[normalize_(routeTitle)]
+    ) {
       const layer = String(values[index][layerCol] || '').trim();
       if (layer) changedLayers.add(layer);
       routeRowsToDelete.push(index + 1);
