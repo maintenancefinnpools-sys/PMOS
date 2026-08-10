@@ -149,7 +149,10 @@ function readExistingPmosCalendarRoutes_() {
       const routeId = String(route['Customer ID'] || '').trim();
       const customer = customersById[routeId] ||
         customersByTitle[normalize_(routeTitle)] || {};
-      const customerId = String(customer['Customer ID'] || routeId).trim();
+      // The Route Template is the scheduling source of truth. When it carries
+      // an explicit Customer ID, preserve that identity even if the fallback
+      // title lookup resolves to a different Customers-sheet record.
+      const customerId = String(routeId || customer['Customer ID'] || '').trim();
       // Calendar Title is preferred, but a populated route must not disappear
       // merely because that optional display field is blank in one route copy.
       const title = String(
