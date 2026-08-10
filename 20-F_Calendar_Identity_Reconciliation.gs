@@ -169,11 +169,11 @@ function pairPmosCalendarCustomerSeries_(desired, current, mappings, reconciliat
     const existing = currentBuckets[identity] || [];
     if (!wanted.length || !existing.length) return;
 
-    // Cross-layer pairing is safe only when both unmatched sets are balanced.
-    // With unequal counts, pairing can hide a real route removal by remapping
-    // the extra current series onto a different desired layer. Preserve the
-    // unmatched records so the planner emits explicit CREATE/deletion review.
-    if (wanted.length !== existing.length) return;
+    // Cross-layer recovery is unambiguous only for one desired and one
+    // current series. Multi-series scoring can hide a real removal/create pair
+    // even when totals happen to match, so preserve those records for explicit
+    // CREATE/deletion review instead of guessing.
+    if (wanted.length !== 1 || existing.length !== 1) return;
 
     const pairs = [];
     wanted.forEach(function(desiredRecord) {
