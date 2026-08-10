@@ -3,7 +3,9 @@ function runVerifiedCalendarPlanAuditReadOnly_(options) {
   const source = options || {};
   if (source.forceFresh !== true) {
     const snapshot = readPmosCalendarAuditSnapshot_();
-    if (snapshot) return rebuildPmosCalendarAuditFromSnapshot_(snapshot);
+    if (snapshot && isPmosCalendarAuditSnapshotCurrent_(snapshot)) {
+      return rebuildPmosCalendarAuditFromSnapshot_(snapshot);
+    }
   }
 
   const fresh = buildFreshVerifiedCalendarPlanAuditReadOnly_(source);
