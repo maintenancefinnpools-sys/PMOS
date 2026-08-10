@@ -29,11 +29,19 @@ function executeReviewedCalendarDeleteOperation_(operation, calendar) {
   if (seriesId) {
     let series = null;
     try { series = calendar.getEventSeriesById(seriesId); } catch (error) {}
-    if (series) series.deleteEventSeries();
 
-    let remaining = null;
-    try { remaining = calendar.getEventSeriesById(seriesId); } catch (error) {}
-    if (remaining) {
+    // A retry may arrive after the first delete succeeded. Only invoke the
+    // mutation when Calendar still returns a series handle.
+    if (series) {
+      try {
+        series.deleteEventSeries();
+      } catch (error) {
+        // Calendar can retain a stale series handle briefly after deletion.
+        // Verify live occurrences below before deciding that the retry failed.
+      }
+    }
+
+    if (!waitForReviewedCalendarSeriesDeletion_(calendar, seriesId)) {
       throw new Error('Reviewed series deletion could not be verified: ' + seriesId + '.');
     }
 
@@ -59,6 +67,40 @@ function executeReviewedCalendarDeleteOperation_(operation, calendar) {
   }
 
   return {action: 'DELETE', id: eventId, reviewAction: 'DELETE'};
+}
+
+/**
+ * CalendarApp may return a stale CalendarEventSeries immediately after
+ * deleteEventSeries(). Verify the observable schedule instead: the deletion is
+ * complete when no occurrence with the approved series ID remains in the
+ * active planning window.
+ */
+function waitForReviewedCalendarSeriesDeletion_(calendar, seriesId) {
+  const id = String(seriesId || '').trim();
+  if (!calendar || !id) return true;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (!reviewedCalendarSeriesHasActiveOccurrence_(calendar, id)) return true;
+    if (attempt < 3) Utilities.sleep(1000);
+  }
+  return false;
+}
+
+function reviewedCalendarSeriesHasActiveOccurrence_(calendar, seriesId) {
+  const settings = getRecurringCalendarSettings_();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const configuredEnd = endOfDay_(settings.seasonEnd);
+  const end = configuredEnd.getTime() > start.getTime()
+    ? configuredEnd
+    : new Date(start.getTime() + 35 * 24 * 60 * 60 * 1000);
+
+  return calendar.getEvents(start, end).some(function(event) {
+    let recurring = false;
+    try { recurring = event.isRecurringEvent(); } catch (error) {}
+    if (!recurring) return false;
+    return String(readPmosCalendarEventSeriesId_(event) || '').trim() === seriesId;
+  });
 }
 
 function deleteReviewedSeriesRegistryRowExact_(seriesKey, seriesId) {
