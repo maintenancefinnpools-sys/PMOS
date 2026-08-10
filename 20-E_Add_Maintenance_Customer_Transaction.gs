@@ -117,7 +117,10 @@ function createMaintenanceCustomer(input) {
 function createMaintenanceCustomerAndAutoSync(input) {
   const result = createMaintenanceCustomer(input);
   try {
-    const sync = synchronizeAddedMaintenanceCustomerCalendar_(result.customerId);
+    const sync = synchronizeAddedMaintenanceCustomerCalendar_(
+      result.customerId,
+      result.routeRows.map(function (row) { return row.layer; })
+    );
     result.calendarStatus = 'SYNCHRONIZED';
     result.calendarSync = sync;
     result.summary += '\nCalendar synchronized automatically: ' +
@@ -132,33 +135,65 @@ function createMaintenanceCustomerAndAutoSync(input) {
   return result;
 }
 
-function synchronizeAddedMaintenanceCustomerCalendar_(customerId) {
+function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers) {
   const id = String(customerId || '').trim();
   if (!id) throw new Error('Automatic Calendar Sync is missing the new Customer ID.');
+  const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
+    return String(layer || '').trim();
+  }).filter(Boolean)));
+  if (!layers.length) throw new Error('Automatic Calendar Sync is missing the affected route layers.');
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)) {
     throw new Error('Another PMOS operation is using the Calendar. Retry when it finishes.');
   }
   try {
     const built = buildValidatedPmosCalendarSyncPlan_({});
-    const operations = (built.plan && built.plan.operations || []).filter(function (operation) {
+    const planOperations = built.plan && built.plan.operations || [];
+    const operations = planOperations.filter(function (operation) {
       const desired = operation && operation.payload && operation.payload.desired || {};
-      return String(desired.customerId || '').trim() === id &&
+      return layers.indexOf(String(desired.layer || '').trim()) >= 0 &&
         [String(PMOS_OPERATION.CREATE), String(PMOS_OPERATION.UPDATE)]
           .indexOf(String(operation.action || '')) >= 0;
     });
-    const expected = (built.desiredSeries || []).filter(function (series) {
-      return String(series.customerId || '').trim() === id;
-    }).length;
-    if (!expected) throw new Error('No recurring Calendar series were planned for ' + id + '.');
-    if (operations.length !== expected) {
+    const newCustomerSeries = (built.desiredSeries || []).filter(function (series) {
+      return String(series.customerId || '').trim() === id &&
+        layers.indexOf(String(series.layer || '').trim()) >= 0;
+    });
+    if (newCustomerSeries.length !== layers.length) {
       throw new Error(
-        'Automatic Calendar Sync expected ' + expected + ' new-customer operation(s) but resolved ' +
-        operations.length + '. PMOS stopped without applying unrelated Calendar work.'
+        'Automatic Calendar Sync expected one new-client series in each of ' + layers.length +
+        ' affected route layer(s), but planned ' + newCustomerSeries.length +
+        '. PMOS stopped without applying unrelated Calendar work.'
+      );
+    }
+    const affectedBlockers = planOperations.filter(function (operation) {
+      const payload = operation && operation.payload || {};
+      const desired = payload.desired || {};
+      const current = payload.current || {};
+      const layer = String(desired.layer || current.layer || '').trim();
+      return layers.indexOf(layer) >= 0 && (
+        operation.action === PMOS_OPERATION.ERROR ||
+        Boolean(operation.metadata && operation.metadata.blocking)
+      );
+    });
+    if (affectedBlockers.length) {
+      throw new Error(
+        'The background Calendar audit found ' + affectedBlockers.length +
+        ' blocking problem(s) in the affected route layers. PMOS stopped before synchronization.'
       );
     }
     const settings = getRecurringCalendarSettings_();
     const calendar = getExistingConfiguredPmosCalendar_(settings.calendarName);
+    if (!operations.length) {
+      clearPmosCalendarAuditSnapshot_();
+      return {
+        created: 0,
+        updated: 0,
+        affectedLayers: layers.slice(),
+        operationCount: 0,
+        alreadySynchronized: true
+      };
+    }
     const preflight = validateReviewedCalendarSyncPreflight_(
       operations, calendar, settings.calendarName
     );
@@ -176,6 +211,8 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId) {
       else if (outcome.action === 'UPDATE') counts.updated++;
     });
     clearPmosCalendarAuditSnapshot_();
+    counts.affectedLayers = layers.slice();
+    counts.operationCount = operations.length;
     return counts;
   } finally {
     lock.releaseLock();
@@ -184,7 +221,10 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId) {
 
 function retryAddedMaintenanceCustomerCalendar(input) {
   input = input || {};
-  return synchronizeAddedMaintenanceCustomerCalendar_(input.customerId);
+  return synchronizeAddedMaintenanceCustomerCalendar_(
+    input.customerId,
+    input.affectedLayers || []
+  );
 }
 
 function normalizeMaintenanceCustomerRequest_(input) {
