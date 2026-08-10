@@ -45,11 +45,3 @@ function ensureAppSettingsSheet_() {
 
   return sheet;
 }
-
-function showAppSettings() {
-  const sheet = ensureAppSettingsSheet_();
-  sheet.showSheet();
-  SpreadsheetApp.getActive().setActiveSheet(sheet);
-  sheet.activate();
-  sheet.getRange('B2').activate();
-}
