@@ -328,13 +328,6 @@ function getPendingChanges_() {
     });
 }
 
-function clearPendingChanges_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.PENDING_SHEET);
-  if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).clearContent();
-  }
-}
-
 function updateSyncStatus_(status, details) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.STATUS_SHEET);
   if (!sheet) return;
