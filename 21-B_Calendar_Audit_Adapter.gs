@@ -216,6 +216,7 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
     unclassifiedEvents: unclassifiedEvents,
     approvedTemporaryVisits: approvedTemporaryVisits,
     ignoredEvents: ignoredEvents,
+    seriesDiagnostics: (preview.seriesDiagnostics || []).slice(),
     preview: previewView
   };
 }
