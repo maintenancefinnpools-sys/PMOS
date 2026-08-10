@@ -16,6 +16,7 @@ function synchronizeCustomerDatabase_(markPending) {
   const idCol = headers.indexOf('Customer ID');
   const layerCol = headers.indexOf('Layer');
   const titleCol = headers.indexOf('Calendar Title');
+  const mapLabelCol = headers.indexOf('Map Label');
   const fullNameCol = headers.indexOf('Full Name(s)');
   const addressCol = headers.indexOf('Full Address');
   const frequencyCol = headers.indexOf('Frequency');
@@ -24,12 +25,18 @@ function synchronizeCustomerDatabase_(markPending) {
 
   const changedLayers = new Set();
   const routeRowsToDelete = [];
+  const resolvedRouteIdentities = {};
+  const unresolvedRouteRows = [];
   let routeRowsUpdated = 0;
   let routeRowsRemoved = 0;
 
   for (let index = 1; index < values.length; index++) {
     const routeId = String(values[index][idCol] || '').trim();
-    const routeTitle = String(values[index][titleCol] || '').trim();
+    const routeTitle = readPmosCustomerSyncRouteTitle_(
+      values[index],
+      titleCol,
+      mapLabelCol
+    );
     const customer = customerLookup.byId[routeId] ||
       customerLookup.byTitle[normalize_(routeTitle)];
 
@@ -48,7 +55,27 @@ function synchronizeCustomerDatabase_(markPending) {
       continue;
     }
 
-    if (!customer) continue;
+    if (!customer) {
+      const layer = String(values[index][layerCol] || '').trim();
+      const fullName = fullNameCol >= 0
+        ? String(values[index][fullNameCol] || '').trim() : '';
+      if (layer && (routeId || routeTitle || fullName)) {
+        unresolvedRouteRows.push(index + 1);
+      }
+      continue;
+    }
+
+    const layer = String(values[index][layerCol] || '').trim();
+    const canonicalId = String(customer['Customer ID'] || routeId || '').trim();
+    const routeIdentity = canonicalId && layer
+      ? canonicalId + '|' + layer : '';
+    if (routeIdentity && resolvedRouteIdentities[routeIdentity]) {
+      changedLayers.add(layer);
+      routeRowsToDelete.push(index + 1);
+      routeRowsRemoved++;
+      continue;
+    }
+    if (routeIdentity) resolvedRouteIdentities[routeIdentity] = index + 1;
 
     const updates = [
       [idCol, customer['Customer ID']],
@@ -74,6 +101,16 @@ function synchronizeCustomerDatabase_(markPending) {
       const layer = String(values[index][layerCol] || '').trim();
       if (layer) changedLayers.add(layer);
     }
+  }
+
+  if (unresolvedRouteRows.length) {
+    throw new Error(
+      'Customer Sync stopped before creating route rows because existing ' +
+      'Route Template row(s) could not be matched to Customers: ' +
+      unresolvedRouteRows.slice(0, 20).join(', ') +
+      (unresolvedRouteRows.length > 20 ? '…' : '') +
+      '. Repair those identities first; PMOS will not append a replacement schedule.'
+    );
   }
 
   if (values.length > 1) {
@@ -103,6 +140,7 @@ function synchronizeCustomerDatabase_(markPending) {
 
   creationResult.changedLayers.forEach(layer => changedLayers.add(layer));
 
+  groupPmosRouteRowsByLayerPreservingOrder_();
   normalizeRoutesFromPhysicalOrder_(false);
 
   if (markPending && changedLayers.size) {
@@ -123,6 +161,50 @@ function synchronizeCustomerDatabase_(markPending) {
     routeRowsCreated: creationResult.created,
     changedLayers: [...changedLayers]
   };
+}
+
+function readPmosCustomerSyncRouteTitle_(row, titleCol, mapLabelCol) {
+  const title = titleCol >= 0 ? String(row[titleCol] || '').trim() : '';
+  if (title) return title;
+  const mapLabel = mapLabelCol >= 0 ? String(row[mapLabelCol] || '').trim() : '';
+  return mapLabel.replace(/^\s*\d+\s*[\-\u2013\u2014]\s*/, '').trim();
+}
+
+/** Group route layers while preserving the human-defined order inside each layer. */
+function groupPmosRouteRowsByLayerPreservingOrder_() {
+  const sheet = getRoutesSheet_();
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 3) return false;
+  const headers = values[0].map(function(value) { return String(value).trim(); });
+  const layerCol = headers.indexOf('Layer');
+  if (layerCol < 0) return false;
+
+  const layerOrder = [];
+  const groups = {};
+  const unlayered = [];
+  values.slice(1).forEach(function(row) {
+    const layer = String(row[layerCol] || '').trim();
+    if (!layer) {
+      unlayered.push(row);
+      return;
+    }
+    if (!groups[layer]) {
+      groups[layer] = [];
+      layerOrder.push(layer);
+    }
+    groups[layer].push(row);
+  });
+  const grouped = [];
+  layerOrder.forEach(function(layer) {
+    Array.prototype.push.apply(grouped, groups[layer]);
+  });
+  Array.prototype.push.apply(grouped, unlayered);
+
+  const before = JSON.stringify(values.slice(1));
+  const after = JSON.stringify(grouped);
+  if (before === after) return false;
+  sheet.getRange(2, 1, grouped.length, headers.length).setValues(grouped);
+  return true;
 }
 
 function ensureCustomerIds_() {
