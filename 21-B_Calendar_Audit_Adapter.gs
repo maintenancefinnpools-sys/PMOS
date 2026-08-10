@@ -140,43 +140,23 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
   });
   const lines = [
     'Calendar: ' + String(preview.calendarName || ''),
-    'Sync range: ' + formatPmosCalendarAuditRange_(preview.syncStart, preview.syncEnd),
-    'Expected recurring series: ' + Number(preview.totalSeries || 0),
-    'Creates proposed: ' + Number(preview.creates || 0),
-    'Updates proposed: ' + Number(preview.updates || 0),
-    'Errors: ' + errors.length,
-    'Warnings: ' + warnings.length,
-    'Suggested matches: ' + suggestedMatches.length,
-    'Unclassified events: ' + unclassifiedEvents.length,
-    'Suggested deletions: ' + deletionCandidates.length,
-    'Registered series missing: ' + Number(preview.registeredMissing || 0)
+    'Range: ' + formatPmosCalendarAuditRange_(preview.syncStart, preview.syncEnd),
+    '',
+    'Recurring series: ' + Number(preview.totalSeries || 0),
+    'Proposed changes: ' +
+      Number(preview.creates || 0) + ' create • ' +
+      Number(preview.updates || 0) + ' update • ' +
+      deletionCandidates.length + ' deletion review',
+    '',
+    'Review queue: ' +
+      errors.length + ' error • ' +
+      warnings.length + ' warning • ' +
+      suggestedMatches.length + ' match • ' +
+      unclassifiedEvents.length + ' unclassified',
+    'Registry missing: ' + Number(preview.registeredMissing || 0),
+    '',
+    'Use the searchable series table below for customer-level details.'
   ];
-  const diagnosticOperations = preview.plan &&
-    Array.isArray(preview.plan.operations) ? preview.plan.operations : [];
-  const updateKeys = diagnosticOperations.filter(function(operation) {
-    return operation.action === PMOS_OPERATION.UPDATE;
-  }).map(function(operation) {
-    return String(operation.entityId || '');
-  });
-  const deletionKeys = rawDeletionCandidates.map(function(item) {
-    return String(item.seriesKey || item.seriesId || '');
-  });
-  const identityMappings = (
-    preview.identityReconciliationDetails || []
-  ).map(function(item) {
-    return String(item.fromSeriesKey || '') + ' -> ' +
-      String(item.toSeriesKey || '') + ' [' + String(item.method || '') + ']';
-  });
-  lines.push(
-    'Update series: ' + (updateKeys.length ? updateKeys.join('; ') : 'None')
-  );
-  lines.push(
-    'Deletion series: ' + (deletionKeys.length ? deletionKeys.join('; ') : 'None')
-  );
-  lines.push(
-    'Identity remappings: ' +
-    (identityMappings.length ? identityMappings.join('; ') : 'None')
-  );
   if (!reviewComplete) {
     lines.push('Complete the remaining review items before opening Calendar Sync.');
   } else {
