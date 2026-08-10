@@ -3,25 +3,6 @@
  * Customers sheet is authoritative for customer identity and details.
  */
 
-function syncCustomerDatabaseFromSheet() {
-  const result = synchronizeCustomerDatabase_(true);
-
-  SpreadsheetApp.getUi().alert(
-    'Customer database synchronized',
-    [
-      `${result.idsCreated} Customer ID(s) created.`,
-      `${result.routeRowsUpdated} route row(s) refreshed.`,
-      `${result.routeRowsCreated} missing route row(s) created.`,
-      `${result.changedLayers.length} route layer(s) marked for Calendar synchronization.`,
-      '',
-      result.changedLayers.length
-        ? 'Use PMOS → Calendar → Calendar Plan Audit to review the resulting Calendar changes.'
-        : 'Everything is already synchronized.'
-    ].join('\n'),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
-}
-
 function synchronizeCustomerDatabase_(markPending) {
   ensureSupportSheets_();
   const idsCreated = ensureCustomerIds_();
