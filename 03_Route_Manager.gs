@@ -2,19 +2,6 @@
  * PMOS route planning, pending changes, maps, and route-domain operations.
  * Spreadsheet data is authoritative; this module does not mutate Calendar.
  */
-function refreshRouteNumbers() {
-  ensureSupportSheets_();
-  const result = normalizeRoutesFromPhysicalOrder_(true);
-  SpreadsheetApp.getUi().alert(
-    'Routes refreshed',
-    [
-      result.updatedRows + ' row(s) renumbered or relabelled.',
-      result.changedLayers.length + ' route layer(s) marked as pending.'
-    ].join('\n'),
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
-}
-
 function normalizeRoutesFromPhysicalOrder_(markPending) {
   const sheet = getRoutesSheet_();
   const values = sheet.getDataRange().getValues();
@@ -91,14 +78,6 @@ function normalizeRoutesFromPhysicalOrder_(markPending) {
   PropertiesService.getDocumentProperties()
     .setProperty('PMOS_ROUTE_SIGNATURES', JSON.stringify(currentSignatures));
   return {updatedRows: updatedRows, changedLayers: changedLayers};
-}
-
-function resetRouteBaseline() {
-  normalizeRoutesFromPhysicalOrder_(false);
-  storeRouteSignatures_();
-  clearPendingChanges_();
-  updateSyncStatus_('Everything synchronized', 'Route baseline reset.');
-  SpreadsheetApp.getUi().alert('PMOS route baseline has been reset.');
 }
 
 function storeRouteSignatures_() {
