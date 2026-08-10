@@ -12,18 +12,6 @@ const PMOS_CALENDAR_REPAIR_PLAN_KEY = 'PMOS_CALENDAR_REPAIR_PLAN_V2';
 const PMOS_CALENDAR_REPAIR_OPERATION = 'CALENDAR_REPAIR';
 const PMOS_CALENDAR_REPAIR_TRIGGER_HANDLER = 'runCalendarRepairContinuation';
 
-function saveCalendarEffectiveDate(value) {
-  const date = parseCalendarEffectiveDate_(value);
-  const text = Utilities.formatDate(date, PMOS.TIMEZONE, 'yyyy-MM-dd');
-  PropertiesService.getDocumentProperties()
-    .setProperty(PMOS_CALENDAR_EFFECTIVE_DATE_KEY, text);
-  return {
-    effectiveDate: text,
-    summary: 'Effective date saved: ' +
-      Utilities.formatDate(date, PMOS.TIMEZONE, 'MMMM d, yyyy')
-  };
-}
-
 function getCalendarEffectiveDate_() {
   const stored = PropertiesService.getDocumentProperties()
     .getProperty(PMOS_CALENDAR_EFFECTIVE_DATE_KEY);
