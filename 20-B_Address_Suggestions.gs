@@ -32,21 +32,78 @@ function suggestPmosAddresses(query, limit) {
       const response = Maps.newGeocoder().setRegion('ca').geocode(text);
       const results = response && Array.isArray(response.results) ? response.results : [];
       results.slice(0, maximum).forEach((result, index) => {
-        const address = String(result.formatted_address || '').trim();
-        if (!address) return;
+        const resolved = buildPmosResolvedAddress_(result, 'Google Maps');
+        if (!resolved.complete) return;
+        const address = resolved.address;
         const key = normalizePmosAddressSearch_(address);
         if (seen[key]) return;
-        seen[key] = { address, source: 'Google Maps', score: 500 - index };
+        seen[key] = Object.assign(resolved, { score: 500 - index });
         candidates.push(seen[key]);
       });
     } catch (ignored) {}
   }
 
   candidates.sort((a, b) => b.score - a.score || a.address.localeCompare(b.address));
-  return candidates.slice(0, maximum).map(item => ({
-    address: item.address,
-    source: item.source
+  return candidates.slice(0, maximum).map(item => Object.assign({}, item, {
+    score: undefined
   }));
+}
+
+function resolvePmosAddressSuggestion(address) {
+  const text = String(address || '').trim();
+  if (!text) throw new Error('Choose a complete service address.');
+  const response = Maps.newGeocoder().setRegion('ca').geocode(text);
+  const results = response && Array.isArray(response.results) ? response.results : [];
+  for (let index = 0; index < results.length; index++) {
+    const resolved = buildPmosResolvedAddress_(results[index], 'Google Maps');
+    if (resolved.complete) return resolved;
+  }
+  throw new Error(
+    'PMOS could not confirm a complete street, city, province, postal code, and country for this address.'
+  );
+}
+
+function buildPmosResolvedAddress_(result, source) {
+  const components = {};
+  (result && result.address_components || []).forEach(function (component) {
+    (component.types || []).forEach(function (type) {
+      if (!components[type]) components[type] = component;
+    });
+  });
+  const streetNumber = pmosAddressComponentValue_(components.street_number);
+  const route = pmosAddressComponentValue_(components.route);
+  const street = [streetNumber, route].filter(Boolean).join(' ');
+  const cityComponent = components.locality || components.postal_town ||
+    components.administrative_area_level_3 || components.administrative_area_level_2;
+  const city = pmosAddressComponentValue_(cityComponent);
+  const province = pmosAddressComponentValue_(components.administrative_area_level_1);
+  const postalCode = pmosAddressComponentValue_(components.postal_code);
+  const country = pmosAddressComponentValue_(components.country);
+  const location = result && result.geometry && result.geometry.location || {};
+  const lat = Number(location.lat);
+  const lng = Number(location.lng);
+  const address = String(result && result.formatted_address || '').trim();
+  const complete = Boolean(
+    street && city && province && postalCode && country && address &&
+    Number.isFinite(lat) && Number.isFinite(lng)
+  );
+  return {
+    address: address,
+    street: street,
+    city: city,
+    province: province,
+    postalCode: postalCode,
+    country: country,
+    lat: lat,
+    lng: lng,
+    placeId: String(result && result.place_id || ''),
+    source: String(source || 'Address provider'),
+    complete: complete
+  };
+}
+
+function pmosAddressComponentValue_(component) {
+  return String(component && component.long_name || '').trim();
 }
 
 function collectPmosStoredAddresses_() {

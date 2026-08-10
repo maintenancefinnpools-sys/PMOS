@@ -8,9 +8,16 @@ function recommendMaintenanceClientRotations(input) {
   input = input || {};
   const address = String(input.address || '').trim();
   if (!address) throw new Error('Enter the service address.');
+  if (input.addressVerified !== true || !input.addressDetails ||
+      normalizePmosAddressSearch_(input.addressDetails.address) !== normalizePmosAddressSearch_(address)) {
+    throw new Error('Select a complete address suggestion before calculating route placement.');
+  }
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const geocoder = Maps.newGeocoder().setRegion('ca');
-  const target = geocodePmosAddress_(geocoder, address);
+  const target = normalizePmosRiePoint_({
+    lat: input.addressDetails.lat,
+    lng: input.addressDetails.lng
+  });
   const routes = readRoutesInPhysicalOrder_();
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const candidates = [];

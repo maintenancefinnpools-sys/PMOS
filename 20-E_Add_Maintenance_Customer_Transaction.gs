@@ -232,6 +232,7 @@ function retryAddedMaintenanceCustomerCalendar(input) {
 function normalizeMaintenanceCustomerRequest_(input) {
   const name = String(input.name || '').trim();
   const address = String(input.address || '').trim();
+  const addressDetails = input.addressDetails || {};
   const phone = String(input.phone || '').trim();
   const email = String(input.email || '').trim();
   const notes = String(input.notes || '').trim();
@@ -270,6 +271,14 @@ function normalizeMaintenanceCustomerRequest_(input) {
 
   if (!name) throw new Error('Customer name is required.');
   if (!address) throw new Error('Service address is required.');
+  if (input.addressVerified !== true ||
+      normalizePmosAddressSearch_(addressDetails.address) !== normalizePmosAddressSearch_(address) ||
+      !String(addressDetails.street || '').trim() || !String(addressDetails.city || '').trim() ||
+      !String(addressDetails.province || '').trim() || !String(addressDetails.postalCode || '').trim() ||
+      !String(addressDetails.country || '').trim() ||
+      !Number.isFinite(Number(addressDetails.lat)) || !Number.isFinite(Number(addressDetails.lng))) {
+    throw new Error('Select and confirm a complete address suggestion before creating the client.');
+  }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Email address is not valid.');
   }
@@ -280,6 +289,18 @@ function normalizeMaintenanceCustomerRequest_(input) {
   return Object.freeze({
     name: name,
     address: address,
+    addressDetails: Object.freeze({
+      address: address,
+      street: String(addressDetails.street).trim(),
+      city: String(addressDetails.city).trim(),
+      province: String(addressDetails.province).trim(),
+      postalCode: String(addressDetails.postalCode).trim(),
+      country: String(addressDetails.country).trim(),
+      lat: Number(addressDetails.lat),
+      lng: Number(addressDetails.lng),
+      placeId: String(addressDetails.placeId || '').trim(),
+      source: String(addressDetails.source || '').trim()
+    }),
     phone: phone,
     email: email,
     notes: notes,
@@ -315,6 +336,13 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Full Address': request.address,
     'Service Address': request.address,
     'Street Address': request.address,
+    'Street': request.addressDetails.street,
+    'City': request.addressDetails.city,
+    'Province': request.addressDetails.province,
+    'Postal Code': request.addressDetails.postalCode,
+    'Country': request.addressDetails.country,
+    'Latitude': request.addressDetails.lat,
+    'Longitude': request.addressDetails.lng,
     'Phone': request.phone,
     'Phone Number': request.phone,
     'Primary Phone': request.phone,
