@@ -14,7 +14,7 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Create Client', 'showAddMaintenanceClientV2')
+          .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')

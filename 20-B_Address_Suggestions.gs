@@ -11,6 +11,7 @@ function suggestPmosAddresses(query, limit) {
   const tokens = normalizedQuery.split(' ').filter(Boolean);
   const candidates = [];
   const seen = {};
+  const anchor = getPmosAddressSearchAnchor_();
 
   collectPmosStoredAddresses_().forEach(item => {
     const address = String(item.address || '').trim();
@@ -20,16 +21,28 @@ function suggestPmosAddresses(query, limit) {
     if (score <= 0) return;
     const key = normalized;
     if (!seen[key] || score > seen[key].score) {
-      seen[key] = { address, source: item.source || 'PMOS', score };
+      seen[key] = {
+        address: address,
+        source: item.source || 'PMOS',
+        score: score,
+        distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(item, anchor)
+      };
     }
   });
 
   Object.keys(seen).forEach(key => candidates.push(seen[key]));
-  candidates.sort((a, b) => b.score - a.score || a.address.localeCompare(b.address));
+  candidates.sort(comparePmosAddressCandidates_);
 
   if (candidates.length < maximum && text.length >= 5) {
     try {
-      const response = Maps.newGeocoder().setRegion('ca').geocode(text);
+      let geocoder = Maps.newGeocoder().setRegion('ca');
+      if (anchor && typeof geocoder.setBounds === 'function') {
+        geocoder = geocoder.setBounds(
+          anchor.lat - 1.75, anchor.lng - 2.25,
+          anchor.lat + 1.75, anchor.lng + 2.25
+        );
+      }
+      const response = geocoder.geocode(text);
       const results = response && Array.isArray(response.results) ? response.results : [];
       results.slice(0, maximum).forEach((result, index) => {
         const resolved = buildPmosResolvedAddress_(result, 'Google Maps');
@@ -37,13 +50,16 @@ function suggestPmosAddresses(query, limit) {
         const address = resolved.address;
         const key = normalizePmosAddressSearch_(address);
         if (seen[key]) return;
-        seen[key] = Object.assign(resolved, { score: 500 - index });
+        seen[key] = Object.assign(resolved, {
+          score: 500 - index,
+          distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(resolved, anchor)
+        });
         candidates.push(seen[key]);
       });
     } catch (ignored) {}
   }
 
-  candidates.sort((a, b) => b.score - a.score || a.address.localeCompare(b.address));
+  candidates.sort(comparePmosAddressCandidates_);
   return candidates.slice(0, maximum).map(item => Object.assign({}, item, {
     score: undefined
   }));
@@ -106,6 +122,64 @@ function pmosAddressComponentValue_(component) {
   return String(component && component.long_name || '').trim();
 }
 
+function comparePmosAddressCandidates_(left, right) {
+  const leftDistance = Number(left.distanceFromServiceAreaKm);
+  const rightDistance = Number(right.distanceFromServiceAreaKm);
+  const leftGeographicPenalty = Number.isFinite(leftDistance) ? Math.min(300, leftDistance) * 1.5 : 0;
+  const rightGeographicPenalty = Number.isFinite(rightDistance) ? Math.min(300, rightDistance) * 1.5 : 0;
+  const leftRank = Number(left.score || 0) - leftGeographicPenalty;
+  const rightRank = Number(right.score || 0) - rightGeographicPenalty;
+  return rightRank - leftRank ||
+    (Number.isFinite(leftDistance) ? leftDistance : Number.POSITIVE_INFINITY) -
+      (Number.isFinite(rightDistance) ? rightDistance : Number.POSITIVE_INFINITY) ||
+    String(left.address || '').localeCompare(String(right.address || ''));
+}
+
+function pmosAddressDistanceFromAnchor_(candidate, anchor) {
+  if (!candidate || candidate.lat == null || candidate.lng == null) return null;
+  const lat = Number(candidate && candidate.lat);
+  const lng = Number(candidate && candidate.lng);
+  if (!anchor || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return pmosHaversineKm_({lat: lat, lng: lng}, anchor);
+}
+
+function getPmosAddressSearchAnchor_() {
+  const points = [];
+  const spreadsheet = SpreadsheetApp.getActive();
+  ['Customers', '4-Week Route Template'].forEach(function (sheetName) {
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) return;
+    const table = readPmosHeaderTable_(sheet);
+    const latIndex = findHeaderIndex_(table.headers, ['Latitude', 'Lat']);
+    const lngIndex = findHeaderIndex_(table.headers, ['Longitude', 'Lng', 'Lon']);
+    if (latIndex < 0 || lngIndex < 0) return;
+    table.rows.forEach(function (row) {
+      if (String(row[latIndex] == null ? '' : row[latIndex]).trim() === '' ||
+          String(row[lngIndex] == null ? '' : row[lngIndex]).trim() === '') return;
+      const lat = Number(row[latIndex]);
+      const lng = Number(row[lngIndex]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) points.push({lat: lat, lng: lng});
+    });
+  });
+  const cacheSheet = spreadsheet.getSheetByName(PMOS_RIE_CACHE_SHEET);
+  if (cacheSheet && cacheSheet.getLastRow() > 1) {
+    cacheSheet.getRange(2, 2, cacheSheet.getLastRow() - 1, 4).getValues().forEach(function (row) {
+      [[row[0], row[1]], [row[2], row[3]]].forEach(function (pair) {
+        if (String(pair[0] == null ? '' : pair[0]).trim() === '' ||
+            String(pair[1] == null ? '' : pair[1]).trim() === '') return;
+        const lat = Number(pair[0]);
+        const lng = Number(pair[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) points.push({lat: lat, lng: lng});
+      });
+    });
+  }
+  if (!points.length) return null;
+  return {
+    lat: points.reduce(function (sum, point) { return sum + point.lat; }, 0) / points.length,
+    lng: points.reduce(function (sum, point) { return sum + point.lng; }, 0) / points.length
+  };
+}
+
 function collectPmosStoredAddresses_() {
   const ss = SpreadsheetApp.getActive();
   const sheets = [
@@ -124,6 +198,8 @@ function collectPmosStoredAddresses_() {
     const nameIndex = findHeaderIndex_(table.headers, [
       'Customer Name', 'Full Name(s)', 'Name', 'Customer', 'Calendar Title'
     ]);
+    const latIndex = findHeaderIndex_(table.headers, ['Latitude', 'Lat']);
+    const lngIndex = findHeaderIndex_(table.headers, ['Longitude', 'Lng', 'Lon']);
     if (addressIndex < 0) return;
 
     table.rows.forEach(row => {
@@ -132,7 +208,9 @@ function collectPmosStoredAddresses_() {
       results.push({
         address,
         name: nameIndex >= 0 ? String(row[nameIndex] || '').trim() : '',
-        source: definition.source
+        source: definition.source,
+        lat: latIndex >= 0 ? Number(row[latIndex]) : null,
+        lng: lngIndex >= 0 ? Number(row[lngIndex]) : null
       });
     });
   });
