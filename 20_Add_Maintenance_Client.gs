@@ -4,10 +4,6 @@
  * UI ownership lives in 20-C and the authoritative spreadsheet transaction
  * lives in 20-E. This module never creates customers or mutates Calendar.
  */
-function showAddMaintenanceClient() {
-  return showAddMaintenanceClientV2();
-}
-
 function recommendMaintenanceClientRotations(input) {
   input = input || {};
   const address = String(input.address || '').trim();
@@ -178,11 +174,6 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
     centroidDistanceKm: pmosHaversineKm_(target, centroid),
     customerCount: rows.length
   };
-}
-
-/** Compatibility entry retained for older clients; no Calendar mutation occurs. */
-function createMaintenanceClient(input) {
-  return createMaintenanceCustomer(input);
 }
 
 function makeRoomForMaintenanceStop_(sheet, table, layer, stop) {
