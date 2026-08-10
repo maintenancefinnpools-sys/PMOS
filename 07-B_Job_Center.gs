@@ -65,7 +65,7 @@ function openPmosJobEngine(initialType) {
 <script>
 (function(){
 const definitions=${JSON.stringify(clientDefinitions)};
-let selectedType=${JSON.stringify(selectedType)},busy=false,currentState={},lastError='';
+let selectedType=${JSON.stringify(selectedType)},busy=false,currentState={},lastError='',activeRuntimeStartedAt=0;
 const $=id=>document.getElementById(id);
 function server(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(payload=>{if(payload&&payload.ok===false){reject(new Error(payload.error||'Unknown PMOS server error'));return;}resolve(payload&&payload.ok===true?payload.result:payload);}).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));switch(name){case'remember':return runner.rememberPmosJobType(args[0]);case'status':return runner.getReviewedCalendarSyncJobCenterStatus();case'task':return runner.runPmosTask(args[0]);case'audit':return runner.showFreshCalendarAuditTaskWindow();case'startSync':return runner.startReviewedCalendarSyncJobCenterExecution();case'resumeSync':return runner.resumeReviewedCalendarSyncJobCenterExecution();case'retrySync':return runner.retryReviewedCalendarSyncJobCenterExecution();case'pauseSync':return runner.pauseReviewedCalendarSyncJobCenterExecution();case'repair':return runner.showIntegratedPmosJobEngine('CALENDAR_REPAIR');case'history':return runner.showPmosJobHistoryWindow();default:return reject(new Error('Unsupported PMOS server action: '+name));}});}
 function definition(){return definitions.find(item=>item.type===selectedType)||definitions[0];}
@@ -74,6 +74,7 @@ function isPaused(state){return String(state&&state.status||'')==='Paused';}
 function isFailed(state){return String(state&&state.status||'')==='Paused on error';}
 function setProgress(value){value=Math.max(0,Math.min(100,Number(value||0)));$('progressBar').style.width=value+'%';$('progressText').textContent=Math.round(value)+'%';}
 function setBusy(value){busy=value;renderControls();}
+function renderActiveRuntimeClock(){if(!busy||!activeRuntimeStartedAt||definition().mode!=='runtime')return;const elapsed=formatElapsed(new Date(activeRuntimeStartedAt).toISOString(),'');$('status').textContent='Running';$('progressNote').textContent=(elapsed?elapsed+' • ':'')+'Immediate worker active';}
 function showError(error){lastError=error&&error.message?error.message:String(error||'');$('error').textContent=lastError;}
 function clearError(){lastError='';$('error').textContent='';}
 function renderJobs(){$('jobs').innerHTML=definitions.map(item=>'<button class="job'+(item.type===selectedType?' selected':'')+'" data-type="'+item.type+'">'+item.label+'</button>').join('');document.querySelectorAll('.job').forEach(button=>{button.onclick=()=>{selectedType=button.dataset.type;currentState={};clearError();server('remember',selectedType).catch(()=>{});renderJobs();renderReady();if(definition().mode==='runtime')refreshRuntime(false);};});}
@@ -85,11 +86,11 @@ async function refreshRuntime(showFeedback){try{if(showFeedback)setBusy(true);re
 async function runTask(){try{setBusy(true);clearError();$('status').textContent='Running';$('summary').textContent='Running '+definition().label+'…';const result=await server('task',selectedType);$('status').textContent='Complete';$('summary').textContent=result&&result.summary?result.summary:'Operation completed.';setProgress(100);}catch(error){$('status').textContent='Needs attention';showError(error);}finally{setBusy(false);}}
 async function openAudit(){try{setBusy(true);clearError();await server('audit');$('status').textContent='Audit opened';$('summary').textContent='Complete the Calendar Plan Audit and Review Session in the opened window.';}catch(error){showError(error);}finally{setBusy(false);}}
 async function openRepair(){try{setBusy(true);clearError();await server('repair');$('status').textContent='Repair opened';$('summary').textContent='Calendar Repair opened in a separate window.';}catch(error){showError(error);}finally{setBusy(false);}}
-async function runRuntime(){try{setBusy(true);clearError();const action=isFailed(currentState)?'retrySync':isPaused(currentState)?'resumeSync':'startSync';const state=await server(action);renderRuntime(state);}catch(error){showError(error);}finally{setBusy(false);}}
+async function runRuntime(){try{activeRuntimeStartedAt=Date.now();setBusy(true);clearError();renderActiveRuntimeClock();const action=isFailed(currentState)?'retrySync':isPaused(currentState)?'resumeSync':'startSync';const state=await server(action);renderRuntime(state);}catch(error){showError(error);}finally{activeRuntimeStartedAt=0;setBusy(false);}}
 async function pauseRuntime(){try{setBusy(true);renderRuntime(await server('pauseSync'));}catch(error){showError(error);}finally{setBusy(false);}}
 async function openHistory(){try{setBusy(true);await server('history');}catch(error){showError(error);}finally{setBusy(false);}}
 $('start').onclick=function(){const mode=definition().mode;if(mode==='runtime')return runRuntime();if(mode==='audit')return openAudit();if(mode==='repair')return openRepair();return runTask();};$('pause').onclick=pauseRuntime;$('refresh').onclick=function(){if(definition().mode==='runtime')return refreshRuntime(true);renderReady();};$('history').onclick=openHistory;$('close').onclick=function(){google.script.host.close();};
-renderJobs();renderReady();if(definition().mode==='runtime')refreshRuntime(false);setInterval(function(){if(!busy&&definition().mode==='runtime')refreshRuntime(false);},2000);
+renderJobs();renderReady();if(definition().mode==='runtime')refreshRuntime(false);setInterval(renderActiveRuntimeClock,1000);setInterval(function(){if(!busy&&definition().mode==='runtime')refreshRuntime(false);},2000);
 })();
 </script></body></html>`).setWidth(850).setHeight(680);
 
