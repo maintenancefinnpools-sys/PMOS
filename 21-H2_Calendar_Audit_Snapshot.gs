@@ -10,6 +10,7 @@ function savePmosCalendarAuditSnapshot_(audit) {
     planId: String(audit && audit.planId || ''),
     sourceVersion: String(audit && audit.sourceVersion || ''),
     calendarName: String(audit && audit.calendarName || ''),
+    sourceFingerprint: buildPmosCalendarAuditSourceFingerprint_(),
     preview: audit && audit.preview || {},
     issues: audit && audit.issues || [],
     errors: audit && audit.errors || [],
@@ -61,4 +62,46 @@ function ensurePmosCalendarAuditSnapshotSheet_() {
   if (!sheet) sheet = spreadsheet.insertSheet(PMOS_CALENDAR_AUDIT_SNAPSHOT_SHEET);
   if (!sheet.isSheetHidden()) sheet.hideSheet();
   return sheet;
+}
+
+
+/**
+ * A review snapshot is valid only while its spreadsheet sources are unchanged.
+ * Calendar Plan Audit is read-only, but opening a new window must not reuse a
+ * plan built from an earlier Route Template, Customers, Settings, or Registry
+ * state.
+ */
+function isPmosCalendarAuditSnapshotCurrent_(snapshot) {
+  const saved = String(snapshot && snapshot.sourceFingerprint || '');
+  return Boolean(saved) &&
+    saved === buildPmosCalendarAuditSourceFingerprint_();
+}
+
+function buildPmosCalendarAuditSourceFingerprint_() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  const sheetNames = [
+    PMOS.ROUTES_SHEET,
+    PMOS.CUSTOMERS_SHEET,
+    PMOS.SETTINGS_SHEET,
+    'Calendar Series Registry'
+  ];
+  const sources = sheetNames.map(function(sheetName) {
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) return {sheet: sheetName, missing: true};
+    const range = sheet.getDataRange();
+    return {
+      sheet: sheetName,
+      rows: range.getNumRows(),
+      columns: range.getNumColumns(),
+      values: range.getValues().map(function(row) {
+        return row.map(function(value) {
+          return value instanceof Date && !isNaN(value.getTime())
+            ? value.toISOString()
+            : value;
+        });
+      })
+    };
+  });
+  return 'CALENDAR_AUDIT_SOURCE_' +
+    pmosCalendarHash_(JSON.stringify(sources));
 }
