@@ -175,7 +175,7 @@ function readExistingPmosCalendarRoutes_() {
           ' cannot produce a Calendar series: Layer and customer title are required.'
         );
       }
-      const yearRoundText = customer['Year Round'] || customer.Season || '';
+      const yearRoundText = customer['Year Round'] || customer['Year-Round'] || customer.Season || '';
 
       return {
         key: customerId || title,
@@ -196,7 +196,7 @@ function readExistingPmosCalendarRoutes_() {
         sanitization: String(customer['Sanitization Type(s)'] || ''),
         automation: String(customer.Automation || ''),
         yearRound: normalize_(yearRoundText).indexOf('year round') >= 0 ||
-          normalize_(customer['Year Round'] || '') === 'yes'
+          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
       };
     })
     .filter(function (row) {

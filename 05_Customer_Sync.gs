@@ -479,6 +479,7 @@ function parseCustomerWeeks_(value, frequency) {
 function buildCustomerEntryInformation_(customer) {
   const lines = [];
 
+  if (customer['Entry Information']) lines.push(String(customer['Entry Information']));
   if (customer['Gate Code']) lines.push(`Gate code: ${customer['Gate Code']}`);
   if (customer['Lockbox Code']) lines.push(`Lockbox code: ${customer['Lockbox Code']}`);
   if (customer['Lockbox Location']) lines.push(`Lockbox: ${customer['Lockbox Location']}`);

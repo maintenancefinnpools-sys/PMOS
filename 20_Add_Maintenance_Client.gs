@@ -52,7 +52,17 @@ function recommendMaintenanceClientRotations(input) {
       a.day.localeCompare(b.day);
   });
 
-  const recommendations = scored.slice(0, 3).map(function (item) {
+  const roadRefined = scored.slice(0, 3).map(function (item) {
+    return refineMaintenanceRecommendationWithDirections_(item, target);
+  });
+  roadRefined.sort(function (a, b) {
+    if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
+    return Number(a.addedDurationMinutes || Number.POSITIVE_INFINITY) -
+      Number(b.addedDurationMinutes || Number.POSITIVE_INFINITY) ||
+      a.addedDistanceKm - b.addedDistanceKm || b.score - a.score;
+  });
+
+  const recommendations = roadRefined.map(function (item) {
     item.label = item.secondDay ? item.day + ' + ' + item.secondDay : item.day;
     item.rotationLabel = item.weeks.length === 4
       ? 'Every rotation week'
@@ -71,13 +81,16 @@ function recommendMaintenanceClientRotations(input) {
         : item.addedDistanceKm <= 15
           ? 'Adds some travel but remains a reasonable placement.'
           : 'This is one of the best available placements, but it adds substantial travel.';
+    delete item._placementDetails;
     return item;
   });
 
   return {
     recommendations: recommendations,
     qualityMessage: recommendations.length
-      ? 'Best ' + frequency.toLowerCase() + ' placements based primarily on geographic route fit.'
+      ? (recommendations.every(function (item) { return item.roadDataComplete; })
+        ? 'Best ' + frequency.toLowerCase() + ' placements refined with Google driving distance and time.'
+        : 'Best geographic placements found. Some road-time checks were unavailable; review the displayed warning before creating the client.')
       : 'No usable route placements were found. Manual placement remains available.'
   };
 }
@@ -136,6 +149,7 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
         position: placement.position
       };
     }),
+    _placementDetails: placements,
     score: Math.max(
       0,
       Math.min(100, Math.round(distanceScore * 0.7 + continuityScore * 0.3 - loadPenalty))
@@ -189,8 +203,98 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
     nextName: bestPosition <= rows.length ? String(rows[bestPosition - 1].title || '') : '',
     addedDistanceKm: bestAdded,
     centroidDistanceKm: pmosHaversineKm_(target, centroid),
-    customerCount: rows.length
+    customerCount: rows.length,
+    previousPoint: bestPosition > 1 ? points[bestPosition - 2] : null,
+    nextPoint: bestPosition <= rows.length ? points[bestPosition - 1] : null
   };
+}
+
+function refineMaintenanceRecommendationWithDirections_(item, target) {
+  const details = item._placementDetails || [];
+  let totalDistanceKm = 0;
+  let totalDurationMinutes = 0;
+  let complete = details.length > 0;
+  details.forEach(function (placement) {
+    try {
+      const metric = pmosDrivingInsertionImpact_(
+        placement.previousPoint,
+        target,
+        placement.nextPoint
+      );
+      if (!metric) { complete = false; return; }
+      totalDistanceKm += metric.addedDistanceKm;
+      totalDurationMinutes += metric.addedDurationMinutes;
+    } catch (ignored) {
+      complete = false;
+    }
+  });
+  if (complete) {
+    item.addedDistanceKm = totalDistanceKm / details.length;
+    item.addedDurationMinutes = totalDurationMinutes / details.length;
+    item.score = Math.max(0, Math.min(100, Math.round(
+      100 - Math.min(80, item.addedDurationMinutes * 3.5) -
+      Math.max(0, Number(item.customerCount || 0) - 15) * 0.7
+    )));
+  } else {
+    item.addedDurationMinutes = null;
+  }
+  item.roadDataComplete = complete;
+  return item;
+}
+
+function pmosDrivingInsertionImpact_(previous, target, next) {
+  if (!previous && !next) {
+    return {addedDistanceKm: 0, addedDurationMinutes: 0};
+  }
+  if (!previous || !next) {
+    const edge = pmosDrivingRouteMetric_(previous ? [previous, target] : [target, next]);
+    return edge ? {
+      addedDistanceKm: edge.distanceKm,
+      addedDurationMinutes: edge.durationMinutes
+    } : null;
+  }
+  const inserted = pmosDrivingRouteMetric_([previous, target, next]);
+  const direct = pmosDrivingRouteMetric_([previous, next]);
+  if (!inserted || !direct) return null;
+  return {
+    addedDistanceKm: Math.max(0, inserted.distanceKm - direct.distanceKm),
+    addedDurationMinutes: Math.max(0, inserted.durationMinutes - direct.durationMinutes)
+  };
+}
+
+function pmosDrivingRouteMetric_(points) {
+  if (!Array.isArray(points) || points.length < 2 || points.some(function (point) { return !point; })) {
+    return null;
+  }
+  const keyText = points.map(function (point) {
+    return Number(point.lat).toFixed(5) + ',' + Number(point.lng).toFixed(5);
+  }).join('|');
+  const digest = Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, keyText)
+  ).replace(/=+$/, '');
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'PMOS_DRIVE_' + digest;
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  let finder = Maps.newDirectionFinder()
+    .setOrigin(points[0].lat, points[0].lng)
+    .setDestination(points[points.length - 1].lat, points[points.length - 1].lng)
+    .setMode(Maps.DirectionFinder.Mode.DRIVING)
+    .setRegion('ca');
+  points.slice(1, -1).forEach(function (point) {
+    finder = finder.addWaypoint(point.lat, point.lng);
+  });
+  const response = finder.getDirections();
+  const route = response && response.routes && response.routes[0];
+  if (!route || !Array.isArray(route.legs) || !route.legs.length) return null;
+  const metric = route.legs.reduce(function (result, leg) {
+    result.distanceKm += Number(leg.distance && leg.distance.value || 0) / 1000;
+    result.durationMinutes += Number(leg.duration && leg.duration.value || 0) / 60;
+    return result;
+  }, {distanceKm: 0, durationMinutes: 0});
+  cache.put(cacheKey, JSON.stringify(metric), 21600);
+  return metric;
 }
 
 function listMaintenanceLayersForWeekDay_(routes, week, day) {

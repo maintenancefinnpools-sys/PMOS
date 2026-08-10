@@ -279,8 +279,8 @@ function readRoutesInPhysicalOrder_() {
         email: String(customer.Email || ''),
         sanitization: String(customer['Sanitization Type(s)'] || ''),
         automation: String(customer.Automation || ''),
-        yearRound: normalize_(customer['Year Round'] || customer.Season || '').includes('year round') ||
-          normalize_(customer['Year Round'] || '') === 'yes'
+        yearRound: normalize_(customer['Year Round'] || customer['Year-Round'] || customer.Season || '').includes('year round') ||
+          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
       };
     })
     .filter(function (row) { return row.layer && row.title; });

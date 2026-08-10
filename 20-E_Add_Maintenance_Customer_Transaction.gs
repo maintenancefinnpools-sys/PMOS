@@ -36,7 +36,9 @@ function createMaintenanceCustomer(input) {
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'Calendar Title', 'Full Address', 'Primary Phone',
-      'Email', 'Frequency', 'Service Start Date', 'Customer Notes'
+      'Email', 'Frequency', 'Service Start Date', 'Entry Information',
+      'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
+      'Filter', 'Heater', 'Cleaner', 'Cover', 'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
       'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
@@ -233,6 +235,15 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const phone = String(input.phone || '').trim();
   const email = String(input.email || '').trim();
   const notes = String(input.notes || '').trim();
+  const entryInformation = String(input.entryInformation || '').trim();
+  const sanitization = String(input.sanitization || '').trim();
+  const automation = String(input.automation || '').trim();
+  const pump = String(input.pump || '').trim();
+  const filter = String(input.filter || '').trim();
+  const heater = String(input.heater || '').trim();
+  const cleaner = String(input.cleaner || '').trim();
+  const cover = String(input.cover || '').trim();
+  const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const day = normalizeMaintenanceDay_(input.day || 'Monday');
   const secondDay = frequency === 'Twice Weekly'
@@ -272,6 +283,15 @@ function normalizeMaintenanceCustomerRequest_(input) {
     phone: phone,
     email: email,
     notes: notes,
+    entryInformation: entryInformation,
+    sanitization: sanitization,
+    automation: automation,
+    pump: pump,
+    filter: filter,
+    heater: heater,
+    cleaner: cleaner,
+    cover: cover,
+    yearRound: yearRound,
     frequency: frequency,
     day: day,
     secondDay: secondDay,
@@ -307,6 +327,16 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Notes': request.notes,
     'Customer Notes': request.notes,
     'Details': request.notes,
+    'Entry Information': request.entryInformation,
+    'Sanitization Type(s)': request.sanitization,
+    'Automation': request.automation,
+    'Pump': request.pump,
+    'Filter': request.filter,
+    'Heater': request.heater,
+    'Cleaner': request.cleaner,
+    'Cover': request.cover,
+    'Year Round': request.yearRound ? 'Yes' : 'No',
+    'Season': request.yearRound ? 'Year Round' : 'Seasonal',
     'Status': 'Active'
   };
 }
