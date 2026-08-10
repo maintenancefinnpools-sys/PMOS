@@ -35,6 +35,7 @@ function runPmosTask_(taskType) {
         return {summary:[
           'IDs created: ' + Number(result.idsCreated || 0),
           'Route rows updated: ' + Number(result.routeRowsUpdated || 0),
+          'Duplicate/orphan route rows removed: ' + Number(result.routeRowsRemoved || 0),
           'Route rows created: ' + Number(result.routeRowsCreated || 0)
         ].join('\n')};
       }
