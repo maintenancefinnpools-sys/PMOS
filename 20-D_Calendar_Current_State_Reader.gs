@@ -17,17 +17,38 @@ function readPmosCalendarCurrentState_(settings, registry, options) {
   const range = normalizePmosCalendarReadRange_(configuration,options);
   const calendar = getExistingConfiguredPmosCalendar_(configuration.calendarName);
 
-  // Fetch the audit range exactly once. The same snapshot is used both to
-  // classify Calendar events and to verify registered recurring series.
+  // Human review remains scoped to the selected audit range. Managed recurring
+  // identity discovery uses a wider planning window so a registry-less series
+  // cannot evade reconciliation/deletion merely because its next occurrence is
+  // outside the review window.
   const rawEvents = calendar.getEvents(range.start,range.end);
-  const observedSeries = indexObservedPmosCalendarSeries_(rawEvents);
+  const discoveryRange = buildPmosManagedSeriesDiscoveryRange_(
+    configuration,
+    range
+  );
+  const sameDiscoveryRange =
+    discoveryRange.start.getTime() === range.start.getTime() &&
+    discoveryRange.end.getTime() === range.end.getTime();
+  const discoveryEvents = sameDiscoveryRange
+    ? rawEvents
+    : calendar.getEvents(discoveryRange.start,discoveryRange.end);
+  const observedSeries = indexObservedPmosCalendarSeries_(discoveryEvents);
   const registered = readRegisteredPmosCalendarSeriesState_(
     calendar,
     records,
     observedSeries,
-    range
+    discoveryRange
   );
-  const events = readPmosCalendarEventsInRange_(calendar,range,rawEvents);
+  const reviewEvents = readPmosCalendarEventsInRange_(calendar,range,rawEvents);
+  const discoveredEvents = readPmosCalendarEventsInRange_(
+    calendar,
+    discoveryRange,
+    discoveryEvents
+  );
+  const events = appendDiscoveredPmosManagedSeries_(
+    reviewEvents,
+    discoveredEvents
+  );
 
   return freezePmosCalendarPlannerValue_({
     calendarName:calendar.getName(),calendarId:calendar.getId(),
@@ -79,6 +100,52 @@ function normalizePmosCalendarReadRange_(settings, options) {
     throw new Error('Calendar Sync end date must not be before its start date.');
   }
   return {start:effectiveStart,end:requestedEnd,includeStartedToday:includeStartedToday};
+}
+
+/**
+ * Managed maintenance series recur no less often than every four weeks. Scan
+ * at least 35 days and through configured Season End regardless of the narrower
+ * human-review range.
+ */
+function buildPmosManagedSeriesDiscoveryRange_(settings, reviewRange) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const start = new Date(Math.min(reviewRange.start.getTime(), today.getTime()));
+  const minimumEnd = new Date(start.getTime() + 35 * 24 * 60 * 60 * 1000);
+  const seasonEnd = settings && settings.seasonEnd instanceof Date
+    ? endOfDay_(settings.seasonEnd)
+    : minimumEnd;
+  const end = new Date(Math.max(
+    reviewRange.end.getTime(),
+    minimumEnd.getTime(),
+    seasonEnd.getTime()
+  ));
+  return {start:start,end:end,includeStartedToday:true};
+}
+
+/**
+ * Add one representative for each managed recurring series found outside the
+ * review range. Temporary, repair and unclassified events remain review-scoped.
+ */
+function appendDiscoveredPmosManagedSeries_(reviewEvents, discoveredEvents) {
+  const result = (reviewEvents || []).slice();
+  const seenSeries = {};
+
+  result.forEach(function(event) {
+    if (event.eventType !== PMOS_CALENDAR_EVENT_TYPE.RECURRING_ROUTE) return;
+    const id = String(event.seriesId || event.eventId || '').trim();
+    if (id) seenSeries[id] = true;
+  });
+
+  (discoveredEvents || []).forEach(function(event) {
+    if (event.eventType !== PMOS_CALENDAR_EVENT_TYPE.RECURRING_ROUTE) return;
+    const id = String(event.seriesId || event.eventId || '').trim();
+    if (!id || seenSeries[id]) return;
+    seenSeries[id] = true;
+    result.push(event);
+  });
+
+  return result;
 }
 
 /** Parse Date objects and yyyy-MM-dd values without silently replacing them. */
