@@ -30,25 +30,29 @@ function executeReviewedCalendarDeleteOperation_(operation, calendar) {
     let series = null;
     try { series = calendar.getEventSeriesById(seriesId); } catch (error) {}
 
-    // A retry may arrive after the first delete succeeded. Only invoke the
-    // mutation when Calendar still returns a series handle.
     if (series) {
-      try {
-        series.deleteEventSeries();
-      } catch (error) {
-        // Calendar can retain a stale series handle briefly after deletion.
-        // Verify live occurrences below before deciding that the retry failed.
-      }
-    }
+      let deleteError = null;
+      try { series.deleteEventSeries(); } catch (error) { deleteError = error; }
 
-    if (!waitForReviewedCalendarSeriesDeletion_(calendar, seriesId)) {
-      throw new Error('Reviewed series deletion could not be verified: ' + seriesId + '.');
+      // deleteEventSeries() is the authoritative mutation. CalendarApp can
+      // retain the deleted series and its occurrences in this execution's
+      // cache, so same-execution reads cannot disprove a successful void call.
+      // If the call itself failed, live occurrences distinguish a real failure
+      // from an idempotent retry after an earlier successful deletion.
+      if (
+        deleteError &&
+        reviewedCalendarSeriesHasActiveOccurrence_(calendar, seriesId)
+      ) {
+        throw new Error(
+          'Reviewed series deletion failed for ' + seriesId + ': ' +
+          String(deleteError && deleteError.message ? deleteError.message : deleteError)
+        );
+      }
     }
 
     if (seriesKey) deleteReviewedSeriesRegistryRowExact_(seriesKey, seriesId);
     return {action: 'DELETE', id: seriesId, reviewAction: 'DELETE'};
   }
-
   let event = null;
   try { event = calendar.getEventById(eventId); } catch (error) {}
   if (event) {
@@ -67,23 +71,6 @@ function executeReviewedCalendarDeleteOperation_(operation, calendar) {
   }
 
   return {action: 'DELETE', id: eventId, reviewAction: 'DELETE'};
-}
-
-/**
- * CalendarApp may return a stale CalendarEventSeries immediately after
- * deleteEventSeries(). Verify the observable schedule instead: the deletion is
- * complete when no occurrence with the approved series ID remains in the
- * active planning window.
- */
-function waitForReviewedCalendarSeriesDeletion_(calendar, seriesId) {
-  const id = String(seriesId || '').trim();
-  if (!calendar || !id) return true;
-
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (!reviewedCalendarSeriesHasActiveOccurrence_(calendar, id)) return true;
-    if (attempt < 3) Utilities.sleep(1000);
-  }
-  return false;
 }
 
 function reviewedCalendarSeriesHasActiveOccurrence_(calendar, seriesId) {
