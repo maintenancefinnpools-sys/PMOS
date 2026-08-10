@@ -60,7 +60,7 @@ function collectPmosStoredAddresses_() {
   sheets.forEach(definition => {
     const sheet = findFirstSheetByName_(ss, definition.names);
     if (!sheet) return;
-    const table = readHeaderTable_(sheet);
+    const table = readPmosHeaderTable_(sheet);
     const addressIndex = findHeaderIndex_(table.headers, [
       'Full Address', 'Service Address', 'Address', 'Street Address', 'Location'
     ]);

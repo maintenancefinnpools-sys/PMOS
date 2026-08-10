@@ -60,6 +60,9 @@ function synchronizeCustomerDatabase_(markPending) {
 
     if (!customer) {
       const layer = String(values[index][layerCol] || '').trim();
+      const routeTitle = readPmosCustomerSyncRouteTitle_(
+        values[index], titleCol, mapLabelCol
+      );
       const fullName = fullNameCol >= 0
         ? String(values[index][fullNameCol] || '').trim() : '';
       if (layer && (routeId || routeTitle || fullName)) {

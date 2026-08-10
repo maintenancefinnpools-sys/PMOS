@@ -89,12 +89,19 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
   const placements = [];
   candidate.weeks.forEach(function (week) {
     serviceDays.forEach(function (day) {
-      placements.push(
-        maintenanceLayerInsertion_(routes, geocoder, target, 'Week ' + week + ' - ' + day)
-      );
+      const layerPlacements = listMaintenanceLayersForWeekDay_(routes, week, day)
+        .map(function (layer) {
+          return maintenanceLayerInsertion_(routes, geocoder, target, layer);
+        })
+        .sort(function (left, right) {
+          return left.addedDistanceKm - right.addedDistanceKm ||
+            left.customerCount - right.customerCount ||
+            left.layer.localeCompare(right.layer);
+        });
+      if (layerPlacements.length) placements.push(layerPlacements[0]);
     });
   });
-  if (!placements.length) return null;
+  if (placements.length !== candidate.weeks.length * serviceDays.length) return null;
 
   const averageAdded = placements.reduce(function (sum, placement) {
     return sum + placement.addedDistanceKm;
@@ -121,6 +128,14 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
     addedDistanceKm: averageAdded,
     centroidDistanceKm: averageCentroid,
     customerCount: averageCount,
+    placements: placements.map(function (placement) {
+      return {
+        week: parseLayer_(placement.layer).week,
+        day: parseLayer_(placement.layer).day,
+        layer: placement.layer,
+        position: placement.position
+      };
+    }),
     score: Math.max(
       0,
       Math.min(100, Math.round(distanceScore * 0.7 + continuityScore * 0.3 - loadPenalty))
@@ -138,6 +153,7 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
   const valid = points.filter(Boolean);
   if (!rows.length || !valid.length) {
     return {
+      layer: layerName,
       position: 1,
       previousName: '',
       nextName: '',
@@ -167,6 +183,7 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
     lng: valid.reduce(function (sum, point) { return sum + point.lng; }, 0) / valid.length
   };
   return {
+    layer: layerName,
     position: bestPosition,
     previousName: bestPosition > 1 ? String(rows[bestPosition - 2].title || '') : '',
     nextName: bestPosition <= rows.length ? String(rows[bestPosition - 1].title || '') : '',
@@ -176,32 +193,38 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
   };
 }
 
-function makeRoomForMaintenanceStop_(sheet, table, layer, stop) {
-  const values = sheet.getDataRange().getValues();
-  const layerIndex = findHeaderIndex_(table.headers, ['Layer', 'Route Layer', 'Route Assignment']);
-  const stopIndex = findHeaderIndex_(table.headers, ['Stop Order', 'Stop', 'Order']);
-  if (layerIndex < 0 || stopIndex < 0) return;
-
-  for (let row = values.length - 1; row >= table.headerRow; row--) {
-    if (normalizeSyncValue_(values[row][layerIndex]) !== normalizeSyncValue_(layer)) continue;
-    const current = Number(values[row][stopIndex] || 0);
-    if (Number.isFinite(current) && current >= stop) {
-      sheet.getRange(row + 1, stopIndex + 1).setValue(current + 1);
-    }
-  }
-  table.rows.forEach(function (row) {
-    if (normalizeSyncValue_(row[layerIndex]) !== normalizeSyncValue_(layer)) return;
-    const current = Number(row[stopIndex] || 0);
-    if (Number.isFinite(current) && current >= stop) row[stopIndex] = current + 1;
-  });
-}
-
-function rollbackMaintenanceClientRows_(appended) {
-  appended.slice().reverse().forEach(function (item) {
+function listMaintenanceLayersForWeekDay_(routes, week, day) {
+  const layers = {};
+  (routes || []).forEach(function (row) {
+    const layer = String(row.layer || '').trim();
+    if (!layer || layers[layer]) return;
     try {
-      if (item.sheet && item.row <= item.sheet.getLastRow()) item.sheet.deleteRow(item.row);
+      const parsed = parseLayer_(layer);
+      if (parsed.week === Number(week) && parsed.day === day) layers[layer] = true;
     } catch (ignored) {}
   });
+  return Object.keys(layers).sort(routeSort_);
+}
+
+function resolveMaintenanceLayer_(routeTable, week, day, preferredLayer) {
+  const layerIndex = findHeaderIndex_(routeTable.headers, [
+    'Layer', 'Route Layer', 'Route Assignment'
+  ]);
+  if (layerIndex < 0) throw new Error('4-Week Route Template is missing the Layer column.');
+  const routes = routeTable.rows.map(function (row) {
+    return {layer: String(row[layerIndex] || '').trim()};
+  });
+  const matches = listMaintenanceLayersForWeekDay_(routes, week, day);
+  const preferred = String(preferredLayer || '').trim();
+  if (preferred && matches.indexOf(preferred) >= 0) return preferred;
+  if (matches.length === 1) return matches[0];
+  if (!matches.length) {
+    throw new Error('No Route Template layer exists for Week ' + week + ' - ' + day + '.');
+  }
+  throw new Error(
+    'More than one Route Template layer exists for Week ' + week + ' - ' + day +
+    '. Choose a route recommendation so PMOS can select the intended layer.'
+  );
 }
 
 function normalizeMaintenanceFrequency_(value) {
@@ -236,6 +259,15 @@ function parseMaintenanceStartDate_(value) {
     date.getDate() !== day
   ) {
     throw new Error('Service start date is invalid.');
+  }
+  const todayText = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
+  if (text < todayText) {
+    throw new Error('Service start date cannot be before today (' + todayText + ').');
+  }
+  const settings = getRecurringCalendarSettings_();
+  const seasonEnd = Utilities.formatDate(settings.seasonEnd, PMOS.TIMEZONE, 'yyyy-MM-dd');
+  if (text > seasonEnd) {
+    throw new Error('Service start date is after the configured season end (' + seasonEnd + ').');
   }
   return date;
 }
@@ -293,6 +325,69 @@ function appendMappedMaintenanceRow_(sheet, table, valuesByHeader) {
   const row = mappedMaintenanceRow_(table.headers, valuesByHeader);
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, table.headers.length).setValues([row]);
   return row;
+}
+
+function readPmosHeaderTable_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) throw new Error('Sheet is empty: ' + sheet.getName());
+  const known = [
+    'customer id', 'calendar title', 'full name(s)', 'full address',
+    'layer', 'stop order', 'frequency'
+  ].map(normalizeSyncHeader_);
+  let headerIndex = 0;
+  let bestScore = -1;
+  values.slice(0, Math.min(10, values.length)).forEach(function (row, index) {
+    const normalized = row.map(normalizeSyncHeader_);
+    const score = known.reduce(function (total, header) {
+      return total + (normalized.indexOf(header) >= 0 ? 1 : 0);
+    }, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      headerIndex = index;
+    }
+  });
+  const headers = values[headerIndex].map(function (value) {
+    return String(value || '').trim();
+  });
+  return {
+    headerRow: headerIndex + 1,
+    headers: headers,
+    rows: values.slice(headerIndex + 1).filter(function (row) {
+      return row.some(function (value) { return value !== '' && value != null; });
+    })
+  };
+}
+
+function findFirstSheetByName_(spreadsheet, names) {
+  const candidates = names || [];
+  for (let index = 0; index < candidates.length; index++) {
+    const sheet = spreadsheet.getSheetByName(candidates[index]);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+function normalizeSyncHeader_(value) {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeSyncValue_(value) {
+  return normalize_(value);
+}
+
+function findHeaderIndex_(headers, candidates) {
+  const normalized = (headers || []).map(normalizeSyncHeader_);
+  const options = (candidates || []).map(normalizeSyncHeader_);
+  for (let index = 0; index < options.length; index++) {
+    const match = normalized.indexOf(options[index]);
+    if (match >= 0) return match;
+  }
+  return -1;
 }
 
 function nextMaintenanceStopForLayer_(routeTable, layer) {

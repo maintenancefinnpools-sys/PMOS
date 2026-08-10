@@ -12,7 +12,7 @@ function createMaintenanceCustomer(input) {
     throw new Error('Another PMOS operation is running. Try again when it finishes.');
   }
 
-  const appended = [];
+  let snapshots = [];
   try {
     const spreadsheet = SpreadsheetApp.getActive();
     const customersSheet = findFirstSheetByName_(spreadsheet, [
@@ -26,8 +26,13 @@ function createMaintenanceCustomer(input) {
       throw new Error('Customers or 4-Week Route Template sheet was not found.');
     }
 
-    let customerTable = readHeaderTable_(customersSheet);
-    let routeTable = readHeaderTable_(routeSheet);
+    snapshots = [
+      snapshotMaintenanceSheet_(customersSheet),
+      snapshotMaintenanceSheet_(routeSheet)
+    ];
+
+    let customerTable = readPmosHeaderTable_(customersSheet);
+    let routeTable = readPmosHeaderTable_(routeSheet);
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'Calendar Title', 'Full Address', 'Primary Phone',
@@ -37,8 +42,8 @@ function createMaintenanceCustomer(input) {
       'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
     ]);
 
-    customerTable = readHeaderTable_(customersSheet);
-    routeTable = readHeaderTable_(routeSheet);
+    customerTable = readPmosHeaderTable_(customersSheet);
+    routeTable = readPmosHeaderTable_(routeSheet);
     assertMaintenanceClientNotDuplicate_(
       customerTable,
       request.name,
@@ -50,29 +55,22 @@ function createMaintenanceCustomer(input) {
     const sharedValues = buildMaintenanceCustomerSharedValues_(request, customerId);
 
     appendMappedMaintenanceRow_(customersSheet, customerTable, sharedValues);
-    appended.push({sheet: customersSheet, row: customersSheet.getLastRow()});
 
     const routeRows = appendMaintenanceCustomerRouteRows_(
       routeSheet,
       routeTable,
       sharedValues,
-      request,
-      appended
+      request
     );
 
     SpreadsheetApp.flush();
 
-    let customerRefresh = 'Customer data refresh was not required.';
-    try {
-      if (typeof synchronizeCustomerDatabaseSmart_ === 'function') {
-        const refresh = synchronizeCustomerDatabaseSmart_();
-        customerRefresh = Number(refresh && refresh.routeRowsUpdated || 0) +
-          ' route row(s) refreshed from Customers.';
-      }
-    } catch (error) {
-      customerRefresh = 'Customer data refresh warning: ' +
-        String(error && error.message ? error.message : error);
-    }
+    const refresh = synchronizeCustomerDatabase_(true);
+    const customerRefresh = [
+      Number(refresh && refresh.routeRowsUpdated || 0) + ' route row(s) refreshed',
+      Number(refresh && refresh.routeRowsCreated || 0) + ' route row(s) created',
+      Number(refresh && refresh.routeRowsRemoved || 0) + ' duplicate/orphan row(s) removed'
+    ].join('; ') + '.';
 
     if (typeof clearPmosCalendarAuditSnapshot_ === 'function') {
       clearPmosCalendarAuditSnapshot_();
@@ -90,6 +88,7 @@ function createMaintenanceCustomer(input) {
       ),
       routeRows: routeRows,
       calendarStatus: 'PENDING_PLAN_AUDIT',
+      openCalendarAudit: true,
       summary: [
         'Maintenance customer created.',
         'Customer: ' + request.name,
@@ -105,15 +104,21 @@ function createMaintenanceCustomer(input) {
         }).join('; '),
         customerRefresh,
         '',
-        'Calendar was not changed. Run Calendar Plan Audit when ready to review and synchronize this customer.'
+        'Calendar was not changed directly. Opening a fresh Calendar Plan Audit for review.'
       ].join('\n')
     };
   } catch (error) {
-    rollbackMaintenanceClientRows_(appended);
+    rollbackMaintenanceSheetSnapshots_(snapshots);
     throw error;
   } finally {
     lock.releaseLock();
   }
+}
+
+function createMaintenanceCustomerAndOpenAudit(input) {
+  const result = createMaintenanceCustomer(input);
+  showFreshCalendarAuditTaskWindow();
+  return result;
 }
 
 function normalizeMaintenanceCustomerRequest_(input) {
@@ -133,6 +138,18 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const firstWeek = Math.max(1, Math.min(4, Number(input.week || 1)));
   const requestedStop = Math.max(0, Math.floor(Number(input.stop || 0)));
   const calendarTitle = String(input.calendarTitle || name).trim() || name;
+  const recommendedPlacements = Array.isArray(input.recommendedPlacements)
+    ? input.recommendedPlacements.map(function (placement) {
+      return {
+        week: Number(placement && placement.week || 0),
+        day: String(placement && placement.day || '').trim(),
+        layer: String(placement && placement.layer || '').trim(),
+        position: Math.max(1, Math.floor(Number(placement && placement.position || 1)))
+      };
+    }).filter(function (placement) {
+      return placement.week >= 1 && placement.week <= 4 && placement.layer;
+    })
+    : [];
 
   if (!name) throw new Error('Customer name is required.');
   if (!address) throw new Error('Service address is required.');
@@ -155,7 +172,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
     effectiveDate: effectiveDate,
     firstWeek: firstWeek,
     requestedStop: requestedStop,
-    calendarTitle: calendarTitle
+    calendarTitle: calendarTitle,
+    recommendedPlacements: recommendedPlacements
   });
 }
 
@@ -188,7 +206,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
 }
 
 function appendMaintenanceCustomerRouteRows_(
-    routeSheet, routeTable, sharedValues, request, appended) {
+    routeSheet, routeTable, sharedValues, request) {
   const weeks = maintenanceWeeksForFrequency_(
     request.frequency,
     request.firstWeek
@@ -200,13 +218,18 @@ function appendMaintenanceCustomerRouteRows_(
 
   weeks.forEach(function (week) {
     days.forEach(function (serviceDay) {
-      const layer = 'Week ' + week + ' - ' + serviceDay;
+      const recommendation = request.recommendedPlacements.find(function (placement) {
+        return placement.week === week && placement.day === serviceDay;
+      }) || null;
+      const layer = resolveMaintenanceLayer_(
+        routeTable,
+        week,
+        serviceDay,
+        recommendation && recommendation.layer
+      );
       const stop = request.requestedStop ||
+        (recommendation && recommendation.position) ||
         nextMaintenanceStopForLayer_(routeTable, layer);
-
-      if (request.requestedStop) {
-        makeRoomForMaintenanceStop_(routeSheet, routeTable, layer, stop);
-      }
 
       const rowValues = Object.assign({}, sharedValues, {
         'Layer': layer,
@@ -219,16 +242,78 @@ function appendMaintenanceCustomerRouteRows_(
         'Stop Order': stop,
         'Order': stop
       });
-      const row = appendMappedMaintenanceRow_(
-        routeSheet,
-        routeTable,
-        rowValues
-      );
-      appended.push({sheet: routeSheet, row: routeSheet.getLastRow()});
+      const row = mappedMaintenanceRow_(routeTable.headers, rowValues);
+      insertMaintenanceRouteRow_(routeTable, row, layer, stop);
       routeRows.push({layer: layer, stop: stop});
-      routeTable.rows.push(row);
     });
   });
 
+  writeMaintenanceRouteTable_(routeSheet, routeTable);
+
   return routeRows;
+}
+
+function insertMaintenanceRouteRow_(routeTable, newRow, layer, stop) {
+  const layerIndex = findHeaderIndex_(routeTable.headers, [
+    'Layer', 'Route Layer', 'Route Assignment'
+  ]);
+  const stopIndex = findHeaderIndex_(routeTable.headers, ['Stop Order', 'Stop', 'Order']);
+  const normalizedLayer = normalizeSyncValue_(layer);
+  let insertIndex = routeTable.rows.length;
+  let lastLayerIndex = -1;
+
+  routeTable.rows.forEach(function (row, index) {
+    if (normalizeSyncValue_(row[layerIndex]) !== normalizedLayer) return;
+    lastLayerIndex = index;
+    const current = Number(row[stopIndex] || 0);
+    if (current >= stop && insertIndex === routeTable.rows.length) insertIndex = index;
+    if (Number.isFinite(current) && current >= stop) row[stopIndex] = current + 1;
+  });
+  if (insertIndex === routeTable.rows.length && lastLayerIndex >= 0) {
+    insertIndex = lastLayerIndex + 1;
+  }
+  routeTable.rows.splice(insertIndex, 0, newRow);
+}
+
+function writeMaintenanceRouteTable_(sheet, table) {
+  const firstBodyRow = table.headerRow + 1;
+  const existingBodyRows = Math.max(0, sheet.getLastRow() - table.headerRow);
+  if (existingBodyRows) {
+    sheet.getRange(firstBodyRow, 1, existingBodyRows, table.headers.length).clearContent();
+  }
+  if (table.rows.length) {
+    sheet.getRange(firstBodyRow, 1, table.rows.length, table.headers.length)
+      .setValues(table.rows);
+  }
+}
+
+function snapshotMaintenanceSheet_(sheet) {
+  const range = sheet.getDataRange();
+  return {
+    sheet: sheet,
+    values: range.getValues(),
+    formulas: range.getFormulasR1C1(),
+    rows: range.getNumRows(),
+    columns: range.getNumColumns()
+  };
+}
+
+function rollbackMaintenanceSheetSnapshots_(snapshots) {
+  (snapshots || []).forEach(function (snapshot) {
+    try {
+      const sheet = snapshot.sheet;
+      const clearRows = Math.max(sheet.getLastRow(), snapshot.rows);
+      const clearColumns = Math.max(sheet.getLastColumn(), snapshot.columns);
+      if (clearRows && clearColumns) {
+        sheet.getRange(1, 1, clearRows, clearColumns).clearContent();
+      }
+      sheet.getRange(1, 1, snapshot.rows, snapshot.columns).setValues(snapshot.values);
+      snapshot.formulas.forEach(function (row, rowIndex) {
+        row.forEach(function (formula, columnIndex) {
+          if (formula) sheet.getRange(rowIndex + 1, columnIndex + 1).setFormulaR1C1(formula);
+        });
+      });
+    } catch (ignored) {}
+  });
+  SpreadsheetApp.flush();
 }
