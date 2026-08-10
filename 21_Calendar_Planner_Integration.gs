@@ -83,6 +83,8 @@ function buildValidatedPmosCalendarSyncPlan_(options) {
     plan: plan,
     validation: validation,
     currentState: currentState,
+    desiredSeries: desiredSeries,
+    rawVerifiedState: rawVerifiedState,
     verifiedState: verifiedState,
     reviewDecisions: reviewDecisions,
     reviewExecutorPending: reviewExecutorPending,
@@ -312,9 +314,60 @@ function previewPmosCalendarSyncPlan(options) {
         method: String(item.method || '')
       };
     }),
+    seriesDiagnostics: buildPmosCalendarSeriesDiagnostics_(
+      result.desiredSeries,
+      result.rawVerifiedState && result.rawVerifiedState.records,
+      plan.operations
+    ),
     details: plan.operations.slice(0, 30).map(formatPmosCalendarPreviewOperation_),
     validation: result.validation,
     plan: plan
+  });
+}
+
+function buildPmosCalendarSeriesDiagnostics_(desiredSeries, currentSeries, operations) {
+  const rows = {};
+  function ensure(key) {
+    if (!rows[key]) {
+      rows[key] = {
+        seriesKey: key,
+        title: '',
+        layer: '',
+        customerId: '',
+        desiredPresent: false,
+        currentPresent: false,
+        actions: []
+      };
+    }
+    return rows[key];
+  }
+  (desiredSeries || []).forEach(function(record) {
+    const key = String(record && record.seriesKey || '');
+    if (!key) return;
+    const row = ensure(key);
+    row.desiredPresent = true;
+    row.title = String(record.title || row.title || '');
+    row.layer = String(record.layer || row.layer || '');
+    row.customerId = String(record.customerId || row.customerId || '');
+  });
+  (currentSeries || []).forEach(function(record) {
+    const key = String(record && record.seriesKey || '');
+    if (!key) return;
+    const row = ensure(key);
+    row.currentPresent = true;
+    row.title = String(row.title || record.title || '');
+    row.layer = String(row.layer || record.layer || '');
+    row.customerId = String(row.customerId || record.customerId || '');
+  });
+  (operations || []).forEach(function(operation) {
+    const key = String(operation && operation.entityId || '');
+    if (!key) return;
+    const row = ensure(key);
+    const action = String(operation.action || '');
+    if (action && row.actions.indexOf(action) < 0) row.actions.push(action);
+  });
+  return Object.keys(rows).sort().map(function(key) {
+    return rows[key];
   });
 }
 
