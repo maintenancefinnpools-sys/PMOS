@@ -33,10 +33,37 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
   const remappedCurrentKeys = {};
   const reconciliations = [];
 
+  // Identity recovery is safe only when it cannot change how many managed
+  // series the customer owns. Apply this guard before every remapping pass;
+  // otherwise the same-week/day fallback can consume a genuine route removal
+  // before the cross-layer guard gets a chance to preserve it for review.
+  const customerCountParity = buildPmosCalendarIdentityCountParity_(
+    desired,
+    current,
+    function(record) { return effectivePmosCalendarCustomerId_(record); }
+  );
+  const titleCountParity = buildPmosCalendarIdentityCountParity_(
+    desired,
+    current,
+    function(record) { return normalizePmosCalendarIdentityText_(record && record.title); }
+  );
+  const customerParityDesired = unmatchedDesired.filter(function(record) {
+    return customerCountParity[effectivePmosCalendarCustomerId_(record)] === true;
+  });
+  const customerParityCurrent = unmatchedCurrent.filter(function(record) {
+    return customerCountParity[effectivePmosCalendarCustomerId_(record)] === true;
+  });
+  const titleParityDesired = unmatchedDesired.filter(function(record) {
+    return titleCountParity[normalizePmosCalendarIdentityText_(record && record.title)] === true;
+  });
+  const titleParityCurrent = unmatchedCurrent.filter(function(record) {
+    return titleCountParity[normalizePmosCalendarIdentityText_(record && record.title)] === true;
+  });
+
   // Strongest recovery: same customer and same normalized layer.
   matchPmosCalendarIdentityPass_(
-    unmatchedDesired,
-    unmatchedCurrent,
+    customerParityDesired,
+    customerParityCurrent,
     remappedCurrentKeys,
     reconciliations,
     'CUSTOMER_ID_AND_LAYER',
@@ -49,8 +76,8 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
 
   // Legacy fallback where customer IDs were not recorded reliably.
   matchPmosCalendarIdentityPass_(
-    unmatchedDesired,
-    unmatchedCurrent,
+    titleParityDesired,
+    titleParityCurrent,
     remappedCurrentKeys,
     reconciliations,
     'TITLE_AND_LAYER',
@@ -65,11 +92,6 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
   // total number of desired and current series. A lower desired count means a
   // Route Template row was removed; leave that current series unmatched so it
   // reaches explicit deletion review.
-  const customerCountParity = buildPmosCalendarIdentityCountParity_(
-    desired,
-    current,
-    function(record) { return effectivePmosCalendarCustomerId_(record); }
-  );
   pairPmosCalendarCustomerSeries_(
     unmatchedDesired,
     unmatchedCurrent,
@@ -81,11 +103,6 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
   );
 
   // Conservative title fallback for legacy records with no usable Customer ID.
-  const titleCountParity = buildPmosCalendarIdentityCountParity_(
-    desired,
-    current,
-    function(record) { return normalizePmosCalendarIdentityText_(record && record.title); }
-  );
   pairPmosCalendarCustomerSeries_(
     unmatchedDesired,
     unmatchedCurrent,
