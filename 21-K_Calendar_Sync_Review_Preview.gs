@@ -6,7 +6,13 @@ function openReviewedCalendarSyncPreview() {
   const audit = runVerifiedCalendarPlanAuditReadOnly_();
   if (!audit.reviewComplete) throw new Error('Calendar review is not complete. Finish all review items before opening Calendar Sync Preview.');
 
-  const preview = audit.preview || previewPmosCalendarSyncPlan();
+  // The audit snapshot is evidence for review completion, not an executable
+  // plan. Rebuild now so ledger decisions are resolved against current verified
+  // Calendar state and this dialog previews the exact plan preparation will use.
+  const preview = previewPmosCalendarSyncPlan();
+  if (String(preview.reviewSessionId || '') !== String(audit.reviewSessionId || '')) {
+    throw new Error('Calendar review session changed before Sync Preview could be built. Run Calendar Plan Audit again.');
+  }
   if (!preview || !preview.plan || !Array.isArray(preview.plan.operations)) throw new Error('Calendar Sync Preview could not build the reviewed operation plan.');
 
   const resolutionErrors = Number(preview.reviewResolutionErrors || 0);
