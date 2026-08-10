@@ -143,27 +143,37 @@ function readExistingPmosCalendarRoutes_() {
 
   return routeValues.slice(1)
     .filter(pmosCalendarRowHasData_)
-    .map(function (row) {
+    .map(function (row, rowIndex) {
       const route = pmosCalendarRowObject_(routeHeaders, row);
       const routeTitle = String(route['Calendar Title'] || '').trim();
+      const mapTitle = String(route['Map Label'] || '')
+        .replace(/^\s*\d+\s*[-\u2013\u2014]\s*/, '')
+        .trim();
+      const lookupTitle = routeTitle || mapTitle;
       const routeId = String(route['Customer ID'] || '').trim();
       const customer = customersById[routeId] ||
-        customersByTitle[normalize_(routeTitle)] || {};
+        customersByTitle[normalize_(lookupTitle)] || {};
       // The Route Template is the scheduling source of truth. When it carries
       // an explicit Customer ID, preserve that identity even if the fallback
       // title lookup resolves to a different Customers-sheet record.
       const customerId = String(routeId || customer['Customer ID'] || '').trim();
-      // Calendar Title is preferred, but a populated route must not disappear
-      // merely because that optional display field is blank in one route copy.
+      // Map Label is a visible derived copy of Calendar Title. Accept it as an
+      // identity recovery source so a visibly populated route cannot vanish
+      // merely because one copied Calendar Title cell is blank.
       const title = String(
         customer['Calendar Title'] || routeTitle ||
-        customer['Full Name(s)'] || route['Full Name(s)'] || ''
+        customer['Full Name(s)'] || route['Full Name(s)'] || mapTitle || ''
       ).trim();
       const layer = String(route.Layer || '').trim();
-      if ((customerId || title) && (!layer || !title)) {
+      if (!layer || !title) {
         throw new Error(
-          PMOS.ROUTES_SHEET + ' row ' + (routeValues.slice(1).indexOf(row) + 2) +
-          ' cannot produce a Calendar series: Layer and customer title are required.'
+          PMOS.ROUTES_SHEET + ' row ' + (rowIndex + 2) +
+          ' is populated but cannot produce a Calendar series. ' +
+          'Layer=' + (layer || '(blank)') +
+          ', Customer ID=' + (routeId || '(blank)') +
+          ', Calendar Title=' + (routeTitle || '(blank)') +
+          ', Full Name=' + String(route['Full Name(s)'] || '(blank)') +
+          ', Map Label=' + String(route['Map Label'] || '(blank)') + '.'
         );
       }
       const yearRoundText = customer['Year Round'] || customer.Season || '';
@@ -188,9 +198,6 @@ function readExistingPmosCalendarRoutes_() {
         yearRound: normalize_(yearRoundText).indexOf('year round') >= 0 ||
           normalize_(customer['Year Round'] || '') === 'yes'
       };
-    })
-    .filter(function (row) {
-      return row.layer && row.title;
     });
 }
 
