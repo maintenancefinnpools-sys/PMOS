@@ -33,7 +33,9 @@ function buildValidatedPmosCalendarSyncPlan_(options) {
         verifiedState,
         currentState
       ),
-      allowDeletes: true,
+      // Missing desired series are review warnings until the Review Session
+      // resolver appends an explicit user-approved DELETE operation.
+      allowDeletes: false,
       includeSkips: false
     }
   );
@@ -148,13 +150,25 @@ function readExistingPmosCalendarRoutes_() {
       const customer = customersById[routeId] ||
         customersByTitle[normalize_(routeTitle)] || {};
       const customerId = String(customer['Customer ID'] || routeId).trim();
-      const title = String(customer['Calendar Title'] || routeTitle).trim();
+      // Calendar Title is preferred, but a populated route must not disappear
+      // merely because that optional display field is blank in one route copy.
+      const title = String(
+        customer['Calendar Title'] || routeTitle ||
+        customer['Full Name(s)'] || route['Full Name(s)'] || ''
+      ).trim();
+      const layer = String(route.Layer || '').trim();
+      if ((customerId || title) && (!layer || !title)) {
+        throw new Error(
+          PMOS.ROUTES_SHEET + ' row ' + (routeValues.slice(1).indexOf(row) + 2) +
+          ' cannot produce a Calendar series: Layer and customer title are required.'
+        );
+      }
       const yearRoundText = customer['Year Round'] || customer.Season || '';
 
       return {
         key: customerId || title,
         customerId: customerId,
-        layer: String(route.Layer || '').trim(),
+        layer: layer,
         order: Number(route['Stop Order'] || 0),
         title: title,
         fullName: String(customer['Full Name(s)'] || route['Full Name(s)'] || title),
