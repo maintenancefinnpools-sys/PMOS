@@ -1,0 +1,33 @@
+name: PMOS Static Check
+
+on:
+  push:
+    branches:
+      - pmos-development
+      - main
+  pull_request:
+
+jobs:
+  apps-script-static-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check Apps Script global namespace
+        run: python3 tools/check_apps_script_globals.py
+
+      - name: Report self-only global candidates
+        run: python3 tools/report_unused_apps_script_globals.py
+
+      - name: Check combined Apps Script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/pmos-combined.js
+          while IFS= read -r -d '' file; do
+            printf '\n// ---- %s ----\n' "$file" >> /tmp/pmos-combined.js
+            cat "$file" >> /tmp/pmos-combined.js
+            printf '\n' >> /tmp/pmos-combined.js
+          done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
+          node --check /tmp/pmos-combined.js

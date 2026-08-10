@@ -1,0 +1,424 @@
+/**
+ * PMOS Calendar planner integration.
+ *
+ * Reads existing PMOS source data and actual Calendar state, builds an immutable
+ * Calendar Sync plan, and validates it. Preview performs no writes.
+ */
+
+function buildValidatedPmosCalendarSyncPlan_(options) {
+  const settings = getRecurringCalendarSettings_();
+  const desiredSeries = buildRecurringSeriesPlan_(readExistingPmosCalendarRoutes_);
+  const currentRegistry = readExistingPmosCalendarRegistry_();
+  const currentState = readPmosCalendarCurrentState_(
+    settings,
+    currentRegistry,
+    options || {}
+  );
+  const rawVerifiedState = buildVerifiedPmosCalendarSeriesState_(
+    currentState,
+    currentRegistry
+  );
+  const verifiedState = reconcilePmosCalendarSeriesIdentities_(
+    desiredSeries,
+    rawVerifiedState
+  );
+
+  const basePlan = buildPmosCalendarSyncPlan(
+    desiredSeries,
+    verifiedState.records,
+    {
+      calendarName: settings.calendarName,
+      sourceVersion: buildPmosCalendarVerifiedSourceVersion_(
+        desiredSeries,
+        verifiedState,
+        currentState
+      ),
+      // Missing desired series are review warnings until the Review Session
+      // resolver appends an explicit user-approved DELETE operation.
+      allowDeletes: false,
+      includeSkips: false
+    }
+  );
+
+  let plan = appendPmosCalendarStateReviewPlan_(
+    basePlan,
+    currentState,
+    verifiedState
+  );
+
+  let reviewDecisions = null;
+  try {
+    reviewDecisions = readActivePmosCalendarReviewDecisions_();
+  } catch (error) {
+    reviewDecisions = null;
+  }
+
+  if (reviewDecisions) {
+    plan = appendResolvedPmosCalendarReviewOperations_(
+      plan,
+      currentState,
+      verifiedState,
+      reviewDecisions
+    );
+  }
+
+  const genericValidation = validatePmosPlan(plan, {
+    validateCustomers: false
+  });
+  const calendarValidation = validatePmosCalendarPlanSafety_(plan);
+  const validation = combinePmosCalendarValidationReports_(
+    genericValidation,
+    calendarValidation
+  );
+
+  const plannerErrors = plan.operations.filter(function (operation) {
+    return operation.action === PMOS_OPERATION.ERROR ||
+      Boolean(operation.metadata && operation.metadata.blocking);
+  });
+  const reviewExecutorPending = Boolean(
+    plan.metadata && plan.metadata.reviewExecutorPending
+  );
+
+  return Object.freeze({
+    plan: plan,
+    validation: validation,
+    currentState: currentState,
+    desiredSeries: desiredSeries,
+    rawVerifiedState: rawVerifiedState,
+    verifiedState: verifiedState,
+    reviewDecisions: reviewDecisions,
+    reviewExecutorPending: reviewExecutorPending,
+    canExecute: validation.executable &&
+      plannerErrors.length === 0 &&
+      !reviewExecutorPending,
+    plannerErrorCount: plannerErrors.length
+  });
+}
+
+/** Reads route and customer sources without repairing or modifying either. */
+function readExistingPmosCalendarRoutes_() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  const routeSheet = spreadsheet.getSheetByName(PMOS.ROUTES_SHEET);
+  const customerSheet = spreadsheet.getSheetByName(PMOS.CUSTOMERS_SHEET);
+
+  if (!routeSheet) {
+    throw new Error('Missing required route source sheet: ' + PMOS.ROUTES_SHEET + '.');
+  }
+  if (!customerSheet) {
+    throw new Error('Missing required customer source sheet: ' + PMOS.CUSTOMERS_SHEET + '.');
+  }
+
+  const routeValues = routeSheet.getDataRange().getValues();
+  const customerValues = customerSheet.getDataRange().getValues();
+  if (!routeValues.length || !routeValues[0].length) {
+    throw new Error(PMOS.ROUTES_SHEET + ' has no header row.');
+  }
+  if (!customerValues.length || !customerValues[0].length) {
+    throw new Error(PMOS.CUSTOMERS_SHEET + ' has no header row.');
+  }
+
+  const routeHeaders = routeValues[0].map(pmosCalendarHeader_);
+  const customerHeaders = customerValues[0].map(pmosCalendarHeader_);
+  const requiredRouteHeaders = ['Layer', 'Stop Order'];
+  const missingRouteHeaders = requiredRouteHeaders.filter(function (header) {
+    return routeHeaders.indexOf(header) < 0;
+  });
+  if (missingRouteHeaders.length) {
+    throw new Error(
+      PMOS.ROUTES_SHEET + ' is missing required column(s): ' +
+      missingRouteHeaders.join(', ') + '.'
+    );
+  }
+  if (routeHeaders.indexOf('Customer ID') < 0 &&
+      routeHeaders.indexOf('Calendar Title') < 0) {
+    throw new Error(
+      PMOS.ROUTES_SHEET +
+      ' requires either Customer ID or Calendar Title to identify route rows.'
+    );
+  }
+
+  const customersById = {};
+  const customersByTitle = {};
+  customerValues.slice(1).forEach(function (row) {
+    if (!pmosCalendarRowHasData_(row)) return;
+    const customer = pmosCalendarRowObject_(customerHeaders, row);
+    const customerId = String(customer['Customer ID'] || '').trim();
+    const title = String(customer['Calendar Title'] || '').trim();
+    const fullName = String(customer['Full Name(s)'] || '').trim();
+    if (!title && !fullName) return;
+    if (customerId) customersById[customerId] = customer;
+    if (title) customersByTitle[normalize_(title)] = customer;
+  });
+
+  return routeValues.slice(1)
+    .filter(pmosCalendarRowHasData_)
+    .map(function (row, rowIndex) {
+      const route = pmosCalendarRowObject_(routeHeaders, row);
+      const routeTitle = String(route['Calendar Title'] || '').trim();
+      const routeId = String(route['Customer ID'] || '').trim();
+      const customer = customersById[routeId] ||
+        customersByTitle[normalize_(routeTitle)] || {};
+      // The Route Template is the scheduling source of truth. When it carries
+      // an explicit Customer ID, preserve that identity even if the fallback
+      // title lookup resolves to a different Customers-sheet record.
+      const customerId = String(routeId || customer['Customer ID'] || '').trim();
+      // Calendar Title is preferred, but a populated route must not disappear
+      // merely because that optional display field is blank in one route copy.
+      const title = String(
+        customer['Calendar Title'] || routeTitle ||
+        customer['Full Name(s)'] || route['Full Name(s)'] || ''
+      ).trim();
+      const layer = String(route.Layer || '').trim();
+      if ((customerId || title) && (!layer || !title)) {
+        throw new Error(
+          PMOS.ROUTES_SHEET + ' row ' + (rowIndex + 2) +
+          ' cannot produce a Calendar series: Layer and customer title are required.'
+        );
+      }
+      const yearRoundText = customer['Year Round'] || customer['Year-Round'] || customer.Season || '';
+
+      return {
+        key: customerId || title,
+        sourceRow: rowIndex + 2,
+        customerId: customerId,
+        layer: layer,
+        order: Number(route['Stop Order'] || 0),
+        title: title,
+        fullName: String(customer['Full Name(s)'] || route['Full Name(s)'] || title),
+        address: String(customer['Full Address'] || route['Full Address'] || ''),
+        frequency: String(customer.Frequency || route.Frequency || ''),
+        entry: buildCustomerEntryInformation_(customer) ||
+          String(route['Entry Information'] || ''),
+        notes: String(customer['Customer Notes'] || route['Customer Notes'] || ''),
+        phone: String(customer['Primary Phone'] || ''),
+        secondaryPhone: String(customer['Secondary Phone'] || ''),
+        email: String(customer.Email || ''),
+        sanitization: String(customer['Sanitization Type(s)'] || ''),
+        automation: String(customer.Automation || ''),
+        yearRound: normalize_(yearRoundText).indexOf('year round') >= 0 ||
+          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
+      };
+    })
+    .filter(function (row) {
+      return row.layer && row.title;
+    });
+}
+
+/** Reads the Calendar Series Registry without creating or repairing it. */
+function readExistingPmosCalendarRegistry_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName('Calendar Series Registry');
+  if (!sheet) {
+    throw new Error(
+      'Missing Calendar Series Registry. Run Initialize PMOS or Update PMOS before previewing Calendar Sync.'
+    );
+  }
+
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) {
+    throw new Error(
+      'Calendar Series Registry has no header row. Run Update PMOS to repair support structures.'
+    );
+  }
+
+  const headers = values[0].map(pmosCalendarHeader_);
+  const requiredHeaders = [
+    'Series Key', 'Customer ID', 'Layer', 'Series ID',
+    'Calendar Name', 'Signature', 'Status'
+  ];
+  const missingHeaders = requiredHeaders.filter(function (header) {
+    return headers.indexOf(header) < 0;
+  });
+  if (missingHeaders.length) {
+    throw new Error(
+      'Calendar Series Registry is missing required column(s): ' +
+      missingHeaders.join(', ') + '. Run Update PMOS to repair support structures.'
+    );
+  }
+
+  const indexes = {};
+  headers.forEach(function (header, index) { indexes[header] = index; });
+  const registry = {};
+
+  values.slice(1).forEach(function (row, index) {
+    const seriesKey = String(row[indexes['Series Key']] || '').trim();
+    if (!seriesKey) return;
+    registry[seriesKey] = {
+      row: index + 2,
+      seriesKey: seriesKey,
+      customerId: String(row[indexes['Customer ID']] || ''),
+      layer: String(row[indexes.Layer] || ''),
+      seriesId: String(row[indexes['Series ID']] || ''),
+      calendarName: String(row[indexes['Calendar Name']] || ''),
+      signature: String(row[indexes.Signature] || ''),
+      status: String(row[indexes.Status] || '')
+    };
+  });
+
+  return registry;
+}
+
+function previewPmosCalendarSyncPlan(options) {
+  const result = buildValidatedPmosCalendarSyncPlan_(options || {});
+  const plan = result.plan;
+  const summary = summarizePmosCalendarSyncPlan(plan);
+  const executable = plan.operations.filter(isPmosExecutableOperation);
+  const reviewOperations = plan.operations.filter(function (operation) {
+    return Boolean(operation.metadata && operation.metadata.reviewOperation);
+  });
+  const reviewCounts = Object.assign(
+    {match: 0, temporary: 0, ignore: 0, keep: 0, delete: 0},
+    plan.metadata && plan.metadata.reviewDecisionCounts || {}
+  );
+
+  return Object.freeze({
+    planId: plan.id,
+    calendarName: plan.metadata.calendarName || '',
+    totalSeries: Number(plan.metadata.desiredCount || 0),
+    creates: Number(summary.counts[PMOS_OPERATION.CREATE] || 0),
+    updates: Number(summary.counts[PMOS_OPERATION.UPDATE] || 0),
+    deletes: Number(summary.counts[PMOS_OPERATION.DELETE] || 0),
+    skips: Number(summary.counts[PMOS_OPERATION.SKIP] || 0),
+    warnings: Number(summary.counts[PMOS_OPERATION.WARNING] || 0),
+    plannerErrors: Number(summary.counts[PMOS_OPERATION.ERROR] || 0),
+    validationErrors: Number(result.validation.errorCount || 0),
+    validationWarnings: Number(result.validation.warningCount || 0),
+    canExecute: result.canExecute,
+    reviewExecutorPending: result.reviewExecutorPending,
+    reviewSessionId: String(plan.metadata.reviewSessionId || ''),
+    reviewOperationCount: reviewOperations.length,
+    reviewedMatches: Number(reviewCounts.match || 0),
+    reviewedTemporaryVisits: Number(reviewCounts.temporary || 0),
+    reviewedKeeps: Number(reviewCounts.keep || 0),
+    reviewedDeletions: Number(reviewCounts.delete || 0),
+    reviewResolutionErrors: Number(
+      plan.metadata.reviewResolutionErrorCount || 0
+    ),
+    reviewedActions: reviewOperations.map(formatPmosCalendarPreviewOperation_),
+    affectedRoutes: countPmosCalendarAffectedRoutes_(executable),
+    affectedEvents: executable.length,
+    registeredPresent: Number(result.currentState.registeredPresentCount || 0),
+    registeredMissing: Number(result.currentState.registeredMissingCount || 0),
+    temporaryVisits: Number(result.currentState.temporaryVisitCount || 0),
+    repairVisits: Number(result.currentState.repairVisitCount || 0),
+    unclassifiedEvents: Number(result.currentState.unclassifiedCount || 0),
+    includeStartedToday: Boolean(result.currentState.range.includeStartedToday),
+    syncStart: result.currentState.range.start,
+    syncEnd: result.currentState.range.end,
+    identityReconciliations: Number(result.verifiedState.identityReconciliationCount || 0),
+    identityReconciliationDetails: (
+      result.verifiedState.identityReconciliations || []
+    ).map(function(item) {
+      return {
+        fromSeriesKey: String(item.fromSeriesKey || ''),
+        toSeriesKey: String(item.toSeriesKey || ''),
+        customerId: String(item.customerId || ''),
+        method: String(item.method || '')
+      };
+    }),
+    seriesDiagnostics: buildPmosCalendarSeriesDiagnostics_(
+      result.desiredSeries,
+      result.rawVerifiedState && result.rawVerifiedState.records,
+      plan.operations
+    ),
+    details: plan.operations.slice(0, 30).map(formatPmosCalendarPreviewOperation_),
+    validation: result.validation,
+    plan: plan
+  });
+}
+
+function buildPmosCalendarSeriesDiagnostics_(desiredSeries, currentSeries, operations) {
+  const rows = {};
+  function ensure(key) {
+    if (!rows[key]) {
+      rows[key] = {
+        seriesKey: key,
+        title: '',
+        layer: '',
+        customerId: '',
+        sourceRow: 0,
+        stopOrder: 0,
+        desiredPresent: false,
+        currentPresent: false,
+        actions: []
+      };
+    }
+    return rows[key];
+  }
+  (desiredSeries || []).forEach(function(record) {
+    const key = String(record && record.seriesKey || '');
+    if (!key) return;
+    const row = ensure(key);
+    row.desiredPresent = true;
+    row.title = String(record.title || row.title || '');
+    row.layer = String(record.layer || row.layer || '');
+    row.customerId = String(record.customerId || row.customerId || '');
+    row.sourceRow = Number(record.row && record.row.sourceRow || row.sourceRow || 0);
+    row.stopOrder = Number(record.row && record.row.order || row.stopOrder || 0);
+  });
+  (currentSeries || []).forEach(function(record) {
+    const key = String(record && record.seriesKey || '');
+    if (!key) return;
+    const row = ensure(key);
+    row.currentPresent = true;
+    row.title = String(row.title || record.title || '');
+    row.layer = String(row.layer || record.layer || '');
+    row.customerId = String(row.customerId || record.customerId || '');
+  });
+  (operations || []).forEach(function(operation) {
+    const key = String(operation && operation.entityId || '');
+    if (!key) return;
+    const row = ensure(key);
+    const action = String(operation.action || '');
+    if (action && row.actions.indexOf(action) < 0) row.actions.push(action);
+  });
+  return Object.keys(rows).sort().map(function(key) {
+    return rows[key];
+  });
+}
+
+function formatPmosCalendarPreviewOperation_(operation) {
+  const desired = operation.payload && operation.payload.desired;
+  const current = operation.payload && operation.payload.current;
+  const review = operation.payload && operation.payload.review;
+  const record = desired || current || review || {};
+  return {
+    id: operation.id,
+    action: operation.action,
+    reviewAction: operation.metadata && operation.metadata.reviewAction || '',
+    reviewOperation: Boolean(operation.metadata && operation.metadata.reviewOperation),
+    seriesKey: operation.entityId,
+    layer: record.layer || '',
+    title: record.title || record.eventTitle || operation.entityId || '',
+    customerId: review && review.customerId || '',
+    customerName: review && review.customerName || '',
+    reason: operation.reason || '',
+    changedFields: operation.payload && operation.payload.changedFields
+      ? operation.payload.changedFields.slice()
+      : []
+  };
+}
+
+function countPmosCalendarAffectedRoutes_(operations) {
+  const routes = {};
+  operations.forEach(function (operation) {
+    const desired = operation.payload && operation.payload.desired;
+    const current = operation.payload && operation.payload.current;
+    const layer = (desired && desired.layer) || (current && current.layer);
+    if (layer) routes[layer] = true;
+  });
+  return Object.keys(routes).length;
+}
+
+function pmosCalendarHeader_(value) {
+  return String(value || '').trim();
+}
+
+function pmosCalendarRowHasData_(row) {
+  return row.some(function (value) { return value !== '' && value != null; });
+}
+
+function pmosCalendarRowObject_(headers, row) {
+  const object = {};
+  headers.forEach(function (header, index) { object[header] = row[index]; });
+  return object;
+}

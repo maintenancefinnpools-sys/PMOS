@@ -1,11 +1,6 @@
 /**
  * PMOS v1.9.0 — Menus and user entry points.
- * Move-only refactor: public names and operational behavior are preserved.
  */
-
-function showNewMaintenanceClientNotice() {
-  return showAddMaintenanceClient();
-}
 
 function onOpen() {
   const initialized = isPmosInitialized_();
@@ -19,16 +14,23 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Schedule New Maintenance Client', 'showAddMaintenanceClient')
+          .addItem('Create Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
-          .addItem('Calendar Plan Audit', 'showCalendarAuditTaskWindow')
-          .addItem('Calendar Job Engine', 'openPmosJobEngine')
+          .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
+          .addItem('PMOS Job Center', 'openPmosJobEngine')
+          .addSeparator()
+          .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
       )
       .addSeparator()
       .addItem('Route History', 'showRouteHistoryDialog')
       .addItem('Chemistry Catalog', 'showChemistryCatalog')
       .addItem('Feature Lab', 'showFeatureLab')
+      .addSubMenu(
+        SpreadsheetApp.getUi().createMenu('PMOS Settings')
+          .addItem('App Settings', 'openPmosAppSettings')
+          .addItem('Routing Settings', 'showPmosRoutingSettings')
+      )
       .addItem('Update Center', 'showUpdateCenter')
       .addItem('Update PMOS', 'updatePmos');
   }
@@ -38,6 +40,7 @@ function onOpen() {
 
 function showUpdateCenter() {
   ensureUpdateCenterSheet_();
+
   const installed = PropertiesService.getDocumentProperties().getProperty('PMOS_VERSION') || 'Not initialized';
   const initialized = isPmosInitialized_() ? 'Initialized' : 'Not initialized';
 
@@ -64,6 +67,7 @@ function showUpdateCenter() {
 
 function showFeatureLab() {
   ensureFeatureLabSheet_();
+
   const sheet = SpreadsheetApp.getActive().getSheetByName('Feature Lab');
   const rows = sheet.getDataRange().getValues().slice(1);
 

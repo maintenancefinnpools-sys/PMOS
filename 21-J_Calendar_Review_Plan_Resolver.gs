@@ -1,0 +1,266 @@
+/**
+ * Resolves approved Calendar Review Session decisions against verified Calendar
+ * state and appends explicit reviewed-event operations to the Sync plan.
+ */
+function appendResolvedPmosCalendarReviewOperations_(plan, currentState, verifiedState, decisionSet) {
+  const decisions = decisionSet || readActivePmosCalendarReviewDecisions_();
+  const validation = validatePmosCalendarReviewDecisionSet_(decisions);
+  const intents = buildPmosCalendarReviewOperationIntents_(decisions);
+  const stateIndex = buildPmosCalendarReviewStateIndex_(currentState, verifiedState);
+  const reviewOperations = [];
+  const resolutionErrors = validation.errors.slice();
+
+  intents.forEach(function (intent) {
+    const itemKey = String(intent.itemKey || '').trim();
+    const decisionRecord = findPmosCalendarReviewDecisionRecord_(decisions, itemKey, intent.action);
+    const payload = decisionRecord && decisionRecord.payload || {};
+    const stateRecord = stateIndex[itemKey] || findPmosCalendarReviewStateRecordByPayload_(stateIndex, payload);
+
+    if (!stateRecord) {
+      resolutionErrors.push(
+        'Reviewed Calendar item ' + itemKey + ' could not be found in the verified Calendar state.'
+      );
+      reviewOperations.push(buildPmosCalendarReviewPlannerError_(intent, payload,
+        'The reviewed Calendar event no longer exists or its identity changed.'));
+      return;
+    }
+
+    if (intent.action === 'LINK_CUSTOMER' && !String(payload.customerId || '').trim()) {
+      resolutionErrors.push(
+        'Reviewed Calendar match ' + itemKey + ' is missing the approved Customer ID.'
+      );
+      reviewOperations.push(buildPmosCalendarReviewPlannerError_(intent, payload,
+        'The approved customer identity is missing. Run a fresh Calendar Plan Audit.'));
+      return;
+    }
+
+    reviewOperations.push(buildResolvedPmosCalendarReviewPlanOperation_(
+      intent,
+      stateRecord,
+      payload,
+      decisions.sessionId
+    ));
+  });
+
+  const resolvedKeys = buildPmosCalendarResolvedReviewIdentitySet_(intents, decisions);
+  const existingOperations = (plan && plan.operations || []).filter(function (operation) {
+    return !isPmosCalendarResolvedReviewWarning_(operation, resolvedKeys);
+  });
+  const metadata = Object.assign({}, plan && plan.metadata || {}, {
+    reviewSessionId: String(decisions.sessionId || ''),
+    reviewDecisionCounts: Object.assign({}, decisions.counts || {}),
+    reviewOperationCount: reviewOperations.length,
+    reviewResolutionErrorCount: resolutionErrors.length,
+    reviewExecutorPending: false
+  });
+
+  return Object.freeze(Object.assign({}, plan, {
+    operations: Object.freeze(existingOperations.concat(reviewOperations)),
+    metadata: Object.freeze(metadata),
+    reviewResolution: Object.freeze({
+      valid: resolutionErrors.length === 0,
+      errorCount: resolutionErrors.length,
+      errors: Object.freeze(resolutionErrors.slice()),
+      operationCount: reviewOperations.length
+    })
+  }));
+}
+
+function buildPmosCalendarResolvedReviewIdentitySet_(intents, decisionSet) {
+  const identities = {};
+  (intents || []).forEach(function (intent) {
+    const itemKey = String(intent && intent.itemKey || '').trim();
+    if (itemKey) identities[itemKey] = true;
+
+    const record = findPmosCalendarReviewDecisionRecord_(
+      decisionSet,
+      itemKey,
+      intent && intent.action
+    );
+    const payload = record && record.payload || {};
+    [payload.eventId, payload.seriesId, payload.seriesKey, payload.operationId]
+      .forEach(function (value) {
+        const key = String(value || '').trim();
+        if (key) identities[key] = true;
+      });
+  });
+  return identities;
+}
+
+function isPmosCalendarResolvedReviewWarning_(operation, resolvedKeys) {
+  if (!operation || operation.action !== PMOS_OPERATION.WARNING) return false;
+
+  const metadata = operation.metadata || {};
+  const payload = operation.payload || {};
+  const current = payload.current || {};
+  const isReviewWarning = metadata.reviewRequired === true ||
+    String(metadata.reviewType || '').toUpperCase() === 'UNCLASSIFIED_CALENDAR_EVENT' ||
+    (Boolean(payload.current) && !payload.desired);
+  if (!isReviewWarning) return false;
+
+  const identities = [
+    operation.entityId,
+    operation.id,
+    current.eventId,
+    current.seriesId,
+    current.seriesKey,
+    current.operationId
+  ];
+  return identities.some(function (value) {
+    const key = String(value || '').trim();
+    return Boolean(key && resolvedKeys[key]);
+  });
+}
+
+function buildPmosCalendarReviewStateIndex_(currentState, verifiedState) {
+  const index = {};
+  indexPmosCalendarReviewStateValue_(index, currentState);
+  indexPmosCalendarReviewStateValue_(index, verifiedState);
+  return index;
+}
+
+function indexPmosCalendarReviewStateValue_(index, value) {
+  if (value == null) return;
+  if (Array.isArray(value)) {
+    value.forEach(function (item) { indexPmosCalendarReviewStateValue_(index, item); });
+    return;
+  }
+  if (typeof value !== 'object') return;
+
+  const keys = [
+    value.eventId,
+    value.seriesId,
+    value.seriesKey,
+    value.operationId,
+    value.id
+  ].map(function (key) { return String(key || '').trim(); }).filter(Boolean);
+
+  keys.forEach(function (key) {
+    if (!index[key]) index[key] = value;
+  });
+
+  Object.keys(value).forEach(function (key) {
+    const child = value[key];
+    if (child && typeof child === 'object') {
+      indexPmosCalendarReviewStateValue_(index, child);
+    }
+  });
+}
+
+function findPmosCalendarReviewStateRecordByPayload_(stateIndex, payload) {
+  const candidates = [payload && payload.eventId, payload && payload.seriesId]
+    .map(function (key) { return String(key || '').trim(); })
+    .filter(Boolean);
+  for (let index = 0; index < candidates.length; index++) {
+    if (stateIndex[candidates[index]]) return stateIndex[candidates[index]];
+  }
+  return null;
+}
+
+function findPmosCalendarReviewDecisionRecord_(decisionSet, itemKey, intentAction) {
+  const decisions = decisionSet && decisionSet.records || {};
+  const expectedTypes = intentAction === 'LINK_CUSTOMER'
+    ? ['SUGGESTED_MATCH']
+    : intentAction === 'REGISTER_TEMPORARY_VISIT'
+      ? ['UNCLASSIFIED_EVENT']
+      : ['DELETION_CANDIDATE'];
+
+  const keys = Object.keys(decisions);
+  for (let index = 0; index < keys.length; index++) {
+    const record = decisions[keys[index]] || {};
+    if (String(record.itemKey || '') !== String(itemKey || '')) continue;
+    if (expectedTypes.indexOf(String(record.reviewType || '').toUpperCase()) < 0) continue;
+    return record;
+  }
+  return null;
+}
+
+function buildResolvedPmosCalendarReviewPlanOperation_(intent, stateRecord, payload, sessionId) {
+  const isReviewedDelete = String(intent && intent.action || '').toUpperCase() ===
+    'DELETE_APPROVED_EVENT';
+  return Object.freeze({
+    modelVersion: PMOS_OPERATION_MODEL_VERSION,
+    id: String(intent.id || ''),
+    planner: 'CALENDAR_SYNC',
+    action: pmosCalendarReviewOperationAction_(intent.action),
+    entity: 'CALENDAR_REVIEW_EVENT',
+    entityId: String(intent.itemKey || ''),
+    destination: 'GOOGLE_CALENDAR',
+    priority: PMOS_OPERATION_PRIORITY.NORMAL,
+    reason: pmosCalendarReviewIntentReason_(intent.action),
+    payload: Object.freeze({
+      current: stateRecord,
+      review: Object.freeze(Object.assign({}, payload || {}, {
+        action: intent.action,
+        approvedByUser: true,
+        reviewSessionId: String(sessionId || '')
+      }))
+    }),
+    metadata: Object.freeze({
+      reviewOperation: true,
+      reviewAction: pmosCalendarReviewExecutorAction_(intent.action),
+      reviewIntent: String(intent.action || ''),
+      reviewExecutorPending: false,
+      userApproved: true,
+      deletionApproved: isReviewedDelete,
+      blocking: false
+    }),
+    dependencies: Object.freeze([])
+  });
+}
+
+function pmosCalendarReviewOperationAction_(intentAction) {
+  switch (String(intentAction || '').toUpperCase()) {
+    case 'LINK_CUSTOMER':
+    case 'REGISTER_TEMPORARY_VISIT':
+      return PMOS_OPERATION.MERGE;
+    case 'DELETE_APPROVED_EVENT':
+      return PMOS_OPERATION.DELETE;
+    case 'PRESERVE_EVENT':
+      return PMOS_OPERATION.SKIP;
+    default:
+      return PMOS_OPERATION.ERROR;
+  }
+}
+
+function pmosCalendarReviewExecutorAction_(intentAction) {
+  switch (String(intentAction || '').toUpperCase()) {
+    case 'LINK_CUSTOMER': return 'MATCH';
+    case 'REGISTER_TEMPORARY_VISIT': return 'TEMPORARY';
+    case 'DELETE_APPROVED_EVENT': return 'DELETE';
+    case 'PRESERVE_EVENT': return 'KEEP';
+    default: return 'UNKNOWN';
+  }
+}
+
+function buildPmosCalendarReviewPlannerError_(intent, payload, reason) {
+  return Object.freeze({
+    modelVersion: PMOS_OPERATION_MODEL_VERSION,
+    id: 'REVIEW_ERROR_' + pmosCalendarHash_(String(intent && intent.itemKey || '')),
+    planner: 'CALENDAR_SYNC',
+    action: PMOS_OPERATION.ERROR,
+    entity: 'CALENDAR_REVIEW_EVENT',
+    entityId: String(intent && intent.itemKey || ''),
+    destination: 'GOOGLE_CALENDAR',
+    priority: PMOS_OPERATION_PRIORITY.CRITICAL,
+    reason: String(reason || 'A reviewed Calendar decision could not be resolved.'),
+    payload: Object.freeze({review: Object.freeze(Object.assign({}, payload || {}))}),
+    metadata: Object.freeze({
+      reviewOperation: true,
+      reviewAction: String(intent && intent.action || ''),
+      userApproved: true,
+      blocking: true
+    }),
+    dependencies: Object.freeze([])
+  });
+}
+
+function pmosCalendarReviewIntentReason_(action) {
+  switch (String(action || '')) {
+    case 'LINK_CUSTOMER': return 'Link reviewed Calendar event to the approved customer.';
+    case 'REGISTER_TEMPORARY_VISIT': return 'Register reviewed Calendar event as a Temporary Visit.';
+    case 'PRESERVE_EVENT': return 'Preserve reviewed Calendar event unchanged.';
+    case 'DELETE_APPROVED_EVENT': return 'Delete Calendar event approved for deletion.';
+    default: return 'Apply approved Calendar review decision.';
+  }
+}
