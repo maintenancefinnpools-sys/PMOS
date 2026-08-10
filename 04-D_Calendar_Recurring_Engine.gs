@@ -90,7 +90,13 @@ function buildRecurringSeriesPlan_(routeReader) {
       !row.yearRound &&
       firstDate.getTime() > endOfDay_(settings.seasonEnd).getTime()
     ) {
-      return;
+      throw new Error(
+        row.title + ' — ' + row.layer +
+        ': the Route Template contains this customer, but its next occurrence ' +
+        formatDiagnosticDate_(firstDate) + ' is after the configured Season End ' +
+        formatDiagnosticDate_(settings.seasonEnd) +
+        '. PMOS stopped instead of treating the managed series as absent.'
+      );
     }
 
     const order = positiveNumberOrDefault_(row.order, 1);
