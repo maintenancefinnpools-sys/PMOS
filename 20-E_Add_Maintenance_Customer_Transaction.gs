@@ -87,8 +87,7 @@ function createMaintenanceCustomer(input) {
         'yyyy-MM-dd'
       ),
       routeRows: routeRows,
-      calendarStatus: 'PENDING_PLAN_AUDIT',
-      openCalendarAudit: true,
+      calendarStatus: 'PENDING_AUTOMATIC_SYNC',
       summary: [
         'Maintenance customer created.',
         'Customer: ' + request.name,
@@ -104,7 +103,7 @@ function createMaintenanceCustomer(input) {
         }).join('; '),
         customerRefresh,
         '',
-        'Calendar was not changed directly. Opening a fresh Calendar Plan Audit for review.'
+        'Starting automatic Calendar synchronization.'
       ].join('\n')
     };
   } catch (error) {
@@ -115,10 +114,77 @@ function createMaintenanceCustomer(input) {
   }
 }
 
-function createMaintenanceCustomerAndOpenAudit(input) {
+function createMaintenanceCustomerAndAutoSync(input) {
   const result = createMaintenanceCustomer(input);
-  showFreshCalendarAuditTaskWindow();
+  try {
+    const sync = synchronizeAddedMaintenanceCustomerCalendar_(result.customerId);
+    result.calendarStatus = 'SYNCHRONIZED';
+    result.calendarSync = sync;
+    result.summary += '\nCalendar synchronized automatically: ' +
+      Number(sync.created || 0) + ' created, ' +
+      Number(sync.updated || sync.adjusted || 0) + ' updated.';
+  } catch (error) {
+    result.calendarStatus = 'SYNC_ERROR';
+    result.calendarError = String(error && error.message ? error.message : error);
+    result.summary += '\n\nThe customer was saved, but automatic Calendar Sync stopped safely:\n' +
+      result.calendarError + '\nUse Retry Calendar Sync; do not add the customer again.';
+  }
   return result;
+}
+
+function synchronizeAddedMaintenanceCustomerCalendar_(customerId) {
+  const id = String(customerId || '').trim();
+  if (!id) throw new Error('Automatic Calendar Sync is missing the new Customer ID.');
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) {
+    throw new Error('Another PMOS operation is using the Calendar. Retry when it finishes.');
+  }
+  try {
+    const built = buildValidatedPmosCalendarSyncPlan_({});
+    const operations = (built.plan && built.plan.operations || []).filter(function (operation) {
+      const desired = operation && operation.payload && operation.payload.desired || {};
+      return String(desired.customerId || '').trim() === id &&
+        [String(PMOS_OPERATION.CREATE), String(PMOS_OPERATION.UPDATE)]
+          .indexOf(String(operation.action || '')) >= 0;
+    });
+    const expected = (built.desiredSeries || []).filter(function (series) {
+      return String(series.customerId || '').trim() === id;
+    }).length;
+    if (!expected) throw new Error('No recurring Calendar series were planned for ' + id + '.');
+    if (operations.length !== expected) {
+      throw new Error(
+        'Automatic Calendar Sync expected ' + expected + ' new-customer operation(s) but resolved ' +
+        operations.length + '. PMOS stopped without applying unrelated Calendar work.'
+      );
+    }
+    const settings = getRecurringCalendarSettings_();
+    const calendar = getExistingConfiguredPmosCalendar_(settings.calendarName);
+    const preflight = validateReviewedCalendarSyncPreflight_(
+      operations, calendar, settings.calendarName
+    );
+    if (!preflight.valid) throw new Error(preflight.errors.join('\n'));
+
+    const state = {
+      id: 'ADD_CLIENT_' + Utilities.getUuid(),
+      planId: String(built.plan.id || 'ADD_CLIENT'),
+      calendarName: settings.calendarName
+    };
+    const counts = {created: 0, updated: 0};
+    operations.forEach(function (operation) {
+      const outcome = executeReviewedCalendarOperation_(operation, state);
+      if (outcome.action === 'CREATE') counts.created++;
+      else if (outcome.action === 'UPDATE') counts.updated++;
+    });
+    clearPmosCalendarAuditSnapshot_();
+    return counts;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function retryAddedMaintenanceCustomerCalendar(input) {
+  input = input || {};
+  return synchronizeAddedMaintenanceCustomerCalendar_(input.customerId);
 }
 
 function normalizeMaintenanceCustomerRequest_(input) {
