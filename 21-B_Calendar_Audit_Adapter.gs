@@ -151,6 +151,32 @@ function buildPmosCalendarAuditResponse_(preview, issues, errors, warnings,
     'Suggested deletions: ' + deletionCandidates.length,
     'Registered series missing: ' + Number(preview.registeredMissing || 0)
   ];
+  const diagnosticOperations = preview.plan &&
+    Array.isArray(preview.plan.operations) ? preview.plan.operations : [];
+  const updateKeys = diagnosticOperations.filter(function(operation) {
+    return operation.action === PMOS_OPERATION.UPDATE;
+  }).map(function(operation) {
+    return String(operation.entityId || '');
+  });
+  const deletionKeys = rawDeletionCandidates.map(function(item) {
+    return String(item.seriesKey || item.seriesId || '');
+  });
+  const identityMappings = (
+    preview.identityReconciliationDetails || []
+  ).map(function(item) {
+    return String(item.fromSeriesKey || '') + ' -> ' +
+      String(item.toSeriesKey || '') + ' [' + String(item.method || '') + ']';
+  });
+  lines.push(
+    'Update series: ' + (updateKeys.length ? updateKeys.join('; ') : 'None')
+  );
+  lines.push(
+    'Deletion series: ' + (deletionKeys.length ? deletionKeys.join('; ') : 'None')
+  );
+  lines.push(
+    'Identity remappings: ' +
+    (identityMappings.length ? identityMappings.join('; ') : 'None')
+  );
   if (!reviewComplete) {
     lines.push('Complete the remaining review items before opening Calendar Sync.');
   } else {
