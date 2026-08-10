@@ -33,6 +33,20 @@ function suggestPmosAddresses(query, limit) {
   Object.keys(seen).forEach(key => candidates.push(seen[key]));
   candidates.sort(comparePmosAddressCandidates_);
 
+  if (text.length >= 3) {
+    try {
+      suggestPmosGraphHopperAddresses_(text, maximum, anchor).forEach(function (resolved, index) {
+        const key = normalizePmosAddressSearch_(resolved.address);
+        if (seen[key]) return;
+        seen[key] = Object.assign(resolved, {
+          score: 650 - index,
+          distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(resolved, anchor)
+        });
+        candidates.push(seen[key]);
+      });
+    } catch (ignored) {}
+  }
+
   if (candidates.length < maximum && text.length >= 5) {
     try {
       let geocoder = Maps.newGeocoder().setRegion('ca');
@@ -60,9 +74,68 @@ function suggestPmosAddresses(query, limit) {
   }
 
   candidates.sort(comparePmosAddressCandidates_);
-  return candidates.slice(0, maximum).map(item => Object.assign({}, item, {
-    score: undefined
-  }));
+  return candidates.slice(0, maximum).map(function (item) {
+    const result = Object.assign({}, item);
+    delete result.score;
+    delete result.distanceFromServiceAreaKm;
+    return result;
+  });
+}
+
+function suggestPmosGraphHopperAddresses_(query, limit, anchor) {
+  const apiKey = PropertiesService.getScriptProperties()
+    .getProperty(PMOS_RIE_PROPERTIES.GRAPHHOPPER_KEY);
+  if (!apiKey) return [];
+  const parameters = [
+    'q=' + encodeURIComponent(query),
+    'locale=en',
+    'countrycode=ca',
+    'limit=' + encodeURIComponent(String(Math.max(1, Math.min(10, Number(limit || 6))))),
+    'key=' + encodeURIComponent(apiKey)
+  ];
+  if (anchor) parameters.push('point=' + encodeURIComponent(anchor.lat + ',' + anchor.lng));
+  const response = UrlFetchApp.fetch('https://graphhopper.com/api/1/geocode?' + parameters.join('&'), {
+    method: 'get',
+    muteHttpExceptions: true
+  });
+  const status = response.getResponseCode();
+  let body = {};
+  try { body = JSON.parse(response.getContentText() || '{}'); } catch (ignored) {}
+  if (status < 200 || status >= 300) {
+    throw new Error('GraphHopper address search failed (' + status + ').');
+  }
+  return (body.hits || []).map(function (hit) {
+    const street = [String(hit.housenumber || '').trim(), String(hit.street || hit.name || '').trim()]
+      .filter(Boolean).join(' ');
+    const city = String(hit.city || hit.town || hit.village || hit.county || '').trim();
+    const province = String(hit.state || '').trim();
+    const postalCode = String(hit.postcode || '').trim();
+    const country = String(hit.country || 'Canada').trim();
+    const lat = Number(hit.point && hit.point.lat);
+    const lng = Number(hit.point && hit.point.lng);
+    const address = [
+      street,
+      city,
+      [province, postalCode].filter(Boolean).join(' '),
+      country
+    ].filter(Boolean).join(', ');
+    return {
+      address: address,
+      street: street,
+      city: city,
+      province: province,
+      postalCode: postalCode,
+      country: country,
+      lat: lat,
+      lng: lng,
+      placeId: String(hit.osm_id || ''),
+      source: 'GraphHopper',
+      complete: Boolean(
+        hit.housenumber && street && city && province && postalCode && country &&
+        Number.isFinite(lat) && Number.isFinite(lng)
+      )
+    };
+  }).filter(function (item) { return item.complete; });
 }
 
 function resolvePmosAddressSuggestion(address) {
