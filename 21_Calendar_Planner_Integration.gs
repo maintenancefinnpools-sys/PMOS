@@ -152,7 +152,7 @@ function readExistingPmosCalendarRoutes_() {
 
   return routeValues.slice(1)
     .filter(pmosCalendarRowHasData_)
-    .map(function (row) {
+    .map(function (row, rowIndex) {
       const route = pmosCalendarRowObject_(routeHeaders, row);
       const routeTitle = String(route['Calendar Title'] || '').trim();
       const routeId = String(route['Customer ID'] || '').trim();
@@ -171,7 +171,7 @@ function readExistingPmosCalendarRoutes_() {
       const layer = String(route.Layer || '').trim();
       if ((customerId || title) && (!layer || !title)) {
         throw new Error(
-          PMOS.ROUTES_SHEET + ' row ' + (routeValues.slice(1).indexOf(row) + 2) +
+          PMOS.ROUTES_SHEET + ' row ' + (rowIndex + 2) +
           ' cannot produce a Calendar series: Layer and customer title are required.'
         );
       }
@@ -179,6 +179,7 @@ function readExistingPmosCalendarRoutes_() {
 
       return {
         key: customerId || title,
+        sourceRow: rowIndex + 2,
         customerId: customerId,
         layer: layer,
         order: Number(route['Stop Order'] || 0),
@@ -334,6 +335,8 @@ function buildPmosCalendarSeriesDiagnostics_(desiredSeries, currentSeries, opera
         title: '',
         layer: '',
         customerId: '',
+        sourceRow: 0,
+        stopOrder: 0,
         desiredPresent: false,
         currentPresent: false,
         actions: []
@@ -349,6 +352,8 @@ function buildPmosCalendarSeriesDiagnostics_(desiredSeries, currentSeries, opera
     row.title = String(record.title || row.title || '');
     row.layer = String(record.layer || row.layer || '');
     row.customerId = String(record.customerId || row.customerId || '');
+    row.sourceRow = Number(record.row && record.row.sourceRow || row.sourceRow || 0);
+    row.stopOrder = Number(record.row && record.row.order || row.stopOrder || 0);
   });
   (currentSeries || []).forEach(function(record) {
     const key = String(record && record.seriesKey || '');
