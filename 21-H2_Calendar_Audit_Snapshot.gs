@@ -1,11 +1,12 @@
 /** Durable immutable Calendar audit snapshot used only during one review flow. */
 const PMOS_CALENDAR_AUDIT_SNAPSHOT_SHEET = 'PMOS Calendar Audit Snapshot';
 const PMOS_CALENDAR_AUDIT_SNAPSHOT_CHUNK = 40000;
+const PMOS_CALENDAR_AUDIT_SNAPSHOT_VERSION = 2;
 
 function savePmosCalendarAuditSnapshot_(audit) {
   const sheet = ensurePmosCalendarAuditSnapshotSheet_();
   const snapshot = {
-    version: 1,
+    version: PMOS_CALENDAR_AUDIT_SNAPSHOT_VERSION,
     savedAt: new Date().toISOString(),
     planId: String(audit && audit.planId || ''),
     sourceVersion: String(audit && audit.sourceVersion || ''),
@@ -73,7 +74,9 @@ function ensurePmosCalendarAuditSnapshotSheet_() {
  */
 function isPmosCalendarAuditSnapshotCurrent_(snapshot) {
   const saved = String(snapshot && snapshot.sourceFingerprint || '');
-  return Boolean(saved) &&
+  return Number(snapshot && snapshot.version || 0) ===
+      PMOS_CALENDAR_AUDIT_SNAPSHOT_VERSION &&
+    Boolean(saved) &&
     saved === buildPmosCalendarAuditSourceFingerprint_();
 }
 
