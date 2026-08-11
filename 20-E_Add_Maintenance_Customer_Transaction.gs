@@ -247,12 +247,13 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const equipmentTypes = {
     PUMP: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
     EQUIPMENT_AUTOMATION: true, IONIZER: true, OZONATOR: true,
-    UV: true, SALT_SYSTEM: true, OTHER: true
+    UV: true, SALT_SYSTEM: true, OTHER_SANITIZER: true, ROBOT: true, OTHER: true
   };
   const equipmentFields = [
     'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
     'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
-    'automation', 'chlorineSource', 'manufacturer', 'equipmentType'
+    'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
+    'robotType', 'sanitizerType'
   ];
   const rawBodies = Array.isArray(input.bodiesOfWater) ? input.bodiesOfWater.slice(0, 8) : [];
   const bodiesOfWater = rawBodies.map(function (body, bodyIndex) {
@@ -306,6 +307,9 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const control = mainBody.equipment.find(function (item) {
     return item.type === 'EQUIPMENT_AUTOMATION';
   });
+  const robot = mainBody.equipment.find(function (item) {
+    return item.type === 'ROBOT';
+  });
   const sanitization = mainBody.sanitization;
   const automation = control
     ? [control.details.manufacturer, control.details.model, control.details.modelNumber]
@@ -314,7 +318,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const pump = describeUnit(mainBody.pump);
   const filter = describeUnit(mainBody.filter);
   const heater = describeUnit(mainBody.heater);
-  const cleaner = mainBody.cleaner;
+  const cleaner = robot
+    ? [robot.details.robotType, robot.details.make, robot.details.model, robot.details.modelNumber]
+      .filter(Boolean).join(' · ')
+    : mainBody.cleaner;
   const cover = mainBody.cover;
   const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
@@ -407,7 +414,8 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     CHEMISTRY_AUTOMATION: 'Chemistry Automation',
     EQUIPMENT_AUTOMATION: 'Equipment Automation', IONIZER: 'Ionizer',
     OZONATOR: 'Ozonator', UV: 'UV Sanitizer',
-    SALT_SYSTEM: 'Salt Chlorine Generator', OTHER: 'Other Equipment'
+    SALT_SYSTEM: 'Salt Chlorine Generator', OTHER_SANITIZER: 'Other Sanitizer',
+    ROBOT: 'Robot', OTHER: 'Other Equipment'
   };
   const summarizeUnit = function (unit) {
     return [unit && unit.make, unit && unit.model, unit && unit.modelNumber]
@@ -428,7 +436,8 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     (body.equipment || []).forEach(function (item) {
       const details = item.details || {};
       const description = [
-        details.name || details.purpose || details.equipmentType,
+        details.name || details.purpose || details.equipmentType ||
+          details.robotType || details.sanitizerType,
         details.manufacturer || details.make,
         details.model,
         details.modelNumber
