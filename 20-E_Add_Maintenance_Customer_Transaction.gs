@@ -255,7 +255,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const equipmentTypes = {
     PUMP: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
     EQUIPMENT_AUTOMATION: true, IONIZER: true, OZONATOR: true,
-    UV: true, SALT_SYSTEM: true, OTHER_SANITIZER: true, ROBOT: true, OTHER: true
+    UV: true, SALT_SYSTEM: true, CHLORINE_FEEDER: true,
+    OTHER_SANITIZER: true, ROBOT: true, OTHER: true
   };
   const equipmentFields = [
     'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
@@ -448,7 +449,8 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     CHEMISTRY_AUTOMATION: 'Chemistry Automation',
     EQUIPMENT_AUTOMATION: 'Equipment Automation', IONIZER: 'Ionizer',
     OZONATOR: 'Ozonator', UV: 'UV Sanitizer',
-    SALT_SYSTEM: 'Salt Chlorine Generator', OTHER_SANITIZER: 'Other Sanitizer',
+    SALT_SYSTEM: 'Salt Chlorine Generator', CHLORINE_FEEDER: 'Chlorinator',
+    OTHER_SANITIZER: 'Other Sanitizer',
     ROBOT: 'Robot', OTHER: 'Other Equipment'
   };
   const equipmentSummary = request.bodiesOfWater.map(function (body) {
