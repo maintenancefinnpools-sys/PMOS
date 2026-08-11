@@ -61,6 +61,18 @@ function routePmosWithRie_(points, options) {
   return metric;
 }
 
+function matrixPmosWithRie_(points) {
+  const coordinates = (points || []).map(normalizePmosRiePoint_);
+  if (coordinates.length < 2) throw new Error('RIE matrix requires at least two locations.');
+  const settings = getPmosRieSettings_();
+  if (settings.provider !== 'GRAPHHOPPER' || !settings.graphHopperConfigured) {
+    throw new Error('The selected routing provider does not support PMOS matrix refinement.');
+  }
+  const provider = getPmosRouteProvider_('GRAPHHOPPER');
+  if (typeof provider.matrix !== 'function') throw new Error('GraphHopper matrix routing is unavailable.');
+  return provider.matrix(coordinates, settings);
+}
+
 function routePmosRieLeg_(origin, destination, settings, options) {
   const allowFallback = !options || options.allowFallback !== false;
   const order = settings.provider === 'GOOGLE'
@@ -88,7 +100,10 @@ function routePmosRieLeg_(origin, destination, settings, options) {
 }
 
 function getPmosRouteProvider_(providerName) {
-  if (providerName === 'GRAPHHOPPER') return {route: routePmosGraphHopperLeg_};
+  if (providerName === 'GRAPHHOPPER') return {
+    route: routePmosGraphHopperLeg_,
+    matrix: routePmosGraphHopperMatrix_
+  };
   if (providerName === 'GOOGLE') return {route: routePmosGoogleLeg_};
   throw new Error('Unsupported RIE provider: ' + providerName);
 }

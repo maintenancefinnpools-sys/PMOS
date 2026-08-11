@@ -14,6 +14,14 @@ function recommendMaintenanceClientRotations(input) {
   }
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const geocoder = Maps.newGeocoder().setRegion('ca');
+  const geocodeMemo = {};
+  const resolvePoint = function (candidateAddress, allowFailure) {
+    const key = normalizePmosAddressSearch_(candidateAddress);
+    if (Object.prototype.hasOwnProperty.call(geocodeMemo, key)) return geocodeMemo[key];
+    const point = geocodePmosAddress_(geocoder, candidateAddress, allowFailure);
+    geocodeMemo[key] = point;
+    return point;
+  };
   const target = normalizePmosRiePoint_({
     lat: input.addressDetails.lat,
     lng: input.addressDetails.lng
@@ -49,7 +57,7 @@ function recommendMaintenanceClientRotations(input) {
 
   const scored = candidates
     .map(function (candidate) {
-      return scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate);
+      return scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate);
     })
     .filter(Boolean);
   scored.sort(function (a, b) {
@@ -59,9 +67,7 @@ function recommendMaintenanceClientRotations(input) {
       a.day.localeCompare(b.day);
   });
 
-  const roadRefined = scored.slice(0, 3).map(function (item) {
-    return refineMaintenanceRecommendationWithDirections_(item, target);
-  });
+  const roadRefined = refineMaintenanceRecommendationsWithMatrix_(scored.slice(0, 3), target);
   roadRefined.sort(function (a, b) {
     if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
     return Number(a.addedDurationMinutes || Number.POSITIVE_INFINITY) -
@@ -102,7 +108,7 @@ function recommendMaintenanceClientRotations(input) {
   };
 }
 
-function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate) {
+function scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate) {
   const serviceDays = candidate.secondDay
     ? [candidate.day, candidate.secondDay]
     : [candidate.day];
@@ -111,7 +117,7 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
     serviceDays.forEach(function (day) {
       const layerPlacements = listMaintenanceLayersForWeekDay_(routes, week, day)
         .map(function (layer) {
-          return maintenanceLayerInsertion_(routes, geocoder, target, layer);
+          return maintenanceLayerInsertion_(routes, resolvePoint, target, layer);
         })
         .sort(function (left, right) {
           return left.addedDistanceKm - right.addedDistanceKm ||
@@ -164,14 +170,18 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
   };
 }
 
-function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
+function maintenanceLayerInsertion_(routes, resolvePoint, target, layerName) {
   const rows = routes
     .filter(function (row) { return normalize_(row.layer) === normalize_(layerName); })
     .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); });
   const points = rows.map(function (row) {
-    return row.address ? geocodePmosAddress_(geocoder, row.address, true) : null;
+    return row.address ? resolvePoint(row.address, true) : null;
   });
   const valid = points.filter(Boolean);
+  const validTitles = [];
+  points.forEach(function (point, index) {
+    if (point) validTitles.push(String(rows[index].title || ''));
+  });
   if (!rows.length || !valid.length) {
     return {
       layer: layerName,
@@ -218,8 +228,139 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
     previousPoint: bestPosition > 1 ? points[bestPosition - 2] : null,
     nextPoint: bestPosition <= rows.length ? points[bestPosition - 1] : null,
     routePoints: points.filter(Boolean),
+    routeTitles: validTitles,
     insertedPoints: insertedPoints.filter(Boolean)
   };
+}
+
+function refineMaintenanceRecommendationsWithMatrix_(items, target) {
+  const recommendations = items || [];
+  const points = [];
+  const pointIndexes = {};
+  const addPoint = function (point) {
+    if (!point) return;
+    const normalized = normalizePmosRiePoint_(point);
+    const key = normalized.lat.toFixed(6) + ',' + normalized.lng.toFixed(6);
+    if (Object.prototype.hasOwnProperty.call(pointIndexes, key)) return;
+    pointIndexes[key] = points.length;
+    points.push(normalized);
+  };
+  addPoint(target);
+  recommendations.forEach(function (item) {
+    (item._placementDetails || []).forEach(function (placement) {
+      (placement.insertedPoints || []).forEach(addPoint);
+    });
+  });
+  if (points.length < 2 || points.length > 80) {
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationWithDirections_(item, target);
+    });
+  }
+  try {
+    const matrix = matrixPmosWithRie_(points);
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationFromMatrix_(item, target, matrix, pointIndexes);
+    });
+  } catch (ignored) {
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationWithDirections_(item, target);
+    });
+  }
+}
+
+function refineMaintenanceRecommendationFromMatrix_(item, target, matrix, pointIndexes) {
+  const details = item._placementDetails || [];
+  let totalAddedDistanceKm = 0;
+  let totalAddedDurationMinutes = 0;
+  let totalRouteDistanceKm = 0;
+  let totalRouteDriveMinutes = 0;
+  let complete = details.length > 0;
+  details.forEach(function (placement) {
+    const optimized = choosePmosMatrixInsertion_(placement, target, matrix, pointIndexes);
+    if (!optimized) { complete = false; return; }
+    placement.position = optimized.position;
+    placement.previousName = optimized.previousName;
+    placement.nextName = optimized.nextName;
+    placement.insertedPoints = optimized.insertedPoints;
+    totalAddedDistanceKm += optimized.addedDistanceKm;
+    totalAddedDurationMinutes += optimized.addedDurationMinutes;
+    totalRouteDistanceKm += optimized.routeDistanceKm;
+    totalRouteDriveMinutes += optimized.routeDurationMinutes;
+  });
+  if (!complete) return refineMaintenanceRecommendationWithDirections_(item, target);
+  item.placements = details.map(function (placement) {
+    const parsed = parseLayer_(placement.layer);
+    return {week: parsed.week, day: parsed.day, layer: placement.layer, position: placement.position};
+  });
+  if (details[0]) {
+    item.position = details[0].position;
+    item.previousName = details[0].previousName;
+    item.nextName = details[0].nextName;
+  }
+  item.addedDistanceKm = totalAddedDistanceKm / details.length;
+  item.addedDurationMinutes = totalAddedDurationMinutes / details.length;
+  item.routeDistanceKm = totalRouteDistanceKm / details.length;
+  item.routeDriveMinutes = totalRouteDriveMinutes / details.length;
+  item.serviceMinutes = getPmosRieSettings_().serviceMinutes;
+  item.estimatedRouteMinutes = item.routeDriveMinutes +
+    (Number(item.customerCount || 0) + 1) * item.serviceMinutes;
+  item.routeProvider = matrix.providerLabel || 'GraphHopper';
+  item.roadDataComplete = true;
+  item.score = Math.max(0, Math.min(100, Math.round(
+    100 - Math.min(80, item.addedDurationMinutes * 3.5) -
+    Math.max(0, Number(item.customerCount || 0) - 15) * 0.7
+  )));
+  return item;
+}
+
+function choosePmosMatrixInsertion_(placement, target, matrix, pointIndexes) {
+  const route = (placement.routePoints || []).filter(Boolean);
+  const titles = placement.routeTitles || [];
+  const base = sumPmosMatrixRoute_(route, matrix, pointIndexes);
+  if (!base) return null;
+  let best = null;
+  for (let position = 0; position <= route.length; position++) {
+    const insertedPoints = route.slice();
+    insertedPoints.splice(position, 0, target);
+    const inserted = sumPmosMatrixRoute_(insertedPoints, matrix, pointIndexes);
+    if (!inserted) continue;
+    const candidate = {
+      position: position + 1,
+      previousName: position > 0 ? String(titles[position - 1] || '') : '',
+      nextName: position < titles.length ? String(titles[position] || '') : '',
+      insertedPoints: insertedPoints,
+      addedDistanceKm: Math.max(0, inserted.distanceKm - base.distanceKm),
+      addedDurationMinutes: Math.max(0, inserted.durationMinutes - base.durationMinutes),
+      routeDistanceKm: inserted.distanceKm,
+      routeDurationMinutes: inserted.durationMinutes
+    };
+    if (!best || candidate.addedDurationMinutes < best.addedDurationMinutes ||
+        (candidate.addedDurationMinutes === best.addedDurationMinutes &&
+          candidate.addedDistanceKm < best.addedDistanceKm)) best = candidate;
+  }
+  return best;
+}
+
+function sumPmosMatrixRoute_(routePoints, matrix, pointIndexes) {
+  const route = (routePoints || []).filter(Boolean);
+  if (route.length < 2) return {distanceKm: 0, durationMinutes: 0};
+  let distanceMetres = 0;
+  let durationSeconds = 0;
+  for (let index = 1; index < route.length; index++) {
+    const from = normalizePmosRiePoint_(route[index - 1]);
+    const to = normalizePmosRiePoint_(route[index]);
+    const fromIndex = pointIndexes[from.lat.toFixed(6) + ',' + from.lng.toFixed(6)];
+    const toIndex = pointIndexes[to.lat.toFixed(6) + ',' + to.lng.toFixed(6)];
+    const rawDistance = matrix.distances[fromIndex] && matrix.distances[fromIndex][toIndex];
+    const rawDuration = matrix.times[fromIndex] && matrix.times[fromIndex][toIndex];
+    if (rawDistance == null || rawDuration == null) return null;
+    const distance = Number(rawDistance);
+    const duration = Number(rawDuration);
+    if (!Number.isFinite(distance) || !Number.isFinite(duration)) return null;
+    distanceMetres += distance;
+    durationSeconds += duration;
+  }
+  return {distanceKm: distanceMetres / 1000, durationMinutes: durationSeconds / 60};
 }
 
 function refineMaintenanceRecommendationWithDirections_(item, target) {
