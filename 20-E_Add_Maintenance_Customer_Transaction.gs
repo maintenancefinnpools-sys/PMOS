@@ -38,7 +38,8 @@ function createMaintenanceCustomer(input) {
       'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
       'Email', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
-      'Filter', 'Heater', 'Cleaner', 'Cover', 'Year Round'
+      'Filter', 'Heater', 'Cleaner', 'Cover', 'Bodies of Water',
+      'Equipment Summary', 'Equipment Details JSON', 'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
       'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
@@ -240,13 +241,81 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const email = String(input.email || '').trim();
   const notes = String(input.notes || '').trim();
   const entryInformation = String(input.entryInformation || '').trim();
-  const sanitization = String(input.sanitization || '').trim();
-  const automation = String(input.automation || '').trim();
-  const pump = String(input.pump || '').trim();
-  const filter = String(input.filter || '').trim();
-  const heater = String(input.heater || '').trim();
-  const cleaner = String(input.cleaner || '').trim();
-  const cover = String(input.cover || '').trim();
+  const cleanEquipmentText = function (value) {
+    return String(value == null ? '' : value).trim().slice(0, 250);
+  };
+  const equipmentTypes = {
+    PUMP: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
+    EQUIPMENT_AUTOMATION: true, IONIZER: true, OZONATOR: true,
+    UV: true, SALT_SYSTEM: true, OTHER: true
+  };
+  const equipmentFields = [
+    'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
+    'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
+    'automation', 'chlorineSource', 'manufacturer', 'equipmentType'
+  ];
+  const rawBodies = Array.isArray(input.bodiesOfWater) ? input.bodiesOfWater.slice(0, 8) : [];
+  const bodiesOfWater = rawBodies.map(function (body, bodyIndex) {
+    const source = body || {};
+    const equipment = (Array.isArray(source.equipment) ? source.equipment : [])
+      .slice(0, 20).map(function (item) {
+        const type = cleanEquipmentText(item && item.type).toUpperCase();
+        if (!equipmentTypes[type]) return null;
+        const rawDetails = item && item.details || {};
+        const details = {};
+        equipmentFields.forEach(function (field) {
+          const value = cleanEquipmentText(rawDetails[field]);
+          if (value) details[field] = value;
+        });
+        return {type: type, details: details};
+      }).filter(Boolean);
+    const normalizeUnit = function (unit) {
+      const value = unit || {};
+      return {
+        make: cleanEquipmentText(value.make),
+        model: cleanEquipmentText(value.model),
+        modelNumber: cleanEquipmentText(value.modelNumber)
+      };
+    };
+    return {
+      name: cleanEquipmentText(source.name) || (bodyIndex ? 'Spa' : 'Pool'),
+      type: cleanEquipmentText(source.type) || (bodyIndex ? 'Spa' : 'Pool'),
+      sanitization: cleanEquipmentText(source.sanitization),
+      pump: normalizeUnit(source.pump),
+      filter: normalizeUnit(source.filter),
+      heater: normalizeUnit(source.heater),
+      cleaner: cleanEquipmentText(source.cleaner),
+      cover: cleanEquipmentText(source.cover),
+      equipment: equipment
+    };
+  });
+  if (!bodiesOfWater.length) {
+    bodiesOfWater.push({
+      name: 'Pool', type: 'Pool', sanitization: cleanEquipmentText(input.sanitization),
+      pump: {make: '', model: cleanEquipmentText(input.pump), modelNumber: ''},
+      filter: {make: '', model: cleanEquipmentText(input.filter), modelNumber: ''},
+      heater: {make: '', model: cleanEquipmentText(input.heater), modelNumber: ''},
+      cleaner: cleanEquipmentText(input.cleaner), cover: cleanEquipmentText(input.cover),
+      equipment: []
+    });
+  }
+  const mainBody = bodiesOfWater[0];
+  const describeUnit = function (unit) {
+    return [unit && unit.make, unit && unit.model, unit && unit.modelNumber].filter(Boolean).join(' · ');
+  };
+  const control = mainBody.equipment.find(function (item) {
+    return item.type === 'EQUIPMENT_AUTOMATION';
+  });
+  const sanitization = mainBody.sanitization;
+  const automation = control
+    ? [control.details.manufacturer, control.details.model, control.details.modelNumber]
+      .filter(Boolean).join(' · ')
+    : cleanEquipmentText(input.automation);
+  const pump = describeUnit(mainBody.pump);
+  const filter = describeUnit(mainBody.filter);
+  const heater = describeUnit(mainBody.heater);
+  const cleaner = mainBody.cleaner;
+  const cover = mainBody.cover;
   const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const day = normalizeMaintenanceDay_(input.day || 'Monday');
@@ -319,6 +388,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     heater: heater,
     cleaner: cleaner,
     cover: cover,
+    bodiesOfWater: bodiesOfWater,
     yearRound: yearRound,
     frequency: frequency,
     day: day,
@@ -332,6 +402,41 @@ function normalizeMaintenanceCustomerRequest_(input) {
 }
 
 function buildMaintenanceCustomerSharedValues_(request, customerId) {
+  const equipmentLabels = {
+    PUMP: 'Additional Pump', WATER_FEATURE: 'Water Feature',
+    CHEMISTRY_AUTOMATION: 'Chemistry Automation',
+    EQUIPMENT_AUTOMATION: 'Equipment Automation', IONIZER: 'Ionizer',
+    OZONATOR: 'Ozonator', UV: 'UV Sanitizer',
+    SALT_SYSTEM: 'Salt Chlorine Generator', OTHER: 'Other Equipment'
+  };
+  const summarizeUnit = function (unit) {
+    return [unit && unit.make, unit && unit.model, unit && unit.modelNumber]
+      .filter(Boolean).join(' · ');
+  };
+  const equipmentSummary = request.bodiesOfWater.map(function (body) {
+    const bodyPump = summarizeUnit(body.pump);
+    const bodyFilter = summarizeUnit(body.filter);
+    const bodyHeater = summarizeUnit(body.heater);
+    const basics = [
+      body.sanitization && 'Sanitization: ' + body.sanitization,
+      bodyPump && 'Pump: ' + bodyPump,
+      bodyFilter && 'Filter: ' + bodyFilter,
+      bodyHeater && 'Heater: ' + bodyHeater,
+      body.cleaner && 'Cleaner: ' + body.cleaner,
+      body.cover && 'Cover: ' + body.cover
+    ].filter(Boolean);
+    (body.equipment || []).forEach(function (item) {
+      const details = item.details || {};
+      const description = [
+        details.name || details.purpose || details.equipmentType,
+        details.manufacturer || details.make,
+        details.model,
+        details.modelNumber
+      ].filter(Boolean).join(' · ');
+      basics.push((equipmentLabels[item.type] || item.type) + (description ? ': ' + description : ''));
+    });
+    return body.name + ' (' + body.type + '): ' + (basics.join('; ') || 'No equipment entered');
+  }).join('\n');
   return {
     'Customer ID': customerId,
     'First Name': request.firstName,
@@ -372,6 +477,11 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Heater': request.heater,
     'Cleaner': request.cleaner,
     'Cover': request.cover,
+    'Bodies of Water': request.bodiesOfWater.map(function (body) {
+      return body.name + ' (' + body.type + ')';
+    }).join('; '),
+    'Equipment Summary': equipmentSummary,
+    'Equipment Details JSON': JSON.stringify({version: 1, bodies: request.bodiesOfWater}),
     'Year Round': request.yearRound ? 'Yes' : 'No',
     'Season': request.yearRound ? 'Year Round' : 'Seasonal',
     'Status': 'Active'
