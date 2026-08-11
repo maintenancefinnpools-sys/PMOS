@@ -263,7 +263,9 @@ function normalizeMaintenanceCustomerRequest_(input) {
     'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
     'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
     'robotType', 'sanitizerType', 'connectedToAutomation', 'actuatorMake',
-    'actuatorModel', 'actuatorQuantity'
+    'actuatorModel', 'actuatorQuantity', 'filterType', 'filterSize',
+    'heaterType', 'heaterMake', 'heaterModel', 'heaterModelNumber',
+    'featureEquipmentType', 'featureEquipmentMake', 'featureEquipmentModel'
   ];
   const rawBodies = Array.isArray(input.bodiesOfWater) ? input.bodiesOfWater.slice(0, 8) : [];
   const bodiesOfWater = rawBodies.map(function (body, bodyIndex) {
