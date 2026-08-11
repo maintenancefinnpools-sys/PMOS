@@ -255,7 +255,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const equipmentTypes = {
     PUMP: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
     EQUIPMENT_AUTOMATION: true, IONIZER: true, OZONATOR: true,
-    UV: true, SALT_SYSTEM: true, CHLORINE_FEEDER: true,
+    UV: true, SALT_SYSTEM: true, CHLORINE_FEEDER: true, BROMINE_FEEDER: true,
     OTHER_SANITIZER: true, ROBOT: true, OTHER: true
   };
   const equipmentFields = [
@@ -450,6 +450,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     EQUIPMENT_AUTOMATION: 'Equipment Automation', IONIZER: 'Ionizer',
     OZONATOR: 'Ozonator', UV: 'UV Sanitizer',
     SALT_SYSTEM: 'Salt Chlorine Generator', CHLORINE_FEEDER: 'Chlorinator',
+    BROMINE_FEEDER: 'Brominator',
     OTHER_SANITIZER: 'Other Sanitizer',
     ROBOT: 'Robot', OTHER: 'Other Equipment'
   };
