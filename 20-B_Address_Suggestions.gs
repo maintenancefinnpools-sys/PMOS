@@ -166,15 +166,48 @@ function suggestPmosGraphHopperAddresses_(query, limit, anchor) {
 function resolvePmosAddressSuggestion(address) {
   const text = String(address || '').trim();
   if (!text) throw new Error('Choose a complete service address.');
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'PMOS_CONFIRMED_ADDRESS_' + pmosAddressCacheDigest_(
+    normalizePmosAddressSearch_(text)
+  );
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (ignored) {}
+  }
   const response = Maps.newGeocoder().setRegion('ca').geocode(text);
   const results = response && Array.isArray(response.results) ? response.results : [];
   for (let index = 0; index < results.length; index++) {
     const resolved = buildPmosResolvedAddress_(results[index], 'Google Maps');
-    if (resolved.complete) return resolved;
+    if (resolved.complete) {
+      cache.put(cacheKey, JSON.stringify(resolved), 21600);
+      return resolved;
+    }
   }
   throw new Error(
     'PMOS could not confirm a complete street, city, province, postal code, and country for this address.'
   );
+}
+
+function confirmPmosSelectedAddress(candidate) {
+  const selected = candidate || {};
+  if (selected.complete && String(selected.source || '') === 'Google Maps') return selected;
+  const confirmed = resolvePmosAddressSuggestion(selected.address);
+  const selectedLat = Number(selected.lat);
+  const selectedLng = Number(selected.lng);
+  if (Number.isFinite(selectedLat) && Number.isFinite(selectedLng)) {
+    const differenceKm = pmosHaversineKm_(
+      {lat: selectedLat, lng: selectedLng},
+      {lat: confirmed.lat, lng: confirmed.lng}
+    );
+    if (differenceKm > 1) {
+      throw new Error(
+        'GraphHopper and Google located this address more than 1 km apart. ' +
+        'Choose another suggestion or verify the street and postal code.'
+      );
+    }
+  }
+  confirmed.suggestionSource = String(selected.source || 'PMOS');
+  return confirmed;
 }
 
 function buildPmosResolvedAddress_(result, source) {
