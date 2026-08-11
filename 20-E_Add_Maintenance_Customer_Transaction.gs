@@ -35,7 +35,7 @@ function createMaintenanceCustomer(input) {
     let routeTable = readPmosHeaderTable_(routeSheet);
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
-      'Customer ID', 'Calendar Title', 'Full Address', 'Primary Phone',
+      'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
       'Email', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
       'Filter', 'Heater', 'Cleaner', 'Cover', 'Year Round'
@@ -81,7 +81,7 @@ function createMaintenanceCustomer(input) {
     return {
       created: true,
       customerId: customerId,
-      customerName: request.name,
+      customerName: request.fullName,
       frequency: request.frequency,
       effectiveDate: Utilities.formatDate(
         request.effectiveDate,
@@ -92,7 +92,7 @@ function createMaintenanceCustomer(input) {
       calendarStatus: 'PENDING_AUTOMATIC_SYNC',
       summary: [
         'Maintenance customer created.',
-        'Customer: ' + request.name,
+        'Customer: ' + request.fullName,
         'Customer ID: ' + customerId,
         'Frequency: ' + request.frequency,
         'Effective date: ' + Utilities.formatDate(
@@ -230,7 +230,10 @@ function retryAddedMaintenanceCustomerCalendar(input) {
 }
 
 function normalizeMaintenanceCustomerRequest_(input) {
-  const name = String(input.name || '').trim();
+  const firstName = String(input.firstName || '').trim();
+  const lastName = String(input.lastName || input.name || '').trim();
+  const name = lastName;
+  const fullName = [firstName, lastName].filter(Boolean).join(' ');
   const address = String(input.address || '').trim();
   const addressDetails = input.addressDetails || {};
   const phone = String(input.phone || '').trim();
@@ -255,7 +258,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
   );
   const firstWeek = Math.max(1, Math.min(4, Number(input.week || 1)));
   const requestedStop = Math.max(0, Math.floor(Number(input.stop || 0)));
-  const calendarTitle = String(input.calendarTitle || name).trim() || name;
+  const calendarTitle = String(input.calendarTitle || lastName).trim() || lastName;
   const recommendedPlacements = Array.isArray(input.recommendedPlacements)
     ? input.recommendedPlacements.map(function (placement) {
       return {
@@ -269,7 +272,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
     })
     : [];
 
-  if (!name) throw new Error('Customer name is required.');
+  if (!firstName) throw new Error('First name is required.');
+  if (!lastName) throw new Error('Last name is required.');
   if (!address) throw new Error('Service address is required.');
   if (input.addressVerified !== true ||
       normalizePmosAddressSearch_(addressDetails.address) !== normalizePmosAddressSearch_(address) ||
@@ -287,6 +291,9 @@ function normalizeMaintenanceCustomerRequest_(input) {
   }
 
   return Object.freeze({
+    firstName: firstName,
+    lastName: lastName,
+    fullName: fullName || lastName,
     name: name,
     address: address,
     addressDetails: Object.freeze({
@@ -327,10 +334,12 @@ function normalizeMaintenanceCustomerRequest_(input) {
 function buildMaintenanceCustomerSharedValues_(request, customerId) {
   return {
     'Customer ID': customerId,
-    'Customer Name': request.name,
-    'Name': request.name,
-    'Customer': request.name,
-    'Full Name(s)': request.name,
+    'First Name': request.firstName,
+    'Last Name': request.lastName,
+    'Customer Name': request.lastName,
+    'Name': request.lastName,
+    'Customer': request.lastName,
+    'Full Name(s)': request.fullName,
     'Calendar Title': request.calendarTitle,
     'Address': request.address,
     'Full Address': request.address,
