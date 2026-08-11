@@ -253,7 +253,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     return String(value == null ? '' : value).trim().slice(0, 250);
   };
   const equipmentTypes = {
-    PUMP: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
+    PUMP: true, FILTER: true, HEATER: true, WATER_FEATURE: true, CHEMISTRY_AUTOMATION: true,
     EQUIPMENT_AUTOMATION: true, IONIZER: true, OZONATOR: true,
     UV: true, SALT_SYSTEM: true, CHLORINE_FEEDER: true, BROMINE_FEEDER: true,
     OTHER_SANITIZER: true, ROBOT: true, OTHER: true
@@ -481,7 +481,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
 
 function buildMaintenanceCustomerSharedValues_(request, customerId) {
   const equipmentLabels = {
-    PUMP: 'Additional Pump', WATER_FEATURE: 'Water Feature',
+    PUMP: 'Pump', FILTER: 'Filter', HEATER: 'Heater', WATER_FEATURE: 'Water Feature',
     CHEMISTRY_AUTOMATION: 'Chemistry Automation',
     EQUIPMENT_AUTOMATION: 'Equipment Automation', IONIZER: 'Ionizer',
     OZONATOR: 'Ozonator', UV: 'UV Sanitizer',
