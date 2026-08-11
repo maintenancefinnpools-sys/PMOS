@@ -89,7 +89,9 @@ function resolvePmosCalendarUpsertTransaction_(transaction, calendar, registry) 
 
   let desired;
   try {
-    desired = deserializeCanonicalCalendarSeries_(desiredPayload);
+    // Transaction JSON is parsed by buildPmosCalendarTransactionRecord_.
+    // Re-normalize its date strings and canonical fields for live comparison.
+    desired = normalizePmosCalendarSeries(desiredPayload, 'DESIRED');
   } catch (error) {
     return manualPmosCalendarRecovery_(transaction, error.message);
   }
