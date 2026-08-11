@@ -2,6 +2,7 @@
  * Create Client dialog with RIE-assisted recurring-route placement.
  * The existing scoped Calendar transaction synchronizes the affected layers.
  */
+// Feature build marker: water-body UI with generated-dialog parse fix.
 function showAddMaintenanceClientV2() {
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
   const html = HtmlService.createHtmlOutput(`
