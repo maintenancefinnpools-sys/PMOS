@@ -8,6 +8,14 @@ function suggestPmosAddresses(query, limit) {
   if (text.length < 3) return [];
 
   const normalizedQuery = normalizePmosAddressSearch_(text);
+  const responseCache = CacheService.getScriptCache();
+  const responseCacheKey = 'PMOS_ADDRESS_SUGGEST_' + pmosAddressCacheDigest_(
+    normalizedQuery + '|' + maximum
+  );
+  const cachedResponse = responseCache.get(responseCacheKey);
+  if (cachedResponse) {
+    try { return JSON.parse(cachedResponse); } catch (ignored) {}
+  }
   const tokens = normalizedQuery.split(' ').filter(Boolean);
   const candidates = [];
   const seen = {};
@@ -33,9 +41,12 @@ function suggestPmosAddresses(query, limit) {
   Object.keys(seen).forEach(key => candidates.push(seen[key]));
   candidates.sort(comparePmosAddressCandidates_);
 
+  let graphHopperCount = 0;
   if (text.length >= 3) {
     try {
-      suggestPmosGraphHopperAddresses_(text, maximum, anchor).forEach(function (resolved, index) {
+      const graphHopperResults = suggestPmosGraphHopperAddresses_(text, maximum, anchor);
+      graphHopperCount = graphHopperResults.length;
+      graphHopperResults.forEach(function (resolved, index) {
         const key = normalizePmosAddressSearch_(resolved.address);
         if (seen[key]) return;
         seen[key] = Object.assign(resolved, {
@@ -47,7 +58,7 @@ function suggestPmosAddresses(query, limit) {
     } catch (ignored) {}
   }
 
-  if (candidates.length < maximum && text.length >= 5) {
+  if (!graphHopperCount && candidates.length < maximum && text.length >= 5) {
     try {
       let geocoder = Maps.newGeocoder().setRegion('ca');
       if (anchor && typeof geocoder.setBounds === 'function') {
@@ -74,12 +85,26 @@ function suggestPmosAddresses(query, limit) {
   }
 
   candidates.sort(comparePmosAddressCandidates_);
-  return candidates.slice(0, maximum).map(function (item) {
+  const output = candidates.slice(0, maximum).map(function (item) {
     const result = Object.assign({}, item);
     delete result.score;
     delete result.distanceFromServiceAreaKm;
     return result;
   });
+  responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
+  return output;
+}
+
+function preparePmosAddressSuggestions() {
+  getPmosAddressSearchAnchor_();
+  collectPmosStoredAddresses_();
+  return true;
+}
+
+function pmosAddressCacheDigest_(text) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(text || ''))
+  ).replace(/=+$/, '');
 }
 
 function suggestPmosGraphHopperAddresses_(query, limit, anchor) {
@@ -217,6 +242,11 @@ function pmosAddressDistanceFromAnchor_(candidate, anchor) {
 }
 
 function getPmosAddressSearchAnchor_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('PMOS_ADDRESS_SEARCH_ANCHOR');
+  if (cached) {
+    try { return JSON.parse(cached); } catch (ignored) {}
+  }
   const points = [];
   const spreadsheet = SpreadsheetApp.getActive();
   ['Customers', '4-Week Route Template'].forEach(function (sheetName) {
@@ -247,13 +277,20 @@ function getPmosAddressSearchAnchor_() {
     });
   }
   if (!points.length) return null;
-  return {
+  const anchor = {
     lat: points.reduce(function (sum, point) { return sum + point.lat; }, 0) / points.length,
     lng: points.reduce(function (sum, point) { return sum + point.lng; }, 0) / points.length
   };
+  cache.put('PMOS_ADDRESS_SEARCH_ANCHOR', JSON.stringify(anchor), 600);
+  return anchor;
 }
 
 function collectPmosStoredAddresses_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('PMOS_STORED_ADDRESS_SUGGESTIONS');
+  if (cached) {
+    try { return JSON.parse(cached); } catch (ignored) {}
+  }
   const ss = SpreadsheetApp.getActive();
   const sheets = [
     { names: ['Customers', 'Customer Database', 'Customer List'], source: 'Customers' },
@@ -288,6 +325,8 @@ function collectPmosStoredAddresses_() {
     });
   });
 
+  try { cache.put('PMOS_STORED_ADDRESS_SUGGESTIONS', JSON.stringify(results), 600); }
+  catch (ignored) {}
   return results;
 }
 
