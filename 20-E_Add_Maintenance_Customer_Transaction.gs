@@ -298,6 +298,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
     return {
       name: cleanEquipmentText(source.name) || (bodyIndex ? 'Spa' : 'Pool'),
       type: cleanEquipmentText(source.type) || (bodyIndex ? 'Spa' : 'Pool'),
+      spaType: cleanEquipmentText(source.spaType),
+      equipmentSetup: cleanEquipmentText(source.equipmentSetup),
+      unitMake: cleanEquipmentText(source.unitMake),
+      unitModel: cleanEquipmentText(source.unitModel),
       location: cleanEquipmentText(source.location),
       sanitization: cleanEquipmentText(source.sanitization),
       pump: normalizePump(source.pump),
@@ -526,7 +530,11 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Robot(s)': request.robots,
     'Cover': request.cover,
     'Bodies of Water': request.bodiesOfWater.map(function (body) {
-      return body.name + (body.location ? ' (' + body.location + ')' : '');
+      const bodyDetails = [body.type, body.spaType, body.equipmentSetup]
+        .filter(Boolean).join(' · ');
+      const unit = [body.unitMake, body.unitModel].filter(Boolean).join(' ');
+      return body.name + (body.location ? ' (' + body.location + ')' : '') +
+        (bodyDetails ? ' — ' + bodyDetails : '') + (unit ? ' — ' + unit : '');
     }).join('; '),
     'Equipment Summary': equipmentSummary,
     'Equipment Details JSON': JSON.stringify({version: 1, bodies: request.bodiesOfWater}),
