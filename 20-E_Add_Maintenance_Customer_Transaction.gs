@@ -308,8 +308,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
       heater: {
         type: cleanEquipmentText(source.heater && source.heater.type),
         make: cleanEquipmentText(source.heater && source.heater.make),
-        modelNumber: cleanEquipmentText(source.heater &&
-          (source.heater.modelNumber || source.heater.model))
+        model: cleanEquipmentText(source.heater && source.heater.model),
+        modelNumber: cleanEquipmentText(source.heater && source.heater.modelNumber)
       },
       cleaner: cleanEquipmentText(source.cleaner),
       cover: typeof source.cover === 'object' && source.cover
@@ -326,7 +326,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
       name: 'Pool', type: 'Pool', location: '', sanitization: cleanEquipmentText(input.sanitization),
       pump: {make: '', model: cleanEquipmentText(input.pump), modelNumber: ''},
       filter: {type: '', make: '', size: cleanEquipmentText(input.filter)},
-      heater: {type: '', make: '', modelNumber: cleanEquipmentText(input.heater)},
+      heater: {type: '', make: '', model: '', modelNumber: cleanEquipmentText(input.heater)},
       cleaner: cleanEquipmentText(input.cleaner),
       cover: {type: cleanEquipmentText(input.cover), winterType: ''},
       equipment: []
@@ -347,7 +347,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const pump = describePump(mainBody.pump);
   const filter = [mainBody.filter.type, mainBody.filter.make, mainBody.filter.size]
     .filter(Boolean).join(' · ');
-  const heater = [mainBody.heater.type, mainBody.heater.make, mainBody.heater.modelNumber]
+  const heater = [mainBody.heater.type, mainBody.heater.make,
+    mainBody.heater.model, mainBody.heater.modelNumber]
     .filter(Boolean).join(' · ');
   const robots = mainBody.equipment.filter(function (item) {
     return item.type === 'ROBOT';
@@ -453,9 +454,10 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
   const equipmentSummary = request.bodiesOfWater.map(function (body) {
     const bodyPump = [body.pump.make, body.pump.model, body.pump.modelNumber]
       .filter(Boolean).join(' · ');
-    const bodyFilter = [body.filter.type, body.filter.make, body.filter.size]
+    const bodyFilter = [body.filter.make, body.filter.type, body.filter.size]
       .filter(Boolean).join(' · ');
-    const bodyHeater = [body.heater.type, body.heater.make, body.heater.modelNumber]
+    const bodyHeater = [body.heater.type, body.heater.make,
+      body.heater.model, body.heater.modelNumber]
       .filter(Boolean).join(' · ');
     const bodyCover = [body.cover.type, body.cover.winterType].filter(Boolean).join(' · ');
     const basics = [
@@ -477,7 +479,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
       ].filter(Boolean).join(' · ');
       basics.push((equipmentLabels[item.type] || item.type) + (description ? ': ' + description : ''));
     });
-    return body.name + ' (' + [body.type, body.location].filter(Boolean).join(', ') + '): ' +
+    return body.name + (body.location ? ' (' + body.location + ')' : '') + ': ' +
       (basics.join('; ') || 'No equipment entered');
   }).join('\n');
   return {
@@ -521,7 +523,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Robot(s)': request.robots,
     'Cover': request.cover,
     'Bodies of Water': request.bodiesOfWater.map(function (body) {
-      return body.name + ' (' + [body.type, body.location].filter(Boolean).join(', ') + ')';
+      return body.name + (body.location ? ' (' + body.location + ')' : '');
     }).join('; '),
     'Equipment Summary': equipmentSummary,
     'Equipment Details JSON': JSON.stringify({version: 1, bodies: request.bodiesOfWater}),
