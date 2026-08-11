@@ -34,11 +34,19 @@ function createMaintenanceCustomer(input) {
     let customerTable = readPmosHeaderTable_(customersSheet);
     let routeTable = readPmosHeaderTable_(routeSheet);
 
+    const normalizedCustomerHeaders = customerTable.headers.map(normalizeSyncHeader_);
+    const cleanerHeaderIndex = normalizedCustomerHeaders.indexOf(normalizeSyncHeader_('Cleaner'));
+    const robotsHeaderIndex = normalizedCustomerHeaders.indexOf(normalizeSyncHeader_('Robot(s)'));
+    if (cleanerHeaderIndex >= 0 && robotsHeaderIndex < 0) {
+      customersSheet.getRange(customerTable.headerRow, cleanerHeaderIndex + 1).setValue('Robot(s)');
+      customerTable = readPmosHeaderTable_(customersSheet);
+    }
+
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
       'Email', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
-      'Filter', 'Heater', 'Cleaner', 'Cover', 'Bodies of Water',
+      'Filter', 'Heater', 'Robot(s)', 'Cover', 'Bodies of Water',
       'Equipment Summary', 'Equipment Details JSON', 'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
@@ -268,6 +276,14 @@ function normalizeMaintenanceCustomerRequest_(input) {
           const value = cleanEquipmentText(rawDetails[field]);
           if (value) details[field] = value;
         });
+        if (type === 'CHEMISTRY_AUTOMATION') {
+          details.acidTank = 'Yes';
+          details.pHProbe = 'Yes';
+          details.orpProbe = 'Yes';
+          details.chlorineDelivery = cleanEquipmentText(source.sanitization).toLowerCase() === 'salt'
+            ? 'Controlled salt cell'
+            : 'Chlorine feed tank';
+        }
         return {type: type, details: details};
       }).filter(Boolean);
     const normalizeUnit = function (unit) {
@@ -307,9 +323,6 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const control = mainBody.equipment.find(function (item) {
     return item.type === 'EQUIPMENT_AUTOMATION';
   });
-  const robot = mainBody.equipment.find(function (item) {
-    return item.type === 'ROBOT';
-  });
   const sanitization = mainBody.sanitization;
   const automation = control
     ? [control.details.manufacturer, control.details.model, control.details.modelNumber]
@@ -318,10 +331,12 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const pump = describeUnit(mainBody.pump);
   const filter = describeUnit(mainBody.filter);
   const heater = describeUnit(mainBody.heater);
-  const cleaner = robot
-    ? [robot.details.robotType, robot.details.make, robot.details.model, robot.details.modelNumber]
-      .filter(Boolean).join(' · ')
-    : mainBody.cleaner;
+  const robots = mainBody.equipment.filter(function (item) {
+    return item.type === 'ROBOT';
+  }).map(function (item) {
+    return [item.details.robotType, item.details.make, item.details.model, item.details.modelNumber]
+      .filter(Boolean).join(' · ');
+  }).filter(Boolean).join('; ') || mainBody.cleaner || cleanEquipmentText(input.robots || input.cleaner);
   const cover = mainBody.cover;
   const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
@@ -393,7 +408,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     pump: pump,
     filter: filter,
     heater: heater,
-    cleaner: cleaner,
+    robots: robots,
     cover: cover,
     bodiesOfWater: bodiesOfWater,
     yearRound: yearRound,
@@ -430,7 +445,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
       bodyPump && 'Pump: ' + bodyPump,
       bodyFilter && 'Filter: ' + bodyFilter,
       bodyHeater && 'Heater: ' + bodyHeater,
-      body.cleaner && 'Cleaner: ' + body.cleaner,
+      body.cleaner && 'Robot(s): ' + body.cleaner,
       body.cover && 'Cover: ' + body.cover
     ].filter(Boolean);
     (body.equipment || []).forEach(function (item) {
@@ -484,7 +499,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Pump': request.pump,
     'Filter': request.filter,
     'Heater': request.heater,
-    'Cleaner': request.cleaner,
+    'Robot(s)': request.robots,
     'Cover': request.cover,
     'Bodies of Water': request.bodiesOfWater.map(function (body) {
       return body.name + ' (' + body.type + ')';
