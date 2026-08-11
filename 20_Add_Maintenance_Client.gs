@@ -68,12 +68,7 @@ function recommendMaintenanceClientRotations(input) {
   });
 
   const roadRefined = refineMaintenanceRecommendationsWithMatrix_(scored.slice(0, 3), target);
-  roadRefined.sort(function (a, b) {
-    if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
-    return Number(a.addedDurationMinutes || Number.POSITIVE_INFINITY) -
-      Number(b.addedDurationMinutes || Number.POSITIVE_INFINITY) ||
-      a.addedDistanceKm - b.addedDistanceKm || b.score - a.score;
-  });
+  roadRefined.sort(compareMaintenanceRoadRecommendations_);
 
   const recommendations = roadRefined.map(function (item) {
     item.label = item.secondDay ? item.day + ' + ' + item.secondDay : item.day;
@@ -106,6 +101,17 @@ function recommendMaintenanceClientRotations(input) {
         : 'Some GPS road calculations were unavailable. PMOS kept the geographic shortlist visible for manual review.')
       : 'No usable route placements were found. Manual placement remains available.'
   };
+}
+
+function compareMaintenanceRoadRecommendations_(a, b) {
+  if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
+  const aDuration = a.addedDurationMinutes == null
+    ? Number.POSITIVE_INFINITY : Number(a.addedDurationMinutes);
+  const bDuration = b.addedDurationMinutes == null
+    ? Number.POSITIVE_INFINITY : Number(b.addedDurationMinutes);
+  return aDuration - bDuration ||
+    Number(a.addedDistanceKm || 0) - Number(b.addedDistanceKm || 0) ||
+    Number(b.score || 0) - Number(a.score || 0);
 }
 
 function scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate) {
@@ -159,7 +165,9 @@ function scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candid
         week: parseLayer_(placement.layer).week,
         day: parseLayer_(placement.layer).day,
         layer: placement.layer,
-        position: placement.position
+        position: placement.position,
+        isFirstStop: placement.position === 1,
+        isLastStop: placement.position === Number(placement.customerCount || 0) + 1
       };
     }),
     _placementDetails: placements,
@@ -290,7 +298,14 @@ function refineMaintenanceRecommendationFromMatrix_(item, target, matrix, pointI
   if (!complete) return refineMaintenanceRecommendationWithDirections_(item, target);
   item.placements = details.map(function (placement) {
     const parsed = parseLayer_(placement.layer);
-    return {week: parsed.week, day: parsed.day, layer: placement.layer, position: placement.position};
+    return {
+      week: parsed.week,
+      day: parsed.day,
+      layer: placement.layer,
+      position: placement.position,
+      isFirstStop: placement.position === 1,
+      isLastStop: placement.position === Number(placement.customerCount || 0) + 1
+    };
   });
   if (details[0]) {
     item.position = details[0].position;
