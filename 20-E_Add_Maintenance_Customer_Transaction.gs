@@ -263,9 +263,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
     'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
     'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
     'robotType', 'sanitizerType', 'connectedToAutomation', 'actuatorMake',
-    'actuatorModel', 'actuatorQuantity', 'filterType', 'filterSize',
+    'actuatorModel', 'actuatorModelNumber', 'actuatorQuantity', 'filterType', 'filterSize',
     'heaterType', 'heaterMake', 'heaterModel', 'heaterModelNumber',
-    'featureEquipmentType', 'featureEquipmentMake', 'featureEquipmentModel'
+    'featureEquipmentType', 'featureEquipmentMake', 'featureEquipmentModel',
+    'featureEquipmentJson'
   ];
   const rawBodies = Array.isArray(input.bodiesOfWater) ? input.bodiesOfWater.slice(0, 8) : [];
   const bodiesOfWater = rawBodies.map(function (body, bodyIndex) {
@@ -277,9 +278,37 @@ function normalizeMaintenanceCustomerRequest_(input) {
         const rawDetails = item && item.details || {};
         const details = {};
         equipmentFields.forEach(function (field) {
-          const value = cleanEquipmentText(rawDetails[field]);
+          const value = field === 'featureEquipmentJson'
+            ? String(rawDetails[field] == null ? '' : rawDetails[field]).trim().slice(0, 10000)
+            : cleanEquipmentText(rawDetails[field]);
           if (value) details[field] = value;
         });
+        if (type === 'WATER_FEATURE' && details.featureEquipmentJson) {
+          try {
+            const componentTypes = {PUMP: true, FILTER: true, HEATER: true, OTHER: true};
+            const componentFields = [
+              'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake',
+              'filterType', 'filterSize', 'heaterType', 'heaterMake',
+              'heaterModel', 'heaterModelNumber', 'featureEquipmentType',
+              'featureEquipmentMake', 'featureEquipmentModel'
+            ];
+            const parsedComponents = JSON.parse(details.featureEquipmentJson);
+            details.featureEquipment = (Array.isArray(parsedComponents) ? parsedComponents : [])
+              .slice(0, 12).map(function (component) {
+                const componentType = cleanEquipmentText(component && component.type).toUpperCase();
+                if (!componentTypes[componentType]) return null;
+                const componentDetails = {};
+                componentFields.forEach(function (field) {
+                  const value = cleanEquipmentText(component && component.details && component.details[field]);
+                  if (value) componentDetails[field] = value;
+                });
+                return {type: componentType, details: componentDetails};
+              }).filter(Boolean);
+          } catch (ignored) {
+            details.featureEquipment = [];
+          }
+          delete details.featureEquipmentJson;
+        }
         if (type === 'CHEMISTRY_AUTOMATION') {
           details.acidTank = 'Yes';
           details.pHProbe = 'Yes';
@@ -488,6 +517,23 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
         details.modelNumber
       ].filter(Boolean).join(' · ');
       basics.push((equipmentLabels[item.type] || item.type) + (description ? ': ' + description : ''));
+      let featurePumpIndex = 0;
+      (details.featureEquipment || []).forEach(function (component) {
+        const componentDetails = component.details || {};
+        const componentDescription = [
+          componentDetails.pumpMake || componentDetails.filterMake || componentDetails.heaterMake ||
+            componentDetails.featureEquipmentMake,
+          componentDetails.pumpModel || componentDetails.filterType || componentDetails.heaterModel ||
+            componentDetails.featureEquipmentModel,
+          componentDetails.pumpModelNumber || componentDetails.filterSize ||
+            componentDetails.heaterModelNumber || componentDetails.featureEquipmentType
+        ].filter(Boolean).join(' · ');
+        if (component.type === 'PUMP') featurePumpIndex += 1;
+        const componentLabel = component.type === 'PUMP'
+          ? 'Water Feature Pump ' + featurePumpIndex
+          : 'Water Feature ' + component.type.charAt(0) + component.type.slice(1).toLowerCase();
+        basics.push(componentLabel + (componentDescription ? ': ' + componentDescription : ''));
+      });
     });
     return body.name + (body.location ? ' (' + body.location + ')' : '') + ': ' +
       (basics.join('; ') || 'No equipment entered');
