@@ -283,7 +283,6 @@ function handlePmosSheetChange(e) {
 
     if (sheet.getName() === PMOS.CUSTOMERS_SHEET) {
       synchronizeCustomerDatabase_(true);
-      sortMaintenanceCustomersAlphabetically_(sheet);
       return;
     }
 
@@ -308,7 +307,6 @@ function handlePmosSheetEdit(e) {
 
     if (sheet.getName() === PMOS.CUSTOMERS_SHEET) {
       synchronizeCustomerDatabase_(true);
-      sortMaintenanceCustomersAlphabetically_(sheet);
       return;
     }
 
