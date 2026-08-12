@@ -83,7 +83,8 @@ function buildRecurringSeriesPlan_(routeReader) {
     const firstDate = firstOccurrenceForLayer_(
       parsed,
       settings,
-      row.yearRound
+      row.yearRound,
+      row.serviceStartDate
     );
 
     if (
