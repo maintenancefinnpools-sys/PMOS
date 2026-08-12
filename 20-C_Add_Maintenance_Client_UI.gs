@@ -4,6 +4,7 @@
  */
 // Feature build marker: water-body UI with generated-dialog parse fix.
 function showAddMaintenanceClientV2() {
+  migrateMaintenanceCustomerEquipmentStorage_();
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top"><style>
