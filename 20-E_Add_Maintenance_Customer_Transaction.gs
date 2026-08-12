@@ -26,9 +26,15 @@ function createMaintenanceCustomer(input) {
       throw new Error('Customers or 4-Week Route Template sheet was not found.');
     }
 
+    const equipmentSheet = migrateMaintenanceCustomerEquipmentStorage_(
+      spreadsheet,
+      customersSheet
+    );
+
     snapshots = [
       snapshotMaintenanceSheet_(customersSheet),
-      snapshotMaintenanceSheet_(routeSheet)
+      snapshotMaintenanceSheet_(routeSheet),
+      snapshotMaintenanceSheet_(equipmentSheet)
     ];
 
     let customerTable = readPmosHeaderTable_(customersSheet);
@@ -47,7 +53,7 @@ function createMaintenanceCustomer(input) {
       'Email', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
       'Filter', 'Heater', 'Robot(s)', 'Cover', 'Bodies of Water',
-      'Equipment Summary', 'Equipment Details JSON', 'Year Round'
+      'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
       'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
@@ -64,8 +70,18 @@ function createMaintenanceCustomer(input) {
 
     const customerId = generateNextPmosCustomerId_();
     const sharedValues = buildMaintenanceCustomerSharedValues_(request, customerId);
+    const equipmentSummary = sharedValues['Equipment Summary'];
+    const equipmentDetailsJson = sharedValues['Equipment Details JSON'];
+    delete sharedValues['Equipment Summary'];
+    delete sharedValues['Equipment Details JSON'];
 
     appendMappedMaintenanceRow_(customersSheet, customerTable, sharedValues);
+    upsertMaintenanceCustomerEquipment_(equipmentSheet, {
+      customerId: customerId,
+      calendarTitle: request.calendarTitle,
+      equipmentSummary: equipmentSummary,
+      equipmentDetailsJson: equipmentDetailsJson
+    });
 
     const routeRows = appendMaintenanceCustomerRouteRows_(
       routeSheet,
@@ -123,6 +139,118 @@ function createMaintenanceCustomer(input) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function ensureMaintenanceCustomerEquipmentSheet_(spreadsheet) {
+  const ss = spreadsheet || SpreadsheetApp.getActive();
+  const sheetName = 'PMOS Customer Equipment';
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  const headers = [
+    'Customer ID', 'Calendar Title', 'Equipment Summary',
+    'Equipment Details JSON', 'Updated At'
+  ];
+  const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+  if (headers.some(function (header, index) {
+    return String(current[index] || '').trim() !== header;
+  })) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  sheet.setFrozenRows(1);
+  if (!sheet.isSheetHidden()) sheet.hideSheet();
+  return sheet;
+}
+
+function migrateMaintenanceCustomerEquipmentStorage_(spreadsheet, customersSheet) {
+  const ss = spreadsheet || SpreadsheetApp.getActive();
+  const customers = customersSheet || findFirstSheetByName_(ss, [
+    'Customers', 'Customer Database', 'Customer List'
+  ]);
+  const equipmentSheet = ensureMaintenanceCustomerEquipmentSheet_(ss);
+  if (!customers || customers.getLastRow() < 1) return equipmentSheet;
+
+  const table = readPmosHeaderTable_(customers);
+  const idIndex = table.headers.indexOf('Customer ID');
+  const titleIndex = table.headers.indexOf('Calendar Title');
+  const summaryIndex = table.headers.indexOf('Equipment Summary');
+  const detailsIndex = table.headers.indexOf('Equipment Details JSON');
+  if (summaryIndex < 0 && detailsIndex < 0) return equipmentSheet;
+
+  const equipmentValues = equipmentSheet.getDataRange().getValues();
+  const records = equipmentValues.slice(1).filter(function (row) {
+    return String(row[0] || '').trim();
+  });
+  const byId = {};
+  records.forEach(function (row, index) {
+    byId[String(row[0] || '').trim()] = index;
+  });
+  let migrated = false;
+  table.rows.forEach(function (row) {
+    const customerId = idIndex >= 0 ? String(row[idIndex] || '').trim() : '';
+    const summary = summaryIndex >= 0 ? String(row[summaryIndex] || '').trim() : '';
+    const details = detailsIndex >= 0 ? String(row[detailsIndex] || '').trim() : '';
+    if (!customerId || (!summary && !details)) return;
+    const record = [
+      customerId,
+      titleIndex >= 0 ? String(row[titleIndex] || '').trim() : '',
+      summary,
+      details,
+      new Date()
+    ];
+    if (Object.prototype.hasOwnProperty.call(byId, customerId)) {
+      records[byId[customerId]] = record;
+    } else {
+      byId[customerId] = records.length;
+      records.push(record);
+    }
+    migrated = true;
+  });
+  if (migrated) {
+    const oldRows = Math.max(0, equipmentSheet.getLastRow() - 1);
+    if (oldRows) equipmentSheet.getRange(2, 1, oldRows, 5).clearContent();
+    equipmentSheet.getRange(2, 1, records.length, 5).setValues(records);
+  }
+
+  const customerRows = Math.max(0, customers.getLastRow() - table.headerRow);
+  [summaryIndex, detailsIndex].forEach(function (index) {
+    if (index < 0) return;
+    if (customerRows) {
+      customers.getRange(table.headerRow + 1, index + 1, customerRows, 1)
+        .clearContent();
+    }
+    customers.hideColumns(index + 1);
+  });
+  if (customerRows) {
+    customers.getRange(table.headerRow + 1, 1, customerRows, customers.getLastColumn())
+      .setWrap(false);
+    customers.setRowHeights(table.headerRow + 1, customerRows, 21);
+  }
+  return equipmentSheet;
+}
+
+function upsertMaintenanceCustomerEquipment_(sheet, record) {
+  const equipmentSheet = sheet || ensureMaintenanceCustomerEquipmentSheet_();
+  const customerId = String(record && record.customerId || '').trim();
+  if (!customerId) throw new Error('Customer equipment storage is missing Customer ID.');
+  const values = equipmentSheet.getDataRange().getValues();
+  let rowNumber = 0;
+  for (let index = 1; index < values.length; index++) {
+    if (String(values[index][0] || '').trim() === customerId) {
+      rowNumber = index + 1;
+      break;
+    }
+  }
+  if (!rowNumber) rowNumber = Math.max(2, equipmentSheet.getLastRow() + 1);
+  equipmentSheet.getRange(rowNumber, 1, 1, 5).setValues([[
+    customerId,
+    String(record.calendarTitle || '').trim(),
+    String(record.equipmentSummary || '').trim(),
+    String(record.equipmentDetailsJson || '').trim(),
+    new Date()
+  ]]);
+  equipmentSheet.getRange(rowNumber, 1, 1, 5).setWrap(false);
+  equipmentSheet.setRowHeight(rowNumber, 21);
+  if (!equipmentSheet.isSheetHidden()) equipmentSheet.hideSheet();
 }
 
 function createMaintenanceCustomerAndAutoSync(input) {
