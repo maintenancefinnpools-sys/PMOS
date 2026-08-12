@@ -76,6 +76,11 @@ function createMaintenanceCustomer(input) {
     delete sharedValues['Equipment Details JSON'];
 
     appendMappedMaintenanceRow_(customersSheet, customerTable, sharedValues);
+    const customerRowNumber = customersSheet.getLastRow();
+    customersSheet.getRange(
+      customerRowNumber, 1, 1, customersSheet.getLastColumn()
+    ).setWrap(false);
+    customersSheet.setRowHeight(customerRowNumber, 21);
     upsertMaintenanceCustomerEquipment_(equipmentSheet, {
       customerId: customerId,
       calendarTitle: request.calendarTitle,
@@ -533,7 +538,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
             const componentTypes = {PUMP: true, FILTER: true, HEATER: true, OTHER: true};
             const componentFields = [
               'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake',
-              'filterType', 'filterSize', 'heaterType', 'heaterMake',
+              'filterType', 'filterModel', 'filterSize', 'heaterType', 'heaterMake',
               'heaterModel', 'heaterModelNumber', 'featureEquipmentType',
               'featureEquipmentMake', 'featureEquipmentModel'
             ];
@@ -588,7 +593,9 @@ function normalizeMaintenanceCustomerRequest_(input) {
       filter: {
         type: cleanEquipmentText(source.filter && source.filter.type),
         make: cleanEquipmentText(source.filter && source.filter.make),
-        size: cleanEquipmentText(source.filter && source.filter.size)
+        model: cleanEquipmentText(source.filter && (
+          source.filter.model || source.filter.size
+        ))
       },
       heater: {
         type: cleanEquipmentText(source.heater && source.heater.type),
@@ -610,7 +617,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     bodiesOfWater.push({
       name: 'Pool', type: 'Pool', location: '', sanitization: cleanEquipmentText(input.sanitization),
       pump: {make: '', model: cleanEquipmentText(input.pump), modelNumber: ''},
-      filter: {type: '', make: '', size: cleanEquipmentText(input.filter)},
+      filter: {type: '', make: '', model: cleanEquipmentText(input.filter)},
       heater: {type: '', make: '', model: '', modelNumber: cleanEquipmentText(input.heater)},
       cleaner: cleanEquipmentText(input.cleaner),
       cover: {type: cleanEquipmentText(input.cover), winterType: ''},
@@ -630,7 +637,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
       .filter(Boolean).join(' · ')
     : cleanEquipmentText(input.automation);
   const pump = describePump(mainBody.pump);
-  const filter = [mainBody.filter.type, mainBody.filter.make, mainBody.filter.size]
+  const filter = [mainBody.filter.type, mainBody.filter.make, mainBody.filter.model]
     .filter(Boolean).join(' · ');
   const heater = [mainBody.heater.type, mainBody.heater.make,
     mainBody.heater.model, mainBody.heater.modelNumber]
@@ -741,7 +748,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
   const equipmentSummary = request.bodiesOfWater.map(function (body) {
     const bodyPump = [body.pump.make, body.pump.model, body.pump.modelNumber]
       .filter(Boolean).join(' · ');
-    const bodyFilter = [body.filter.make, body.filter.type, body.filter.size]
+    const bodyFilter = [body.filter.make, body.filter.type, body.filter.model || body.filter.size]
       .filter(Boolean).join(' · ');
     const bodyHeater = [body.heater.type, body.heater.make,
       body.heater.model, body.heater.modelNumber]
@@ -773,7 +780,8 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
             componentDetails.featureEquipmentMake,
           componentDetails.pumpModel || componentDetails.filterType || componentDetails.heaterModel ||
             componentDetails.featureEquipmentModel,
-          componentDetails.pumpModelNumber || componentDetails.filterSize ||
+          componentDetails.pumpModelNumber || componentDetails.filterModel ||
+            componentDetails.filterSize ||
             componentDetails.heaterModelNumber || componentDetails.featureEquipmentType
         ].filter(Boolean).join(' · ');
         if (component.type === 'PUMP') featurePumpIndex += 1;
