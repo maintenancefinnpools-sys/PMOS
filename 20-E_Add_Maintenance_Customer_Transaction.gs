@@ -361,12 +361,20 @@ function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayer
   if (!id || !layers.length) {
     throw new Error('Automatic Calendar Sync could not be scheduled without the saved customer and route layers.');
   }
-  const now = new Date().toISOString();
-  PropertiesService.getDocumentProperties().setProperty(
-    addedMaintenanceCalendarSyncKey_(id),
-    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
-  );
-  ensureAddedMaintenanceCalendarSyncTrigger_();
+  const queueLock = LockService.getScriptLock();
+  if (!queueLock.tryLock(10000)) {
+    throw new Error('Automatic Calendar Sync is busy. Use Retry Calendar Sync in a moment.');
+  }
+  try {
+    const now = new Date().toISOString();
+    PropertiesService.getDocumentProperties().setProperty(
+      addedMaintenanceCalendarSyncKey_(id),
+      JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
+    );
+    ensureAddedMaintenanceCalendarSyncTrigger_();
+  } finally {
+    queueLock.releaseLock();
+  }
 }
 
 function runAddedMaintenanceCustomerCalendarSyncWorker_() {
@@ -445,11 +453,6 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     state.updatedAt = new Date().toISOString();
   }
   properties.setProperty(item.key, JSON.stringify(state));
-  if (hasActiveAddedMaintenanceCalendarSync_(properties)) {
-    ensureAddedMaintenanceCalendarSyncTrigger_();
-  } else {
-    deleteAddedMaintenanceCalendarSyncTriggers_();
-  }
 }
 
 function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
