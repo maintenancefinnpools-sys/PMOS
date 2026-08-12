@@ -58,6 +58,27 @@ function createRecurringSeries_(calendar, plan) {
 }
 
 function updateRecurringSeries_(series, plan) {
+  // An UPDATE must never move an established recurring-series anchor forward.
+  // Doing so causes Google Calendar to remove occurrences before the new
+  // anchor. Keep the existing anchor and only change its route time/duration.
+  try {
+    const existingStart = series.getStartTime();
+    if (
+      existingStart instanceof Date && Number.isFinite(existingStart.getTime()) &&
+      plan.start instanceof Date && Number.isFinite(plan.start.getTime()) &&
+      plan.start.getTime() > existingStart.getTime()
+    ) {
+      const duration = Math.max(60000, plan.end.getTime() - plan.start.getTime());
+      const desiredTime = new Date(plan.start.getTime());
+      plan.start = new Date(existingStart.getTime());
+      plan.start.setHours(
+        desiredTime.getHours(), desiredTime.getMinutes(),
+        desiredTime.getSeconds(), desiredTime.getMilliseconds()
+      );
+      plan.end = new Date(plan.start.getTime() + duration);
+      plan.signature = recurringSeriesSignature_(plan);
+    }
+  } catch (ignored) {}
   series.setTitle(plan.title);
   series.setDescription(buildPmosManagedRecurringDescription_(plan));
   series.setLocation(plan.location);
