@@ -158,7 +158,7 @@ function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayer
   const now = new Date().toISOString();
   PropertiesService.getDocumentProperties().setProperty(
     addedMaintenanceCalendarSyncKey_(id),
-    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', createdAt: now, updatedAt: now, attempts: 0})
+    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0})
   );
   ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
     .timeBased().after(1000).create();
@@ -188,6 +188,7 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     item = pending[0];
     state = item.state;
     state.status = 'RUNNING';
+    state.progress = 5;
     state.startedAt = new Date().toISOString();
     state.updatedAt = state.startedAt;
     state.attempts = Number(state.attempts || 0) + 1;
@@ -197,8 +198,19 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     claimLock.releaseLock();
   }
   try {
-    const result = synchronizeAddedMaintenanceCustomerCalendar_(state.customerId, state.affectedLayers);
+    const result = synchronizeAddedMaintenanceCustomerCalendar_(
+      state.customerId,
+      state.affectedLayers,
+      function (progress) {
+        state.progress = Number(progress.progress || 0);
+        state.processedOperations = Number(progress.processedOperations || 0);
+        state.totalOperations = Number(progress.totalOperations || 0);
+        state.updatedAt = new Date().toISOString();
+        properties.setProperty(item.key, JSON.stringify(state));
+      }
+    );
     state.status = 'COMPLETE';
+    state.progress = 100;
     state.result = result;
     state.completedAt = new Date().toISOString();
     state.updatedAt = state.completedAt;
@@ -228,13 +240,17 @@ function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
   return state;
 }
 
-function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers) {
+function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers, progressCallback) {
   const id = String(customerId || '').trim();
   if (!id) throw new Error('Automatic Calendar Sync is missing the new Customer ID.');
   const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
     return String(layer || '').trim();
   }).filter(Boolean)));
   if (!layers.length) throw new Error('Automatic Calendar Sync is missing the affected route layers.');
+  const reportProgress = typeof progressCallback === 'function'
+    ? progressCallback
+    : function () {};
+  reportProgress({progress: 8, processedOperations: 0, totalOperations: 0});
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)) {
     throw new Error('Another PMOS operation is using the Calendar. Retry when it finishes.');
@@ -247,6 +263,11 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
       return layers.indexOf(String(desired.layer || '').trim()) >= 0 &&
         [String(PMOS_OPERATION.CREATE), String(PMOS_OPERATION.UPDATE)]
           .indexOf(String(operation.action || '')) >= 0;
+    });
+    reportProgress({
+      progress: 25,
+      processedOperations: 0,
+      totalOperations: operations.length
     });
     const newCustomerSeries = (built.desiredSeries || []).filter(function (series) {
       return String(series.customerId || '').trim() === id &&
@@ -279,6 +300,7 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
     const calendar = getExistingConfiguredPmosCalendar_(settings.calendarName);
     if (!operations.length) {
       clearPmosCalendarAuditSnapshot_();
+      reportProgress({progress: 100, processedOperations: 0, totalOperations: 0});
       return {
         created: 0,
         updated: 0,
@@ -291,6 +313,11 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
       operations, calendar, settings.calendarName
     );
     if (!preflight.valid) throw new Error(preflight.errors.join('\n'));
+    reportProgress({
+      progress: 30,
+      processedOperations: 0,
+      totalOperations: operations.length
+    });
 
     const state = {
       id: 'ADD_CLIENT_' + Utilities.getUuid(),
@@ -298,12 +325,22 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
       calendarName: settings.calendarName
     };
     const counts = {created: 0, updated: 0};
-    operations.forEach(function (operation) {
+    operations.forEach(function (operation, index) {
       const outcome = executeReviewedCalendarOperation_(operation, state);
       if (outcome.action === 'CREATE') counts.created++;
       else if (outcome.action === 'UPDATE') counts.updated++;
+      reportProgress({
+        progress: 30 + Math.round(65 * (index + 1) / operations.length),
+        processedOperations: index + 1,
+        totalOperations: operations.length
+      });
     });
     clearPmosCalendarAuditSnapshot_();
+    reportProgress({
+      progress: 100,
+      processedOperations: operations.length,
+      totalOperations: operations.length
+    });
     counts.affectedLayers = layers.slice();
     counts.operationCount = operations.length;
     return counts;
