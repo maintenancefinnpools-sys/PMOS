@@ -238,18 +238,33 @@ function migrateMaintenanceCustomerEquipmentStorage_(spreadsheet, customersSheet
 
 function sortMaintenanceCustomersAlphabetically_(sheet) {
   const table = readPmosHeaderTable_(sheet);
-  if (!table.rows.length) return;
-  const lastNameIndex = findHeaderIndex_(table.headers, [
+  const bodyRowCount = Math.max(0, sheet.getLastRow() - table.headerRow);
+  if (!bodyRowCount) return;
+  const nameIndexes = [
     'Last Name', 'Customer Name', 'Name', 'Customer', 'Calendar Title'
-  ]);
-  if (lastNameIndex < 0) return;
+  ].map(function (header) {
+    return findHeaderIndex_(table.headers, [header]);
+  }).filter(function (index, position, indexes) {
+    return index >= 0 && indexes.indexOf(index) === position;
+  });
+  if (!nameIndexes.length) return;
   const firstNameIndex = findHeaderIndex_(table.headers, ['First Name']);
   const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
+  const physicalRows = sheet.getRange(
+    table.headerRow + 1,
+    1,
+    bodyRowCount,
+    sheet.getLastColumn()
+  ).getValues();
   const helperColumn = sheet.getLastColumn() + 1;
   sheet.insertColumnAfter(sheet.getLastColumn());
   sheet.getRange(table.headerRow, helperColumn).setValue('PMOS Alphabetical Sort Key');
-  const keys = table.rows.map(function (row) {
-    const lastName = normalizeSyncValue_(row[lastNameIndex]);
+  const keys = physicalRows.map(function (row) {
+    let lastName = '';
+    for (let index = 0; index < nameIndexes.length; index++) {
+      lastName = normalizeSyncValue_(row[nameIndexes[index]]);
+      if (lastName) break;
+    }
     const firstName = firstNameIndex >= 0 ? normalizeSyncValue_(row[firstNameIndex]) : '';
     const customerId = idIndex >= 0 ? normalizeSyncValue_(row[idIndex]) : '';
     return [lastName || '\uffff', firstName, customerId].join('\u0001');
@@ -259,17 +274,17 @@ function sortMaintenanceCustomersAlphabetically_(sheet) {
   sheet.getRange(
     table.headerRow + 1,
     1,
-    table.rows.length,
+    bodyRowCount,
     helperColumn
   ).sort({column: helperColumn, ascending: true});
   sheet.deleteColumn(helperColumn);
   sheet.getRange(
     table.headerRow + 1,
     1,
-    table.rows.length,
+    bodyRowCount,
     sheet.getLastColumn()
   ).setWrap(false);
-  sheet.setRowHeights(table.headerRow + 1, table.rows.length, 21);
+  sheet.setRowHeights(table.headerRow + 1, bodyRowCount, 21);
 }
 
 function upsertMaintenanceCustomerEquipment_(sheet, record) {
