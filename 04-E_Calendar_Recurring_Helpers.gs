@@ -1,7 +1,7 @@
 /**
  * PMOS recurring Calendar helper functions.
  */
-function firstOccurrenceForLayer_(parsed, settings, yearRound) {
+function firstOccurrenceForLayer_(parsed, settings, yearRound, serviceStartDate) {
   const dayOffsets = {Monday:0,Tuesday:1,Wednesday:2,Thursday:3,Friday:4,Saturday:5,Sunday:6};
   if (!Object.prototype.hasOwnProperty.call(dayOffsets, parsed.day)) {
     throw new Error('Unsupported route weekday "' + parsed.day + '" in ' + parsed.routeDay + '.');
@@ -9,10 +9,27 @@ function firstOccurrenceForLayer_(parsed, settings, yearRound) {
   const date = new Date(settings.rotationWeek1Start.getTime());
   date.setHours(12,0,0,0);
   date.setDate(date.getDate() + (parsed.week - 1) * 7 + dayOffsets[parsed.day]);
-  const now = new Date();
   const routeStart = parseFlexibleRouteTime_(settings.routeStart);
   date.setHours(routeStart.hours, routeStart.minutes, 0, 0);
-  while (date.getTime() <= now.getTime()) date.setDate(date.getDate() + 28);
+  let earliest = yearRound ? null : new Date(settings.seasonStart.getTime());
+  if (serviceStartDate instanceof Date && Number.isFinite(serviceStartDate.getTime())) {
+    const requestedStart = new Date(serviceStartDate.getTime());
+    requestedStart.setHours(0, 0, 0, 0);
+    if (!earliest || requestedStart.getTime() > earliest.getTime()) earliest = requestedStart;
+  } else if (String(serviceStartDate || '').trim()) {
+    const startText = String(serviceStartDate).trim();
+    const localMatch = startText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const requestedStart = localMatch
+      ? new Date(Number(localMatch[1]), Number(localMatch[2]) - 1, Number(localMatch[3]))
+      : new Date(startText);
+    if (Number.isFinite(requestedStart.getTime())) {
+      requestedStart.setHours(0, 0, 0, 0);
+      if (!earliest || requestedStart.getTime() > earliest.getTime()) earliest = requestedStart;
+    }
+  }
+  while (earliest && date.getTime() < earliest.getTime()) {
+    date.setDate(date.getDate() + 28);
+  }
   date.setHours(12,0,0,0);
   return date;
 }
