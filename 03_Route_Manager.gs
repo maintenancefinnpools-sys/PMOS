@@ -277,6 +277,7 @@ function readRoutesInPhysicalOrder_() {
         phone: String(customer['Primary Phone'] || ''),
         secondaryPhone: String(customer['Secondary Phone'] || ''),
         email: String(customer.Email || ''),
+        serviceStartDate: customer['Service Start Date'] || customer['Start Date'] || '',
         sanitization: String(customer['Sanitization Type(s)'] || ''),
         automation: String(customer.Automation || ''),
         yearRound: normalize_(customer['Year Round'] || customer['Year-Round'] || customer.Season || '').includes('year round') ||
