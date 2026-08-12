@@ -120,7 +120,9 @@ function prepareReviewedCalendarSyncWindow_() {
     preflightWarnings: preflight.warnings.slice(),
     startedAt: '',
     updatedAt: now.toISOString(),
-    completedAt: ''
+    completedAt: '',
+    calendarThrottleCount: 0,
+    nextAttemptAt: ''
   };
 
   writeReviewedCalendarSyncState_(state);

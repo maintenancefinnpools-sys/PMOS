@@ -80,7 +80,10 @@ function runReviewedCalendarSyncWorker_() {
 
     const started = Date.now();
     const maxRunMs = 45 * 1000;
-    const maxItems = 8;
+    // One recurring UPDATE may write several future occurrences. Keep each
+    // pass deliberately small so CalendarApp does not receive a burst of
+    // dozens of writes in one execution.
+    const maxItems = 2;
     let handled = 0;
 
     while (
@@ -139,6 +142,22 @@ function runReviewedCalendarSyncWorker_() {
             ? operationError.message
             : operationError
         );
+        if (isTransientReviewedCalendarRateLimit_(message)) {
+          const throttleCount = Number(state.calendarThrottleCount || 0) + 1;
+          const delayMs = reviewedCalendarThrottleDelayMs_(throttleCount);
+          // Leave the row Running. The next pass performs transaction recovery
+          // before resetting/replaying it, which safely handles the case where
+          // Google accepted the write but returned the quota error afterward.
+          state.calendarThrottleCount = throttleCount;
+          state.status = 'Scheduled';
+          state.phase = 'Google Calendar write limit reached; retrying automatically';
+          state.lastError = '';
+          state.updatedAt = new Date().toISOString();
+          state.nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+          writeReviewedCalendarSyncState_(state);
+          ensureReviewedCalendarSyncTrigger_(delayMs);
+          return;
+        }
         markReviewedCalendarSyncQueueItem_(
           queueItem.row,
           'Error',
@@ -153,6 +172,8 @@ function runReviewedCalendarSyncWorker_() {
       state.remaining = Math.max(0, state.total - state.cursor);
       state.currentOperation = '';
       state.updatedAt = new Date().toISOString();
+      state.calendarThrottleCount = 0;
+      state.nextAttemptAt = '';
       writeReviewedCalendarSyncState_(state);
       handled++;
     }
@@ -190,7 +211,7 @@ function runReviewedCalendarSyncWorker_() {
     state.phase = 'Waiting for next execution pass';
     state.updatedAt = new Date().toISOString();
     writeReviewedCalendarSyncState_(state);
-    ensureReviewedCalendarSyncTrigger_();
+    ensureReviewedCalendarSyncTrigger_(30000);
 
   } catch (error) {
     const state = readReviewedCalendarSyncState_() || {};
@@ -677,9 +698,24 @@ function reviveReviewedCalendarSeriesPlan_(plan) {
   return copy;
 }
 
-function ensureReviewedCalendarSyncTrigger_() {
+function ensureReviewedCalendarSyncTrigger_(delayMs) {
   removeReviewedCalendarSyncTriggers_();
-  ScriptApp.newTrigger(PMOS_REVIEWED_SYNC_TRIGGER).timeBased().after(1000).create();
+  ScriptApp.newTrigger(PMOS_REVIEWED_SYNC_TRIGGER).timeBased()
+    .after(Math.max(1000, Number(delayMs || 1000)))
+    .create();
+}
+
+function isTransientReviewedCalendarRateLimit_(message) {
+  const text = String(message || '').toLowerCase();
+  return text.indexOf('creating or deleting too many calendars or calendar events') >= 0 ||
+    text.indexOf('service invoked too many times') >= 0 ||
+    text.indexOf('rate limit') >= 0;
+}
+
+function reviewedCalendarThrottleDelayMs_(attempt) {
+  const delays = [2, 5, 10, 20, 30];
+  const index = Math.min(Math.max(1, Number(attempt || 1)), delays.length) - 1;
+  return delays[index] * 60 * 1000;
 }
 
 function removeReviewedCalendarSyncTriggers_() {
