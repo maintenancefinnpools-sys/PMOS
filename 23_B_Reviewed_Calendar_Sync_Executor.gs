@@ -568,7 +568,7 @@ function applyReviewedRecurringCreate_(desired, seriesKey, calendar, transaction
   let series = findExistingPmosRecurringSeries_(calendar, desired, existingRecord);
   const recovered = Boolean(series);
 
-  if (series) updateRecurringSeries_(series, desired);
+  if (series) updateRecurringSeries_(series, desired, calendar);
   else series = createRecurringSeries_(calendar, desired);
 
   const seriesId = String(series.getId() || '');
@@ -601,7 +601,7 @@ function applyReviewedRecurringUpdate_(desired, current, seriesKey, calendar, tr
     throw new Error('Calendar series could not be found for UPDATE: ' + seriesId);
   }
 
-  updateRecurringSeries_(series, desired);
+  updateRecurringSeries_(series, desired, calendar);
   markPmosCalendarTransactionApplied_(transactionId, seriesId);
   upsertSeriesRegistry_(
     desired,
