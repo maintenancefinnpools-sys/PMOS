@@ -309,6 +309,9 @@ function normalizeMaintenanceCustomerRequest_(input) {
           }
           delete details.featureEquipmentJson;
         }
+        if (type === 'WATER_FEATURE' && !details.name && details.featureType) {
+          details.name = details.featureType;
+        }
         if (type === 'CHEMISTRY_AUTOMATION') {
           details.acidTank = 'Yes';
           details.pHProbe = 'Yes';
