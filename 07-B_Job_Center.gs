@@ -94,5 +94,5 @@ renderJobs();renderReady();if(definition().mode==='runtime')refreshRuntime(false
 })();
 </script></body></html>`).setWidth(850).setHeight(680);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Operations');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Operations');
 }

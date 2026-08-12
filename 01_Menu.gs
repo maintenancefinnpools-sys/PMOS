@@ -62,7 +62,7 @@ function showUpdateCenter() {
     </div>`
   ).setWidth(480).setHeight(420);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Update Center');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Update Center');
 }
 
 function showFeatureLab() {
@@ -100,5 +100,5 @@ function showFeatureLab() {
     </div>`
   ).setWidth(560).setHeight(560);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Feature Lab');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Feature Lab');
 }

@@ -118,7 +118,7 @@ function showRouteManagerLink() {
       '<p><a href="' + url + '" target="_blank">Open Route Manager</a></p>' +
     '</div>'
   ).setWidth(360).setHeight(160);
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Route Manager');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Route Manager');
 }
 
 function exportAffectedMapLayers() {

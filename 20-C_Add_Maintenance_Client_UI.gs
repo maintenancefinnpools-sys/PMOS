@@ -150,5 +150,5 @@ document.addEventListener('keydown',function(event){if(event.key==='Enter'&&even
 initializeDialog()
 hideAddPromptOptions(document)
 </script></body></html>`).setWidth(900).setHeight(840);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Add Maintenance Client');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'Add Maintenance Client');
 }
