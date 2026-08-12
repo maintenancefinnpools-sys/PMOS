@@ -87,6 +87,7 @@ function createMaintenanceCustomer(input) {
       equipmentSummary: equipmentSummary,
       equipmentDetailsJson: equipmentDetailsJson
     });
+    sortMaintenanceCustomersAlphabetically_(customersSheet);
 
     const routeRows = appendMaintenanceCustomerRouteRows_(
       routeSheet,
@@ -183,11 +184,16 @@ function migrateMaintenanceCustomerEquipmentStorage_(spreadsheet, customersSheet
     byId[String(row[0] || '').trim()] = index;
   });
   let migrated = false;
+  const unresolvedRows = [];
   table.rows.forEach(function (row) {
     const customerId = idIndex >= 0 ? String(row[idIndex] || '').trim() : '';
     const summary = summaryIndex >= 0 ? String(row[summaryIndex] || '').trim() : '';
     const details = detailsIndex >= 0 ? String(row[detailsIndex] || '').trim() : '';
-    if (!customerId || (!summary && !details)) return;
+    if (!summary && !details) return;
+    if (!customerId) {
+      unresolvedRows.push(table.headerRow + 1 + unresolvedRows.length);
+      return;
+    }
     const record = [
       customerId,
       titleIndex >= 0 ? String(row[titleIndex] || '').trim() : '',
@@ -203,27 +209,67 @@ function migrateMaintenanceCustomerEquipmentStorage_(spreadsheet, customersSheet
     }
     migrated = true;
   });
+  if (unresolvedRows.length) {
+    throw new Error(
+      'Equipment details could not be moved because ' + unresolvedRows.length +
+      ' Customers row(s) have equipment data but no Customer ID.'
+    );
+  }
   if (migrated) {
     const oldRows = Math.max(0, equipmentSheet.getLastRow() - 1);
     if (oldRows) equipmentSheet.getRange(2, 1, oldRows, 5).clearContent();
     equipmentSheet.getRange(2, 1, records.length, 5).setValues(records);
   }
 
-  const customerRows = Math.max(0, customers.getLastRow() - table.headerRow);
-  [summaryIndex, detailsIndex].forEach(function (index) {
-    if (index < 0) return;
-    if (customerRows) {
-      customers.getRange(table.headerRow + 1, index + 1, customerRows, 1)
-        .clearContent();
-    }
-    customers.hideColumns(index + 1);
+  const obsoleteIndexes = [summaryIndex, detailsIndex]
+    .filter(function (index) { return index >= 0; })
+    .sort(function (left, right) { return right - left; });
+  obsoleteIndexes.forEach(function (index) {
+    customers.deleteColumn(index + 1);
   });
+  const customerRows = Math.max(0, customers.getLastRow() - table.headerRow);
   if (customerRows) {
     customers.getRange(table.headerRow + 1, 1, customerRows, customers.getLastColumn())
       .setWrap(false);
     customers.setRowHeights(table.headerRow + 1, customerRows, 21);
   }
   return equipmentSheet;
+}
+
+function sortMaintenanceCustomersAlphabetically_(sheet) {
+  const table = readPmosHeaderTable_(sheet);
+  if (!table.rows.length) return;
+  const lastNameIndex = findHeaderIndex_(table.headers, [
+    'Last Name', 'Customer Name', 'Name', 'Customer', 'Calendar Title'
+  ]);
+  if (lastNameIndex < 0) return;
+  const firstNameIndex = findHeaderIndex_(table.headers, ['First Name']);
+  const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
+  const helperColumn = sheet.getLastColumn() + 1;
+  sheet.insertColumnAfter(sheet.getLastColumn());
+  sheet.getRange(table.headerRow, helperColumn).setValue('PMOS Alphabetical Sort Key');
+  const keys = table.rows.map(function (row) {
+    const lastName = normalizeSyncValue_(row[lastNameIndex]);
+    const firstName = firstNameIndex >= 0 ? normalizeSyncValue_(row[firstNameIndex]) : '';
+    const customerId = idIndex >= 0 ? normalizeSyncValue_(row[idIndex]) : '';
+    return [lastName || '\uffff', firstName, customerId].join('\u0001');
+  });
+  sheet.getRange(table.headerRow + 1, helperColumn, keys.length, 1)
+    .setValues(keys.map(function (key) { return [key]; }));
+  sheet.getRange(
+    table.headerRow + 1,
+    1,
+    table.rows.length,
+    helperColumn
+  ).sort({column: helperColumn, ascending: true});
+  sheet.deleteColumn(helperColumn);
+  sheet.getRange(
+    table.headerRow + 1,
+    1,
+    table.rows.length,
+    sheet.getLastColumn()
+  ).setWrap(false);
+  sheet.setRowHeights(table.headerRow + 1, table.rows.length, 21);
 }
 
 function upsertMaintenanceCustomerEquipment_(sheet, record) {
