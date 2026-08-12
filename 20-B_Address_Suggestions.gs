@@ -225,6 +225,18 @@ function getPmosAddressSearchAnchor_() {
   if (cached) {
     try { return JSON.parse(cached); } catch (ignored) {}
   }
+  const documentProperties = PropertiesService.getDocumentProperties();
+  const savedAnchor = documentProperties.getProperty('PMOS_ADDRESS_SEARCH_ANCHOR_V1');
+  if (savedAnchor) {
+    try {
+      const saved = JSON.parse(savedAnchor);
+      if (saved && saved.anchor && saved.updatedAt &&
+          Date.now() - new Date(saved.updatedAt).getTime() < 24 * 60 * 60 * 1000) {
+        cache.put('PMOS_ADDRESS_SEARCH_ANCHOR', JSON.stringify(saved.anchor), 21600);
+        return saved.anchor;
+      }
+    } catch (ignored) {}
+  }
   const points = [];
   const spreadsheet = SpreadsheetApp.getActive();
   ['Customers', '4-Week Route Template'].forEach(function (sheetName) {
@@ -259,7 +271,11 @@ function getPmosAddressSearchAnchor_() {
     lat: points.reduce(function (sum, point) { return sum + point.lat; }, 0) / points.length,
     lng: points.reduce(function (sum, point) { return sum + point.lng; }, 0) / points.length
   };
-  cache.put('PMOS_ADDRESS_SEARCH_ANCHOR', JSON.stringify(anchor), 600);
+  cache.put('PMOS_ADDRESS_SEARCH_ANCHOR', JSON.stringify(anchor), 21600);
+  documentProperties.setProperty('PMOS_ADDRESS_SEARCH_ANCHOR_V1', JSON.stringify({
+    anchor: anchor,
+    updatedAt: new Date().toISOString()
+  }));
   return anchor;
 }
 
