@@ -319,6 +319,40 @@ function addedMaintenanceCalendarSyncKey_(customerId) {
   return 'PMOS_ADD_CLIENT_SYNC_' + String(customerId || '').trim();
 }
 
+function addedMaintenanceCalendarSyncTriggerHandler_() {
+  return 'runAddedMaintenanceCustomerCalendarSyncWorker_';
+}
+
+function ensureAddedMaintenanceCalendarSyncTrigger_() {
+  const handler = addedMaintenanceCalendarSyncTriggerHandler_();
+  const exists = ScriptApp.getProjectTriggers().some(function (trigger) {
+    return trigger.getHandlerFunction() === handler;
+  });
+  if (!exists) {
+    ScriptApp.newTrigger(handler).timeBased().everyMinutes(1).create();
+  }
+}
+
+function deleteAddedMaintenanceCalendarSyncTriggers_() {
+  const handler = addedMaintenanceCalendarSyncTriggerHandler_();
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    if (trigger.getHandlerFunction() === handler) ScriptApp.deleteTrigger(trigger);
+  });
+}
+
+function hasActiveAddedMaintenanceCalendarSync_(properties) {
+  const entries = (properties || PropertiesService.getDocumentProperties()).getProperties();
+  return Object.keys(entries).some(function (key) {
+    if (key.indexOf('PMOS_ADD_CLIENT_SYNC_') !== 0) return false;
+    try {
+      const state = JSON.parse(entries[key]);
+      return state && (state.status === 'SCHEDULED' || state.status === 'RUNNING');
+    } catch (ignored) {
+      return false;
+    }
+  });
+}
+
 function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayers) {
   const id = String(customerId || '').trim();
   const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
@@ -332,10 +366,7 @@ function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayer
     addedMaintenanceCalendarSyncKey_(id),
     JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
   );
-  ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
-    .timeBased().after(1000).create();
-  ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
-    .timeBased().after(7 * 60 * 1000).create();
+  ensureAddedMaintenanceCalendarSyncTrigger_();
 }
 
 function runAddedMaintenanceCustomerCalendarSyncWorker_() {
@@ -361,7 +392,12 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     }).filter(Boolean).sort(function (left, right) {
       return String(left.state.createdAt || '').localeCompare(String(right.state.createdAt || ''));
     });
-    if (!pending.length) return;
+    if (!pending.length) {
+      if (!hasActiveAddedMaintenanceCalendarSync_(properties)) {
+        deleteAddedMaintenanceCalendarSyncTriggers_();
+      }
+      return;
+    }
     item = pending[0];
     state = item.state;
     state.status = 'RUNNING';
@@ -409,6 +445,11 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     state.updatedAt = new Date().toISOString();
   }
   properties.setProperty(item.key, JSON.stringify(state));
+  if (hasActiveAddedMaintenanceCalendarSync_(properties)) {
+    ensureAddedMaintenanceCalendarSyncTrigger_();
+  } else {
+    deleteAddedMaintenanceCalendarSyncTriggers_();
+  }
 }
 
 function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
@@ -426,8 +467,7 @@ function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
     state.error = 'The previous execution window ended. PMOS scheduled an automatic continuation.';
     state.updatedAt = new Date().toISOString();
     properties.setProperty(key, JSON.stringify(state));
-    ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
-      .timeBased().after(1000).create();
+    ensureAddedMaintenanceCalendarSyncTrigger_();
   }
   return state;
 }
