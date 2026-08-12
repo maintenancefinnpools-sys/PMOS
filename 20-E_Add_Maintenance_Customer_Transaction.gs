@@ -128,22 +128,104 @@ function createMaintenanceCustomer(input) {
 function createMaintenanceCustomerAndAutoSync(input) {
   const result = createMaintenanceCustomer(input);
   try {
-    const sync = synchronizeAddedMaintenanceCustomerCalendar_(
+    scheduleAddedMaintenanceCustomerCalendarSync_(
       result.customerId,
       result.routeRows.map(function (row) { return row.layer; })
     );
-    result.calendarStatus = 'SYNCHRONIZED';
-    result.calendarSync = sync;
-    result.summary += '\nCalendar synchronized automatically: ' +
-      Number(sync.created || 0) + ' created, ' +
-      Number(sync.updated || sync.adjusted || 0) + ' updated.';
+    result.calendarStatus = 'SCHEDULED';
+    result.summary += '\nAutomatic Calendar synchronization is scheduled in the background.';
   } catch (error) {
     result.calendarStatus = 'SYNC_ERROR';
     result.calendarError = String(error && error.message ? error.message : error);
-    result.summary += '\n\nThe customer was saved, but automatic Calendar Sync stopped safely:\n' +
+    result.summary += '\n\nThe customer was saved, but automatic Calendar Sync could not be scheduled:\n' +
       result.calendarError + '\nUse Retry Calendar Sync; do not add the customer again.';
   }
   return result;
+}
+
+function addedMaintenanceCalendarSyncKey_(customerId) {
+  return 'PMOS_ADD_CLIENT_SYNC_' + String(customerId || '').trim();
+}
+
+function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayers) {
+  const id = String(customerId || '').trim();
+  const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
+    return String(layer || '').trim();
+  }).filter(Boolean)));
+  if (!id || !layers.length) {
+    throw new Error('Automatic Calendar Sync could not be scheduled without the saved customer and route layers.');
+  }
+  const now = new Date().toISOString();
+  PropertiesService.getDocumentProperties().setProperty(
+    addedMaintenanceCalendarSyncKey_(id),
+    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', createdAt: now, updatedAt: now, attempts: 0})
+  );
+  ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
+    .timeBased().after(1000).create();
+}
+
+function runAddedMaintenanceCustomerCalendarSyncWorker_() {
+  const claimLock = LockService.getScriptLock();
+  if (!claimLock.tryLock(5000)) return;
+  const properties = PropertiesService.getDocumentProperties();
+  let item;
+  let state;
+  try {
+    const entries = properties.getProperties();
+    const prefix = 'PMOS_ADD_CLIENT_SYNC_';
+    const pending = Object.keys(entries).map(function (key) {
+      if (key.indexOf(prefix) !== 0) return null;
+      try {
+        const candidate = JSON.parse(entries[key]);
+        return candidate && candidate.status === 'SCHEDULED' ? {key: key, state: candidate} : null;
+      } catch (ignored) {
+        return null;
+      }
+    }).filter(Boolean).sort(function (left, right) {
+      return String(left.state.createdAt || '').localeCompare(String(right.state.createdAt || ''));
+    });
+    if (!pending.length) return;
+    item = pending[0];
+    state = item.state;
+    state.status = 'RUNNING';
+    state.startedAt = new Date().toISOString();
+    state.updatedAt = state.startedAt;
+    state.attempts = Number(state.attempts || 0) + 1;
+    delete state.error;
+    properties.setProperty(item.key, JSON.stringify(state));
+  } finally {
+    claimLock.releaseLock();
+  }
+  try {
+    const result = synchronizeAddedMaintenanceCustomerCalendar_(state.customerId, state.affectedLayers);
+    state.status = 'COMPLETE';
+    state.result = result;
+    state.completedAt = new Date().toISOString();
+    state.updatedAt = state.completedAt;
+  } catch (error) {
+    state.status = 'ERROR';
+    state.error = String(error && error.message ? error.message : error);
+    state.updatedAt = new Date().toISOString();
+  }
+  properties.setProperty(item.key, JSON.stringify(state));
+}
+
+function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
+  const id = String(customerId || '').trim();
+  if (!id) throw new Error('Calendar Sync status is missing the saved Customer ID.');
+  const properties = PropertiesService.getDocumentProperties();
+  const key = addedMaintenanceCalendarSyncKey_(id);
+  const raw = properties.getProperty(key);
+  if (!raw) return {status: 'NOT_FOUND', customerId: id};
+  const state = JSON.parse(raw);
+  if (state.status === 'RUNNING' && state.startedAt &&
+      Date.now() - new Date(state.startedAt).getTime() > 7 * 60 * 1000) {
+    state.status = 'ERROR';
+    state.error = 'The background Calendar worker exceeded its execution window. Use Retry Calendar Sync; do not add the customer again.';
+    state.updatedAt = new Date().toISOString();
+    properties.setProperty(key, JSON.stringify(state));
+  }
+  return state;
 }
 
 function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers) {
@@ -232,10 +314,8 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
 
 function retryAddedMaintenanceCustomerCalendar(input) {
   input = input || {};
-  return synchronizeAddedMaintenanceCustomerCalendar_(
-    input.customerId,
-    input.affectedLayers || []
-  );
+  scheduleAddedMaintenanceCustomerCalendarSync_(input.customerId, input.affectedLayers || []);
+  return {status: 'SCHEDULED', customerId: String(input.customerId || '').trim()};
 }
 
 function normalizeMaintenanceCustomerRequest_(input) {
