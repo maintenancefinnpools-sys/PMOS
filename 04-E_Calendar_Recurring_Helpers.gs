@@ -92,17 +92,57 @@ function updateRecurringSeries_(series, plan, calendar) {
       plan.start.getHours(), plan.start.getMinutes(),
       plan.start.getSeconds(), plan.start.getMilliseconds()
     );
-    event.setTitle(plan.title);
-    event.setDescription(description);
-    event.setLocation(plan.location || '');
-    event.setTime(desiredStart, new Date(desiredStart.getTime() + duration));
-    applyPmosRecurringSeriesIdentity_(event, plan);
-    if (plan.color) event.setColor(plan.color);
+    const desiredEnd = new Date(desiredStart.getTime() + duration);
+    if (String(event.getTitle() || '') !== String(plan.title || '')) {
+      event.setTitle(plan.title);
+    }
+    if (normalizePmosCalendarDescriptionForWrite_(event.getDescription()) !==
+        normalizePmosCalendarDescriptionForWrite_(description)) {
+      event.setDescription(description);
+    }
+    if (String(event.getLocation() || '') !== String(plan.location || '')) {
+      event.setLocation(plan.location || '');
+    }
+    if (existingStart.getTime() !== desiredStart.getTime() ||
+        event.getEndTime().getTime() !== desiredEnd.getTime()) {
+      event.setTime(desiredStart, desiredEnd);
+    }
+    applyPmosRecurringSeriesIdentityIfChanged_(event, plan);
+    if (plan.color && String(event.getColor() || '') !== String(plan.color)) {
+      event.setColor(plan.color);
+    }
   });
 
   // Preserve discoverability on the recurring-series parent without changing
   // its recurrence rule or rewriting historical occurrence content.
-  applyPmosRecurringSeriesIdentity_(series, plan);
+  applyPmosRecurringSeriesIdentityIfChanged_(series, plan);
+}
+
+function normalizePmosCalendarDescriptionForWrite_(value) {
+  return String(value || '').replace(/\r\n?/g, '\n').trim();
+}
+
+function applyPmosRecurringSeriesIdentityIfChanged_(series, plan) {
+  setPmosCalendarTagIfChanged_(series, 'PMOS_MANAGED', 'true');
+  setPmosCalendarTagIfChanged_(series, 'PMOS_EVENT_TYPE', 'RECURRING_ROUTE');
+  setPmosCalendarTagIfChanged_(series, 'PMOS_SERIES_KEY', plan.seriesKey);
+  setPmosCalendarTagIfChanged_(series, 'PMOS_CUSTOMER_ID', plan.customerId || '');
+  if (plan.objectId) {
+    setPmosCalendarTagIfChanged_(series, 'PMOS_OBJECT_ID', plan.objectId);
+  }
+  if (plan.currentVersion) {
+    setPmosCalendarTagIfChanged_(
+      series, 'PMOS_OBJECT_VERSION', String(plan.currentVersion)
+    );
+  }
+}
+
+function setPmosCalendarTagIfChanged_(event, key, value) {
+  let existing = null;
+  try { existing = event.getTag(key); } catch (error) {}
+  if (String(existing == null ? '' : existing) !== String(value || '')) {
+    event.setTag(key, String(value || ''));
+  }
 }
 
 function applyPmosRecurringSeriesIdentity_(series, plan) {
