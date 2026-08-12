@@ -71,7 +71,12 @@ function validateReviewedCalendarSyncPreflightOperation_(operation, calendar) {
   if (action === String(PMOS_OPERATION.UPDATE).toUpperCase()) {
     const seriesId = String(current.seriesId || current.id || payload.seriesId || '').trim();
     if (!desired.seriesKey || !seriesId) throw new Error('UPDATE is missing its desired series key or current series ID.');
-    if (!calendar.getEventSeriesById(seriesId)) throw new Error('UPDATE series could not be reloaded from the configured Calendar.');
+    // buildValidatedPmosCalendarSyncPlan_() has already read and reconciled the
+    // live Calendar state immediately before this preflight. Reloading every
+    // series here performs one remote Calendar request per UPDATE (often more
+    // than 200 calls) and can exhaust the Apps Script execution limit before
+    // the durable queue is written. The resumable executor still resolves and
+    // verifies this exact series ID transactionally before applying the update.
     return;
   }
   if (action === String(PMOS_OPERATION.DELETE).toUpperCase()) {
