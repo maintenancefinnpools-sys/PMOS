@@ -97,13 +97,6 @@ function createMaintenanceCustomer(input) {
 
     SpreadsheetApp.flush();
 
-    const refresh = synchronizeCustomerDatabase_(true);
-    const customerRefresh = [
-      Number(refresh && refresh.routeRowsUpdated || 0) + ' route row(s) refreshed',
-      Number(refresh && refresh.routeRowsCreated || 0) + ' route row(s) created',
-      Number(refresh && refresh.routeRowsRemoved || 0) + ' duplicate/orphan row(s) removed'
-    ].join('; ') + '.';
-
     if (typeof clearPmosCalendarAuditSnapshot_ === 'function') {
       clearPmosCalendarAuditSnapshot_();
     }
@@ -133,7 +126,7 @@ function createMaintenanceCustomer(input) {
         'Route placement: ' + routeRows.map(function (row) {
           return row.layer + ', stop ' + row.stop;
         }).join('; '),
-        customerRefresh,
+        'Customer and route-template records saved.',
         '',
         'Starting automatic Calendar synchronization.'
       ].join('\n')
@@ -291,10 +284,12 @@ function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayer
   const now = new Date().toISOString();
   PropertiesService.getDocumentProperties().setProperty(
     addedMaintenanceCalendarSyncKey_(id),
-    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0})
+    JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
   );
   ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
     .timeBased().after(1000).create();
+  ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
+    .timeBased().after(7 * 60 * 1000).create();
 }
 
 function runAddedMaintenanceCustomerCalendarSyncWorker_() {
@@ -310,7 +305,10 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
       if (key.indexOf(prefix) !== 0) return null;
       try {
         const candidate = JSON.parse(entries[key]);
-        return candidate && candidate.status === 'SCHEDULED' ? {key: key, state: candidate} : null;
+        const staleRunning = candidate && candidate.status === 'RUNNING' &&
+          candidate.startedAt && Date.now() - new Date(candidate.startedAt).getTime() > 6.5 * 60 * 1000;
+        return candidate && (candidate.status === 'SCHEDULED' || staleRunning)
+          ? {key: key, state: candidate} : null;
       } catch (ignored) {
         return null;
       }
@@ -331,6 +329,18 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
     claimLock.releaseLock();
   }
   try {
+    if (!state.refreshComplete) {
+      state.phase = 'CUSTOMER_REFRESH';
+      state.progress = 8;
+      state.updatedAt = new Date().toISOString();
+      properties.setProperty(item.key, JSON.stringify(state));
+      synchronizeCustomerDatabase_(true);
+      state.refreshComplete = true;
+      state.progress = 15;
+      state.updatedAt = new Date().toISOString();
+      properties.setProperty(item.key, JSON.stringify(state));
+    }
+    state.phase = 'CALENDAR_SYNC';
     const result = synchronizeAddedMaintenanceCustomerCalendar_(
       state.customerId,
       state.affectedLayers,
@@ -364,11 +374,14 @@ function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
   if (!raw) return {status: 'NOT_FOUND', customerId: id};
   const state = JSON.parse(raw);
   if (state.status === 'RUNNING' && state.startedAt &&
-      Date.now() - new Date(state.startedAt).getTime() > 7 * 60 * 1000) {
-    state.status = 'ERROR';
-    state.error = 'The background Calendar worker exceeded its execution window. Use Retry Calendar Sync; do not add the customer again.';
+      Date.now() - new Date(state.startedAt).getTime() > 6.5 * 60 * 1000) {
+    state.status = 'SCHEDULED';
+    state.phase = state.refreshComplete ? 'CALENDAR_SYNC' : 'CUSTOMER_REFRESH';
+    state.error = 'The previous execution window ended. PMOS scheduled an automatic continuation.';
     state.updatedAt = new Date().toISOString();
     properties.setProperty(key, JSON.stringify(state));
+    ScriptApp.newTrigger('runAddedMaintenanceCustomerCalendarSyncWorker_')
+      .timeBased().after(1000).create();
   }
   return state;
 }
@@ -511,6 +524,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
   const equipmentFields = [
     'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
     'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
+    'cartridgeSetNumber',
     'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
     'robotType', 'sanitizerType', 'connectedToAutomation', 'actuatorMake',
     'actuatorModel', 'actuatorModelNumber', 'actuatorQuantity', 'filterType', 'filterSize',
@@ -538,7 +552,8 @@ function normalizeMaintenanceCustomerRequest_(input) {
             const componentTypes = {PUMP: true, FILTER: true, HEATER: true, OTHER: true};
             const componentFields = [
               'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake',
-              'filterType', 'filterModel', 'filterSize', 'heaterType', 'heaterMake',
+              'filterType', 'filterModel', 'filterSize', 'cartridgeSetNumber',
+              'heaterType', 'heaterMake',
               'heaterModel', 'heaterModelNumber', 'featureEquipmentType',
               'featureEquipmentMake', 'featureEquipmentModel'
             ];
@@ -595,7 +610,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
         make: cleanEquipmentText(source.filter && source.filter.make),
         model: cleanEquipmentText(source.filter && (
           source.filter.model || source.filter.size
-        ))
+        )),
+        cartridgeSetNumber: cleanEquipmentText(
+          source.filter && source.filter.cartridgeSetNumber
+        )
       },
       heater: {
         type: cleanEquipmentText(source.heater && source.heater.type),
@@ -748,7 +766,13 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
   const equipmentSummary = request.bodiesOfWater.map(function (body) {
     const bodyPump = [body.pump.make, body.pump.model, body.pump.modelNumber]
       .filter(Boolean).join(' · ');
-    const bodyFilter = [body.filter.make, body.filter.type, body.filter.model || body.filter.size]
+    const bodyFilter = [
+      body.filter.make,
+      body.filter.type,
+      body.filter.model || body.filter.size,
+      body.filter.cartridgeSetNumber
+        ? 'Replacement set # ' + body.filter.cartridgeSetNumber : ''
+    ]
       .filter(Boolean).join(' · ');
     const bodyHeater = [body.heater.type, body.heater.make,
       body.heater.model, body.heater.modelNumber]
