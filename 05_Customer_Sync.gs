@@ -161,7 +161,9 @@ function synchronizeCustomerDatabase_(markPending) {
     );
   }
 
-  sortMaintenanceCustomersAlphabetically_(getCustomersSheet_());
+  const customersSheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!customersSheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
+  sortMaintenanceCustomersAlphabetically_(customersSheet);
 
   return {
     idsCreated,
@@ -174,7 +176,8 @@ function synchronizeCustomerDatabase_(markPending) {
 }
 
 function backfillPmosCustomerNameColumns_() {
-  const sheet = getCustomersSheet_();
+  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!sheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
   let table = readPmosHeaderTable_(sheet);
   ensureMaintenanceClientHeaders_(sheet, table, ['First Name', 'Last Name']);
   table = readPmosHeaderTable_(sheet);
