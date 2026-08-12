@@ -57,34 +57,52 @@ function createRecurringSeries_(calendar, plan) {
   return series;
 }
 
-function updateRecurringSeries_(series, plan) {
-  // An UPDATE must never move an established recurring-series anchor forward.
-  // Doing so causes Google Calendar to remove occurrences before the new
-  // anchor. Keep the existing anchor and only change its route time/duration.
-  try {
-    const existingStart = series.getStartTime();
-    if (
-      existingStart instanceof Date && Number.isFinite(existingStart.getTime()) &&
-      plan.start instanceof Date && Number.isFinite(plan.start.getTime()) &&
-      plan.start.getTime() > existingStart.getTime()
-    ) {
-      const duration = Math.max(60000, plan.end.getTime() - plan.start.getTime());
-      const desiredTime = new Date(plan.start.getTime());
-      plan.start = new Date(existingStart.getTime());
-      plan.start.setHours(
-        desiredTime.getHours(), desiredTime.getMinutes(),
-        desiredTime.getSeconds(), desiredTime.getMilliseconds()
-      );
-      plan.end = new Date(plan.start.getTime() + duration);
-      plan.signature = recurringSeriesSignature_(plan);
-    }
-  } catch (ignored) {}
-  series.setTitle(plan.title);
-  series.setDescription(buildPmosManagedRecurringDescription_(plan));
-  series.setLocation(plan.location);
-  series.setRecurrence(buildFourWeekRecurrence_(plan), plan.start, plan.end);
+function updateRecurringSeries_(series, plan, calendar) {
+  if (!calendar || typeof calendar.getEvents !== 'function') {
+    throw new Error('Recurring-series UPDATE requires its owning Calendar.');
+  }
+  const seriesId = String(series && series.getId ? series.getId() : '').trim();
+  if (!seriesId) throw new Error('Recurring-series UPDATE is missing its Calendar series ID.');
+  if (!(plan.start instanceof Date) || !Number.isFinite(plan.start.getTime()) ||
+      !(plan.end instanceof Date) || !Number.isFinite(plan.end.getTime())) {
+    throw new Error('Recurring-series UPDATE has invalid desired times.');
+  }
+
+  // setRecurrence() rebuilds the whole series and can alter or duplicate past
+  // occurrences. PMOS history is immutable: update only today's and future
+  // instances while retaining the managed recurring-series identity.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const desiredFirstDay = new Date(plan.start.getTime());
+  desiredFirstDay.setHours(0, 0, 0, 0);
+  const updateStart = desiredFirstDay.getTime() > today.getTime()
+    ? desiredFirstDay : today;
+  const updateEnd = plan.until instanceof Date && Number.isFinite(plan.until.getTime())
+    ? new Date(plan.until.getTime())
+    : new Date(updateStart.getTime() + 370 * 24 * 60 * 60 * 1000);
+  updateEnd.setHours(23, 59, 59, 999);
+  const duration = Math.max(60000, plan.end.getTime() - plan.start.getTime());
+  const description = buildPmosManagedRecurringDescription_(plan);
+
+  calendar.getEvents(updateStart, updateEnd).forEach(function(event) {
+    if (readPmosCalendarEventSeriesId_(event) !== seriesId) return;
+    const existingStart = event.getStartTime();
+    const desiredStart = new Date(existingStart.getTime());
+    desiredStart.setHours(
+      plan.start.getHours(), plan.start.getMinutes(),
+      plan.start.getSeconds(), plan.start.getMilliseconds()
+    );
+    event.setTitle(plan.title);
+    event.setDescription(description);
+    event.setLocation(plan.location || '');
+    event.setTime(desiredStart, new Date(desiredStart.getTime() + duration));
+    applyPmosRecurringSeriesIdentity_(event, plan);
+    if (plan.color) event.setColor(plan.color);
+  });
+
+  // Preserve discoverability on the recurring-series parent without changing
+  // its recurrence rule or rewriting historical occurrence content.
   applyPmosRecurringSeriesIdentity_(series, plan);
-  if (plan.color) series.setColor(plan.color);
 }
 
 function applyPmosRecurringSeriesIdentity_(series, plan) {
