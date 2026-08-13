@@ -12,6 +12,7 @@ function showTemporaryVisitScheduler() {
   <style>
     body{font-family:Arial,sans-serif;padding:18px;color:#1f2937}h2{margin:0 0 6px}.muted{font-size:13px;color:#6b7280;margin-bottom:14px}
     label{display:block;font-weight:600;margin:10px 0 4px}input,textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:7px}
+    .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .addressWrap{position:relative}.addressList{display:none;position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:20;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 24px rgba(15,23,42,.15);max-height:220px;overflow-y:auto}.addressOption{display:block;width:100%;text-align:left;background:#fff;color:#1f2937;border:0;border-bottom:1px solid #e5e7eb;border-radius:0;padding:10px}.addressOption:last-child{border-bottom:0}.addressOption:hover,.addressOption.active{background:#eff6ff}.addressStatus,.addressDetails{display:none;margin-top:6px;padding:8px 10px;border-radius:7px;font-size:12px}.addressStatus{background:#dbeafe;color:#1e40af}.addressDetails{background:#dcfce7;color:#166534}
     textarea{min-height:72px;resize:vertical}.visitCard{border:1px solid #d1d5db;border-radius:10px;padding:12px;margin:9px 0;background:#fff}
     .visitHead{display:flex;justify-content:space-between;align-items:center;gap:8px}.visitTitle{font-weight:700}.visitGrid{display:grid;grid-template-columns:1fr 120px;gap:10px}
@@ -24,20 +25,20 @@ function showTemporaryVisitScheduler() {
 <body>
   <h2>Schedule Temporary Maintenance Visits</h2>
   <div class="muted">Choose a complete service address to calculate the three best GPS route placements. After choosing a date, PMOS recommends the stop position for that date.</div>
-  <label>Calendar title / surname</label><input id="titleInput" placeholder="Example: Smith">
-  <label>Full name</label><input id="fullNameInput" placeholder="Optional">
   <label>Service address</label><div class="addressWrap"><input id="addressInput" placeholder="Begin typing address" autocomplete="off"><div id="addressList" class="addressList"></div></div>
   <div id="addressStatus" class="addressStatus"></div><div id="addressDetails" class="addressDetails"></div>
+  <div class="twoCol"><label>Last Name (Calendar Title)<input id="lastNameInput" placeholder="Example: Smith"></label><label>First Name<input id="firstNameInput" placeholder="Example: Sam"></label></div>
+  <div class="twoCol"><label>Phone Number<input id="phoneInput" placeholder="Optional"></label><label>Email (optional)<input id="emailInput" type="email" placeholder="name@example.com"></label></div>
+  <label>Customer Notes</label><textarea id="customerNotesInput" placeholder="Customer preferences or service notes..."></textarea>
+  <label>Entry Information</label><textarea id="entryInformationInput" placeholder="Gate code, access details, special instructions..."></textarea>
   <div id="dateSuggestions" class="dateSuggestions"></div>
-  <label>Phone</label><input id="phoneInput" placeholder="Optional">
   <label>Visit dates</label><div id="visitsContainer"></div>
   <button id="addVisitButton" type="button" class="secondary small">+ Add Another Visit</button>
-  <label>Entry instructions / notes</label><textarea id="notesInput" placeholder="Gate code, access details, special instructions..."></textarea>
   <div class="buttons"><button id="scheduleButton" type="button" class="primary">Schedule Visit(s)</button><button id="closeButton" type="button" class="secondary">Close</button></div>
   <div id="statusBox" class="status"></div>
 <script>
 (function(){
-  var titleInput=document.getElementById('titleInput'),fullNameInput=document.getElementById('fullNameInput'),addressInput=document.getElementById('addressInput'),addressList=document.getElementById('addressList'),addressStatus=document.getElementById('addressStatus'),addressDetails=document.getElementById('addressDetails'),phoneInput=document.getElementById('phoneInput'),visitsContainer=document.getElementById('visitsContainer'),notesInput=document.getElementById('notesInput'),statusBox=document.getElementById('statusBox'),dateSuggestions=document.getElementById('dateSuggestions'),scheduleButton=document.getElementById('scheduleButton'),addVisitButton=document.getElementById('addVisitButton');
+  var lastNameInput=document.getElementById('lastNameInput'),firstNameInput=document.getElementById('firstNameInput'),addressInput=document.getElementById('addressInput'),addressList=document.getElementById('addressList'),addressStatus=document.getElementById('addressStatus'),addressDetails=document.getElementById('addressDetails'),phoneInput=document.getElementById('phoneInput'),emailInput=document.getElementById('emailInput'),customerNotesInput=document.getElementById('customerNotesInput'),entryInformationInput=document.getElementById('entryInformationInput'),visitsContainer=document.getElementById('visitsContainer'),statusBox=document.getElementById('statusBox'),dateSuggestions=document.getElementById('dateSuggestions'),scheduleButton=document.getElementById('scheduleButton'),addVisitButton=document.getElementById('addVisitButton');
   var visitCounter=0,placementTimer=null,requestSequence=0,dateRequestSequence=0;
   var searchOffset=0,allDateOptions=[],batchDateOptions=[],lastQualityMessage='',batchCompleted=0,batchTotal=0,batchErrors=0,selectedAddress=null,addressTimer=null,addressSequence=0,addressOptions=[],addressActive=-1;
 
@@ -97,8 +98,8 @@ function showTemporaryVisitScheduler() {
     })(dayIndex);
   }
   function selectRecommendedDate(date){var cards=visitsContainer.querySelectorAll('.visitCard'),target=null;for(var i=0;i<cards.length;i++){if(!cards[i].querySelector('.visitDate').value){target=cards[i];break;}}if(!target)target=addVisit('');target.querySelector('.visitDate').value=date;target.setAttribute('data-manual','false');queuePlacementSuggestions();}
-  function payload(){var cards=visitsContainer.querySelectorAll('.visitCard'),visits=[];for(var i=0;i<cards.length;i++){var date=cards[i].querySelector('.visitDate').value;if(date)visits.push({date:date,stopPosition:Number(cards[i].querySelector('.visitStop').value||1)});}return{title:titleInput.value.trim(),fullName:fullNameInput.value.trim(),address:addressInput.value.trim(),addressVerified:!!selectedAddress,addressDetails:selectedAddress,phone:phoneInput.value.trim(),visits:visits,dates:visits.map(function(v){return v.date;}),notes:notesInput.value.trim()};}
-  function resetForm(){titleInput.value='';fullNameInput.value='';addressInput.value='';phoneInput.value='';notesInput.value='';visitsContainer.innerHTML='';dateSuggestions.style.display='none';dateSuggestions.innerHTML='';selectedAddress=null;closeAddressList();showAddressStatus('');addressDetails.style.display='none';addressDetails.textContent='';visitCounter=0;searchOffset=0;allDateOptions=[];batchDateOptions=[];lastQualityMessage='';batchCompleted=0;batchTotal=0;batchErrors=0;addVisit('');addressInput.focus();}
+  function payload(){var cards=visitsContainer.querySelectorAll('.visitCard'),visits=[],firstName=firstNameInput.value.trim(),lastName=lastNameInput.value.trim();for(var i=0;i<cards.length;i++){var date=cards[i].querySelector('.visitDate').value;if(date)visits.push({date:date,stopPosition:Number(cards[i].querySelector('.visitStop').value||1)});}return{title:lastName,firstName:firstName,lastName:lastName,fullName:[firstName,lastName].filter(Boolean).join(' '),address:addressInput.value.trim(),addressVerified:!!selectedAddress,addressDetails:selectedAddress,phone:phoneInput.value.trim(),email:emailInput.value.trim(),customerNotes:customerNotesInput.value.trim(),entryInformation:entryInformationInput.value.trim(),visits:visits,dates:visits.map(function(v){return v.date;}),notes:[customerNotesInput.value.trim(),entryInformationInput.value.trim()].filter(Boolean).join('\\n\\n')};}
+  function resetForm(){lastNameInput.value='';firstNameInput.value='';addressInput.value='';phoneInput.value='';emailInput.value='';customerNotesInput.value='';entryInformationInput.value='';visitsContainer.innerHTML='';dateSuggestions.style.display='none';dateSuggestions.innerHTML='';selectedAddress=null;closeAddressList();showAddressStatus('');addressDetails.style.display='none';addressDetails.textContent='';visitCounter=0;searchOffset=0;allDateOptions=[];batchDateOptions=[];lastQualityMessage='';batchCompleted=0;batchTotal=0;batchErrors=0;addVisit('');addressInput.focus();}
   function scheduleVisits(){var data=payload();if(!data.title){showStatus('Enter a Calendar title or surname.','error');return;}if(!data.addressVerified){showStatus('Choose a complete service address from the suggestions.','error');return;}if(!data.visits.length){showStatus('Choose at least one visit date.','error');return;}setBusy(true);showStatus('Creating '+data.visits.length+' temporary visit(s) and restaggering the selected route(s)…','');google.script.run.withSuccessHandler(function(result){setBusy(false);showStatus(result.created+' temporary visit(s) created.\\n'+result.adjusted+' event time(s) adjusted.\\n\\nReady for the next customer.','success');resetForm();setTimeout(function(){statusBox.style.display='none';},3000);}).withFailureHandler(function(error){setBusy(false);showStatus('Unable to schedule visits:\\n'+(error&&error.message?error.message:String(error)),'error');}).scheduleTemporaryVisits(data);}
   addVisitButton.addEventListener('click',function(){addVisit('');});scheduleButton.addEventListener('click',scheduleVisits);document.getElementById('closeButton').addEventListener('click',function(){google.script.host.close();});addressInput.addEventListener('input',queueAddressSuggestions);addressInput.addEventListener('keydown',function(event){if(addressList.style.display!=='block')return;if(event.key==='ArrowDown'){event.preventDefault();setAddressActive(addressActive+1);}else if(event.key==='ArrowUp'){event.preventDefault();setAddressActive(addressActive-1);}else if(event.key==='Enter'&&addressActive>=0){event.preventDefault();selectAddressOption(addressActive);}else if(event.key==='Escape'){closeAddressList();}});document.addEventListener('mousedown',function(event){if(!event.target.closest('.addressWrap'))closeAddressList();});google.script.run.preparePmosAddressSuggestions();addVisit('');addressInput.focus();
 })();
@@ -301,8 +302,19 @@ function buildTemporaryVisitDescription_(payload) {
     lines.push(`Phone: ${payload.phone}`);
   }
 
+  if (payload.email) {
+    lines.push(`Email: ${payload.email}`);
+  }
 
-  if (payload.notes) {
+  if (payload.customerNotes) {
+    lines.push('', 'Customer Notes:', String(payload.customerNotes));
+  }
+
+  if (payload.entryInformation) {
+    lines.push('', 'Entry Information:', String(payload.entryInformation));
+  }
+
+  if (!payload.customerNotes && !payload.entryInformation && payload.notes) {
     lines.push('', String(payload.notes));
   }
 
