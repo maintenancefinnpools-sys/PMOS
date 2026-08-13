@@ -12,6 +12,15 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
   const missingRegistrySeries = [];
   const seenSeriesIdentities = {};
   const registeredSeriesKeys = {};
+  const observedEventBySeriesKey = {};
+
+  // Registry rows own identity, but a real occurrence owns the live Calendar
+  // fields used to decide whether the Calendar actually needs to be written.
+  (state.events || []).forEach(function (event) {
+    if (event.eventType !== PMOS_CALENDAR_EVENT_TYPE.RECURRING_ROUTE) return;
+    const key = String(event.seriesKey || '').trim();
+    if (key && !observedEventBySeriesKey[key]) observedEventBySeriesKey[key] = event;
+  });
 
   (state.registeredSeries || []).forEach(function (observed) {
     const key = String(observed.seriesKey || '').trim();
@@ -28,14 +37,11 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
       return;
     }
 
-    // A registered series key is the authoritative identity. Google Calendar
-    // may expose the same series ID in different forms when it is read through
-    // the registry and through an occurrence. Keep one canonical current record
-    // for the registered key rather than manufacturing a planner duplicate.
     if (registeredSeriesKeys[key]) return;
     registeredSeriesKeys[key] = true;
 
     const record = registryRecords[key] || observed;
+    const live = observedEventBySeriesKey[key] || null;
     const seriesId = String(observed.seriesId || record.seriesId || '').trim();
     const identity = key + '::' + seriesId;
     seenSeriesIdentities[identity] = true;
@@ -46,14 +52,17 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
       customerId: String(record.customerId || observed.customerId || ''),
       layer: String(record.layer || observed.layer || ''),
       calendarName: String(state.calendarName || record.calendarName || ''),
-      title: String(observed.actualTitle || ''),
-      description: String(observed.actualDescription || ''),
-      location: String(observed.actualLocation || ''),
+      title: String(live && live.title || observed.actualTitle || ''),
+      start: String(live && live.start || ''),
+      end: String(live && live.end || ''),
+      description: String(live && live.description || observed.actualDescription || ''),
+      location: String(live && live.location || observed.actualLocation || ''),
       signature: String(record.signature || observed.signature || ''),
       status: String(record.status || observed.status || ''),
       metadata: {
         verifiedState: PMOS_CALENDAR_STATE.REGISTERED_PRESENT,
-        registryRow: Number(record.row || 0)
+        registryRow: Number(record.row || 0),
+        liveOccurrenceVerified: Boolean(live)
       }
     });
   });
@@ -64,10 +73,6 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
     const key = String(event.seriesKey || '').trim();
     const seriesId = String(event.seriesId || '').trim();
     if (!key || !seriesId) return;
-
-    // The registered record above already represents this managed series. Do
-    // not add its event-snapshot representation a second time merely because
-    // Google returned a differently formatted series ID.
     if (registeredSeriesKeys[key]) return;
 
     const identity = key + '::' + seriesId;
@@ -90,7 +95,8 @@ function buildVerifiedPmosCalendarSeriesState_(currentState, registry) {
       status: 'Calendar Only',
       metadata: {
         verifiedState: PMOS_CALENDAR_STATE.CALENDAR_ONLY,
-        eventId: String(event.eventId || '')
+        eventId: String(event.eventId || ''),
+        liveOccurrenceVerified: true
       }
     });
   });
