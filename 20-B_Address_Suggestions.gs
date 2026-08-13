@@ -2,15 +2,16 @@
  * GraphHopper-only live address suggestions shared by PMOS forms.
  * Google is used separately after selection to confirm the canonical address.
  */
-function suggestPmosAddresses(query, limit) {
+function suggestPmosAddresses(query, limit, preferGoogle) {
   const text = String(query || '').trim();
   const maximum = Math.max(1, Math.min(10, Number(limit || 6)));
   if (text.length < 3) return [];
+  const googleFirst = preferGoogle === true;
 
   const normalizedQuery = normalizePmosAddressSearch_(text);
   const responseCache = CacheService.getScriptCache();
   const responseCacheKey = 'PMOS_ADDRESS_GH_GOOGLE_FALLBACK_V2_' + pmosAddressCacheDigest_(
-    normalizedQuery + '|' + maximum
+    normalizedQuery + '|' + maximum + '|' + (googleFirst ? 'GOOGLE_FIRST' : 'GRAPHHOPPER_FIRST')
   );
   const cachedResponse = responseCache.get(responseCacheKey);
   if (cachedResponse) {
@@ -19,6 +20,16 @@ function suggestPmosAddresses(query, limit) {
   const candidates = [];
   const seen = {};
   const anchor = getPmosAddressSearchAnchor_();
+  if (googleFirst) {
+    try {
+      const confirmed = resolvePmosAddressSuggestion(text);
+      const output = [confirmed];
+      responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
+      return output;
+    } catch (ignored) {
+      return [];
+    }
+  }
   let graphHopperResults = [];
   let graphHopperError = null;
   try {
