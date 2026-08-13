@@ -6,6 +6,7 @@
 function synchronizeCustomerDatabase_(markPending) {
   ensureSupportSheets_();
   const idsCreated = ensureCustomerIds_();
+  const namesBackfilled = backfillPmosCustomerNameColumns_();
   ensureRouteCustomerIdColumn_();
 
   const customerLookup = getCustomerLookup_();
@@ -60,6 +61,9 @@ function synchronizeCustomerDatabase_(markPending) {
 
     if (!customer) {
       const layer = String(values[index][layerCol] || '').trim();
+      const routeTitle = readPmosCustomerSyncRouteTitle_(
+        values[index], titleCol, mapLabelCol
+      );
       const fullName = fullNameCol >= 0
         ? String(values[index][fullNameCol] || '').trim() : '';
       if (layer && (routeId || routeTitle || fullName)) {
@@ -157,13 +161,109 @@ function synchronizeCustomerDatabase_(markPending) {
     );
   }
 
+  const customersSheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!customersSheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
+  sortMaintenanceCustomersAlphabetically_(customersSheet);
+
   return {
     idsCreated,
+    namesBackfilled,
     routeRowsUpdated,
     routeRowsRemoved,
     routeRowsCreated: creationResult.created,
     changedLayers: [...changedLayers]
   };
+}
+
+function backfillPmosCustomerNameColumns_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.CUSTOMERS_SHEET);
+  if (!sheet) throw new Error(`Missing sheet: ${PMOS.CUSTOMERS_SHEET}`);
+  let table = readPmosHeaderTable_(sheet);
+  ensureMaintenanceClientHeaders_(sheet, table, ['First Name', 'Last Name']);
+  table = readPmosHeaderTable_(sheet);
+
+  const firstNameIndex = findHeaderIndex_(table.headers, ['First Name']);
+  const lastNameIndex = findHeaderIndex_(table.headers, ['Last Name']);
+  const calendarTitleIndex = findHeaderIndex_(table.headers, ['Calendar Title']);
+  const fullNameIndex = findHeaderIndex_(table.headers, ['Full Name(s)', 'Full Name']);
+  const bodyRows = Math.max(0, sheet.getLastRow() - table.headerRow);
+  if (firstNameIndex < 0 || lastNameIndex < 0 || calendarTitleIndex < 0 || !bodyRows) {
+    return 0;
+  }
+
+  const values = sheet.getRange(
+    table.headerRow + 1,
+    1,
+    bodyRows,
+    sheet.getLastColumn()
+  ).getValues();
+  let changed = 0;
+  values.forEach(function(row) {
+    const calendarTitle = String(row[calendarTitleIndex] || '').trim();
+    if (!calendarTitle) return;
+    const parsed = parsePmosCustomerNames_(
+      calendarTitle,
+      fullNameIndex >= 0 ? row[fullNameIndex] : ''
+    );
+    let rowChanged = false;
+    if (!String(row[lastNameIndex] || '').trim() && parsed.lastName) {
+      row[lastNameIndex] = parsed.lastName;
+      rowChanged = true;
+    }
+    if (!String(row[firstNameIndex] || '').trim() && parsed.firstName) {
+      row[firstNameIndex] = parsed.firstName;
+      rowChanged = true;
+    }
+    if (rowChanged) changed++;
+  });
+  if (!changed) return 0;
+
+  sheet.getRange(table.headerRow + 1, firstNameIndex + 1, bodyRows, 1)
+    .setValues(values.map(function(row) { return [row[firstNameIndex]]; }));
+  sheet.getRange(table.headerRow + 1, lastNameIndex + 1, bodyRows, 1)
+    .setValues(values.map(function(row) { return [row[lastNameIndex]]; }));
+  return changed;
+}
+
+function parsePmosCustomerNames_(calendarTitle, fullName) {
+  const title = String(calendarTitle || '').trim();
+  const full = String(fullName || '').trim();
+  const qualifierMatch = title.match(/\s*\(([^()]*)\)\s*$/);
+  const qualifier = qualifierMatch ? String(qualifierMatch[1] || '').trim() : '';
+  const lastName = qualifierMatch
+    ? title.slice(0, qualifierMatch.index).trim()
+    : title;
+  if (qualifier) return {firstName: qualifier, lastName: lastName};
+  if (!full || !lastName) return {firstName: '', lastName: lastName};
+
+  const escapedLastName = escapePmosNamePattern_(lastName);
+  let firstName = full;
+  const suffixPattern = new RegExp('\\s+' + escapedLastName + '\\s*$', 'i');
+  const prefixPattern = new RegExp('^\\s*' + escapedLastName + '\\s*[,\\-–—:]\\s*', 'i');
+  if (suffixPattern.test(firstName)) {
+    firstName = firstName.replace(suffixPattern, '');
+  } else if (prefixPattern.test(firstName)) {
+    firstName = firstName.replace(prefixPattern, '');
+  } else if (lastName.indexOf('/') >= 0) {
+    lastName.split('/').map(function(value) { return value.trim(); }).filter(Boolean)
+      .forEach(function(surname) {
+        firstName = firstName.replace(
+          new RegExp('(^|\\s)' + escapePmosNamePattern_(surname) + '(?=\\s|$)', 'ig'),
+          '$1'
+        );
+      });
+  }
+  firstName = firstName
+    .replace(/\s*[/,;:\-–—]+\s*$/g, '')
+    .replace(/^\s*[/,;:\-–—]+\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (normalize_(firstName) === normalize_(full)) firstName = '';
+  return {firstName: firstName, lastName: lastName};
+}
+
+function escapePmosNamePattern_(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function readPmosCustomerSyncRouteTitle_(row, titleCol, mapLabelCol) {
@@ -476,6 +576,7 @@ function parseCustomerWeeks_(value, frequency) {
 function buildCustomerEntryInformation_(customer) {
   const lines = [];
 
+  if (customer['Entry Information']) lines.push(String(customer['Entry Information']));
   if (customer['Gate Code']) lines.push(`Gate code: ${customer['Gate Code']}`);
   if (customer['Lockbox Code']) lines.push(`Lockbox code: ${customer['Lockbox Code']}`);
   if (customer['Lockbox Location']) lines.push(`Lockbox: ${customer['Lockbox Location']}`);

@@ -335,6 +335,5 @@ function showChemistryCatalog() {
   ).setWidth(480).setHeight(300);
 
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Chemistry Catalog');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Chemistry Catalog');
 }
-

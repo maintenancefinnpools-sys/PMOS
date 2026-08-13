@@ -118,7 +118,7 @@ function showRouteManagerLink() {
       '<p><a href="' + url + '" target="_blank">Open Route Manager</a></p>' +
     '</div>'
   ).setWidth(360).setHeight(160);
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Route Manager');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Route Manager');
 }
 
 function exportAffectedMapLayers() {
@@ -277,10 +277,11 @@ function readRoutesInPhysicalOrder_() {
         phone: String(customer['Primary Phone'] || ''),
         secondaryPhone: String(customer['Secondary Phone'] || ''),
         email: String(customer.Email || ''),
+        serviceStartDate: customer['Service Start Date'] || customer['Start Date'] || '',
         sanitization: String(customer['Sanitization Type(s)'] || ''),
         automation: String(customer.Automation || ''),
-        yearRound: normalize_(customer['Year Round'] || customer.Season || '').includes('year round') ||
-          normalize_(customer['Year Round'] || '') === 'yes'
+        yearRound: normalize_(customer['Year Round'] || customer['Year-Round'] || customer.Season || '').includes('year round') ||
+          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
       };
     })
     .filter(function (row) { return row.layer && row.title; });

@@ -45,3 +45,8 @@ function ensureAppSettingsSheet_() {
 
   return sheet;
 }
+
+function openPmosAppSettings() {
+  const sheet = ensureAppSettingsSheet_();
+  SpreadsheetApp.getActive().setActiveSheet(sheet);
+}

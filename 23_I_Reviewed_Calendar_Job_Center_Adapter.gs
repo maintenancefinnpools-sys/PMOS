@@ -93,6 +93,7 @@ function getReviewedCalendarSyncJobCenterStatus_() {
     startedAt: String(detailed && detailed.startedAt || ''),
     updatedAt: String(detailed && detailed.updatedAt || ''),
     completedAt: String(detailed && detailed.completedAt || ''),
+    nextAttemptAt: String(detailed && detailed.nextAttemptAt || ''),
     reviewedQueue: true,
     canRetry: status === 'Paused on error'
   };
@@ -310,6 +311,9 @@ function buildReviewedCalendarJobCenterSummary_(state) {
   );
   if (state.currentOperation) lines.push('Current: ' + state.currentOperation);
   if (state.retries) lines.push('Retries: ' + Number(state.retries || 0));
+  if (state.nextAttemptAt) {
+    lines.push('Automatic retry: ' + String(state.nextAttemptAt));
+  }
   if (String(state.status || '') === 'Paused on error') {
     lines.push('Use Retry After Recovery after correcting the reported problem.');
   }

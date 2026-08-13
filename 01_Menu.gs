@@ -14,7 +14,7 @@ function onOpen() {
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Add Maintenance Customer', 'showAddMaintenanceClientV2')
+          .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
@@ -26,6 +26,11 @@ function onOpen() {
       .addItem('Route History', 'showRouteHistoryDialog')
       .addItem('Chemistry Catalog', 'showChemistryCatalog')
       .addItem('Feature Lab', 'showFeatureLab')
+      .addSubMenu(
+        SpreadsheetApp.getUi().createMenu('PMOS Settings')
+          .addItem('App Settings', 'openPmosAppSettings')
+          .addItem('Routing Settings', 'showPmosRoutingSettings')
+      )
       .addItem('Update Center', 'showUpdateCenter')
       .addItem('Update PMOS', 'updatePmos');
   }
@@ -57,7 +62,7 @@ function showUpdateCenter() {
     </div>`
   ).setWidth(480).setHeight(420);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Update Center');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Update Center');
 }
 
 function showFeatureLab() {
@@ -95,5 +100,5 @@ function showFeatureLab() {
     </div>`
   ).setWidth(560).setHeight(560);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Feature Lab');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Feature Lab');
 }

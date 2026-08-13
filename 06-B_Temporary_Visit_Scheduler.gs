@@ -104,7 +104,7 @@ function showTemporaryVisitScheduler() {
 </script>
 </body>
 </html>`).setWidth(700).setHeight(860);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Schedule Temporary Visits');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'Schedule Temporary Visits');
 }
 
 function scheduleTemporaryVisits_(payload) {
@@ -307,4 +307,3 @@ function buildTemporaryVisitDescription_(payload) {
 
   return lines.join('\n');
 }
-

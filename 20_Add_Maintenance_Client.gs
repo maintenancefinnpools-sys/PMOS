@@ -8,9 +8,24 @@ function recommendMaintenanceClientRotations(input) {
   input = input || {};
   const address = String(input.address || '').trim();
   if (!address) throw new Error('Enter the service address.');
+  if (input.addressVerified !== true || !input.addressDetails ||
+      normalizePmosAddressSearch_(input.addressDetails.address) !== normalizePmosAddressSearch_(address)) {
+    throw new Error('Select a complete address suggestion before calculating route placement.');
+  }
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const geocoder = Maps.newGeocoder().setRegion('ca');
-  const target = geocodePmosAddress_(geocoder, address);
+  const geocodeMemo = {};
+  const resolvePoint = function (candidateAddress, allowFailure) {
+    const key = normalizePmosAddressSearch_(candidateAddress);
+    if (Object.prototype.hasOwnProperty.call(geocodeMemo, key)) return geocodeMemo[key];
+    const point = geocodePmosAddress_(geocoder, candidateAddress, allowFailure);
+    geocodeMemo[key] = point;
+    return point;
+  };
+  const target = normalizePmosRiePoint_({
+    lat: input.addressDetails.lat,
+    lng: input.addressDetails.lng
+  });
   const routes = readRoutesInPhysicalOrder_();
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const candidates = [];
@@ -42,7 +57,7 @@ function recommendMaintenanceClientRotations(input) {
 
   const scored = candidates
     .map(function (candidate) {
-      return scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate);
+      return scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate);
     })
     .filter(Boolean);
   scored.sort(function (a, b) {
@@ -52,7 +67,10 @@ function recommendMaintenanceClientRotations(input) {
       a.day.localeCompare(b.day);
   });
 
-  const recommendations = scored.slice(0, 3).map(function (item) {
+  const roadRefined = refineMaintenanceRecommendationsWithMatrix_(scored.slice(0, 3), target);
+  roadRefined.sort(compareMaintenanceRoadRecommendations_);
+
+  const recommendations = roadRefined.map(function (item) {
     item.label = item.secondDay ? item.day + ' + ' + item.secondDay : item.day;
     item.rotationLabel = item.weeks.length === 4
       ? 'Every rotation week'
@@ -71,30 +89,51 @@ function recommendMaintenanceClientRotations(input) {
         : item.addedDistanceKm <= 15
           ? 'Adds some travel but remains a reasonable placement.'
           : 'This is one of the best available placements, but it adds substantial travel.';
+    delete item._placementDetails;
     return item;
   });
 
   return {
     recommendations: recommendations,
     qualityMessage: recommendations.length
-      ? 'Best ' + frequency.toLowerCase() + ' placements based primarily on geographic route fit.'
+      ? (recommendations.every(function (item) { return item.roadDataComplete; })
+        ? 'Best ' + frequency.toLowerCase() + ' placements calculated by the PMOS Route Intelligence Engine.'
+        : 'Some GPS road calculations were unavailable. PMOS kept the geographic shortlist visible for manual review.')
       : 'No usable route placements were found. Manual placement remains available.'
   };
 }
 
-function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate) {
+function compareMaintenanceRoadRecommendations_(a, b) {
+  if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
+  const aDuration = a.addedDurationMinutes == null
+    ? Number.POSITIVE_INFINITY : Number(a.addedDurationMinutes);
+  const bDuration = b.addedDurationMinutes == null
+    ? Number.POSITIVE_INFINITY : Number(b.addedDurationMinutes);
+  return aDuration - bDuration ||
+    Number(a.addedDistanceKm || 0) - Number(b.addedDistanceKm || 0) ||
+    Number(b.score || 0) - Number(a.score || 0);
+}
+
+function scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate) {
   const serviceDays = candidate.secondDay
     ? [candidate.day, candidate.secondDay]
     : [candidate.day];
   const placements = [];
   candidate.weeks.forEach(function (week) {
     serviceDays.forEach(function (day) {
-      placements.push(
-        maintenanceLayerInsertion_(routes, geocoder, target, 'Week ' + week + ' - ' + day)
-      );
+      const layerPlacements = listMaintenanceLayersForWeekDay_(routes, week, day)
+        .map(function (layer) {
+          return maintenanceLayerInsertion_(routes, resolvePoint, target, layer);
+        })
+        .sort(function (left, right) {
+          return left.addedDistanceKm - right.addedDistanceKm ||
+            left.customerCount - right.customerCount ||
+            left.layer.localeCompare(right.layer);
+        });
+      if (layerPlacements.length) placements.push(layerPlacements[0]);
     });
   });
-  if (!placements.length) return null;
+  if (placements.length !== candidate.weeks.length * serviceDays.length) return null;
 
   const averageAdded = placements.reduce(function (sum, placement) {
     return sum + placement.addedDistanceKm;
@@ -121,6 +160,17 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
     addedDistanceKm: averageAdded,
     centroidDistanceKm: averageCentroid,
     customerCount: averageCount,
+    placements: placements.map(function (placement) {
+      return {
+        week: parseLayer_(placement.layer).week,
+        day: parseLayer_(placement.layer).day,
+        layer: placement.layer,
+        position: placement.position,
+        isFirstStop: placement.position === 1,
+        isLastStop: placement.position === Number(placement.customerCount || 0) + 1
+      };
+    }),
+    _placementDetails: placements,
     score: Math.max(
       0,
       Math.min(100, Math.round(distanceScore * 0.7 + continuityScore * 0.3 - loadPenalty))
@@ -128,22 +178,29 @@ function scoreMaintenanceRotationCandidate_(routes, geocoder, target, candidate)
   };
 }
 
-function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
+function maintenanceLayerInsertion_(routes, resolvePoint, target, layerName) {
   const rows = routes
     .filter(function (row) { return normalize_(row.layer) === normalize_(layerName); })
     .sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); });
   const points = rows.map(function (row) {
-    return row.address ? geocodePmosAddress_(geocoder, row.address, true) : null;
+    return row.address ? resolvePoint(row.address, true) : null;
   });
   const valid = points.filter(Boolean);
+  const validTitles = [];
+  points.forEach(function (point, index) {
+    if (point) validTitles.push(String(rows[index].title || ''));
+  });
   if (!rows.length || !valid.length) {
     return {
+      layer: layerName,
       position: 1,
       previousName: '',
       nextName: '',
       addedDistanceKm: 0,
       centroidDistanceKm: 0,
-      customerCount: rows.length
+      customerCount: rows.length,
+      routePoints: [],
+      insertedPoints: [target]
     };
   }
 
@@ -166,42 +223,275 @@ function maintenanceLayerInsertion_(routes, geocoder, target, layerName) {
     lat: valid.reduce(function (sum, point) { return sum + point.lat; }, 0) / valid.length,
     lng: valid.reduce(function (sum, point) { return sum + point.lng; }, 0) / valid.length
   };
+  const insertedPoints = points.slice();
+  insertedPoints.splice(bestPosition - 1, 0, target);
   return {
+    layer: layerName,
     position: bestPosition,
     previousName: bestPosition > 1 ? String(rows[bestPosition - 2].title || '') : '',
     nextName: bestPosition <= rows.length ? String(rows[bestPosition - 1].title || '') : '',
     addedDistanceKm: bestAdded,
     centroidDistanceKm: pmosHaversineKm_(target, centroid),
-    customerCount: rows.length
+    customerCount: rows.length,
+    previousPoint: bestPosition > 1 ? points[bestPosition - 2] : null,
+    nextPoint: bestPosition <= rows.length ? points[bestPosition - 1] : null,
+    routePoints: points.filter(Boolean),
+    routeTitles: validTitles,
+    insertedPoints: insertedPoints.filter(Boolean)
   };
 }
 
-function makeRoomForMaintenanceStop_(sheet, table, layer, stop) {
-  const values = sheet.getDataRange().getValues();
-  const layerIndex = findHeaderIndex_(table.headers, ['Layer', 'Route Layer', 'Route Assignment']);
-  const stopIndex = findHeaderIndex_(table.headers, ['Stop Order', 'Stop', 'Order']);
-  if (layerIndex < 0 || stopIndex < 0) return;
-
-  for (let row = values.length - 1; row >= table.headerRow; row--) {
-    if (normalizeSyncValue_(values[row][layerIndex]) !== normalizeSyncValue_(layer)) continue;
-    const current = Number(values[row][stopIndex] || 0);
-    if (Number.isFinite(current) && current >= stop) {
-      sheet.getRange(row + 1, stopIndex + 1).setValue(current + 1);
-    }
-  }
-  table.rows.forEach(function (row) {
-    if (normalizeSyncValue_(row[layerIndex]) !== normalizeSyncValue_(layer)) return;
-    const current = Number(row[stopIndex] || 0);
-    if (Number.isFinite(current) && current >= stop) row[stopIndex] = current + 1;
+function refineMaintenanceRecommendationsWithMatrix_(items, target) {
+  const recommendations = items || [];
+  const points = [];
+  const pointIndexes = {};
+  const addPoint = function (point) {
+    if (!point) return;
+    const normalized = normalizePmosRiePoint_(point);
+    const key = normalized.lat.toFixed(6) + ',' + normalized.lng.toFixed(6);
+    if (Object.prototype.hasOwnProperty.call(pointIndexes, key)) return;
+    pointIndexes[key] = points.length;
+    points.push(normalized);
+  };
+  addPoint(target);
+  recommendations.forEach(function (item) {
+    (item._placementDetails || []).forEach(function (placement) {
+      (placement.insertedPoints || []).forEach(addPoint);
+    });
   });
+  if (points.length < 2 || points.length > 80) {
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationWithDirections_(item, target);
+    });
+  }
+  try {
+    const matrix = matrixPmosWithRie_(points);
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationFromMatrix_(item, target, matrix, pointIndexes);
+    });
+  } catch (ignored) {
+    return recommendations.map(function (item) {
+      return refineMaintenanceRecommendationWithDirections_(item, target);
+    });
+  }
 }
 
-function rollbackMaintenanceClientRows_(appended) {
-  appended.slice().reverse().forEach(function (item) {
+function refineMaintenanceRecommendationFromMatrix_(item, target, matrix, pointIndexes) {
+  const details = item._placementDetails || [];
+  let totalAddedDistanceKm = 0;
+  let totalAddedDurationMinutes = 0;
+  let totalRouteDistanceKm = 0;
+  let totalRouteDriveMinutes = 0;
+  let complete = details.length > 0;
+  details.forEach(function (placement) {
+    const optimized = choosePmosMatrixInsertion_(placement, target, matrix, pointIndexes);
+    if (!optimized) { complete = false; return; }
+    placement.position = optimized.position;
+    placement.previousName = optimized.previousName;
+    placement.nextName = optimized.nextName;
+    placement.insertedPoints = optimized.insertedPoints;
+    totalAddedDistanceKm += optimized.addedDistanceKm;
+    totalAddedDurationMinutes += optimized.addedDurationMinutes;
+    totalRouteDistanceKm += optimized.routeDistanceKm;
+    totalRouteDriveMinutes += optimized.routeDurationMinutes;
+  });
+  if (!complete) return refineMaintenanceRecommendationWithDirections_(item, target);
+  item.placements = details.map(function (placement) {
+    const parsed = parseLayer_(placement.layer);
+    return {
+      week: parsed.week,
+      day: parsed.day,
+      layer: placement.layer,
+      position: placement.position,
+      isFirstStop: placement.position === 1,
+      isLastStop: placement.position === Number(placement.customerCount || 0) + 1
+    };
+  });
+  if (details[0]) {
+    item.position = details[0].position;
+    item.previousName = details[0].previousName;
+    item.nextName = details[0].nextName;
+  }
+  item.addedDistanceKm = totalAddedDistanceKm / details.length;
+  item.addedDurationMinutes = totalAddedDurationMinutes / details.length;
+  item.routeDistanceKm = totalRouteDistanceKm / details.length;
+  item.routeDriveMinutes = totalRouteDriveMinutes / details.length;
+  item.serviceMinutes = getPmosRieSettings_().serviceMinutes;
+  item.estimatedRouteMinutes = item.routeDriveMinutes +
+    (Number(item.customerCount || 0) + 1) * item.serviceMinutes;
+  item.routeProvider = matrix.providerLabel || 'GraphHopper';
+  item.roadDataComplete = true;
+  item.score = Math.max(0, Math.min(100, Math.round(
+    100 - Math.min(80, item.addedDurationMinutes * 3.5) -
+    Math.max(0, Number(item.customerCount || 0) - 15) * 0.7
+  )));
+  return item;
+}
+
+function choosePmosMatrixInsertion_(placement, target, matrix, pointIndexes) {
+  const route = (placement.routePoints || []).filter(Boolean);
+  const titles = placement.routeTitles || [];
+  const base = sumPmosMatrixRoute_(route, matrix, pointIndexes);
+  if (!base) return null;
+  let best = null;
+  for (let position = 0; position <= route.length; position++) {
+    const insertedPoints = route.slice();
+    insertedPoints.splice(position, 0, target);
+    const inserted = sumPmosMatrixRoute_(insertedPoints, matrix, pointIndexes);
+    if (!inserted) continue;
+    const candidate = {
+      position: position + 1,
+      previousName: position > 0 ? String(titles[position - 1] || '') : '',
+      nextName: position < titles.length ? String(titles[position] || '') : '',
+      insertedPoints: insertedPoints,
+      addedDistanceKm: Math.max(0, inserted.distanceKm - base.distanceKm),
+      addedDurationMinutes: Math.max(0, inserted.durationMinutes - base.durationMinutes),
+      routeDistanceKm: inserted.distanceKm,
+      routeDurationMinutes: inserted.durationMinutes
+    };
+    if (!best || candidate.addedDurationMinutes < best.addedDurationMinutes ||
+        (candidate.addedDurationMinutes === best.addedDurationMinutes &&
+          candidate.addedDistanceKm < best.addedDistanceKm)) best = candidate;
+  }
+  return best;
+}
+
+function sumPmosMatrixRoute_(routePoints, matrix, pointIndexes) {
+  const route = (routePoints || []).filter(Boolean);
+  if (route.length < 2) return {distanceKm: 0, durationMinutes: 0};
+  let distanceMetres = 0;
+  let durationSeconds = 0;
+  for (let index = 1; index < route.length; index++) {
+    const from = normalizePmosRiePoint_(route[index - 1]);
+    const to = normalizePmosRiePoint_(route[index]);
+    const fromIndex = pointIndexes[from.lat.toFixed(6) + ',' + from.lng.toFixed(6)];
+    const toIndex = pointIndexes[to.lat.toFixed(6) + ',' + to.lng.toFixed(6)];
+    const rawDistance = matrix.distances[fromIndex] && matrix.distances[fromIndex][toIndex];
+    const rawDuration = matrix.times[fromIndex] && matrix.times[fromIndex][toIndex];
+    if (rawDistance == null || rawDuration == null) return null;
+    const distance = Number(rawDistance);
+    const duration = Number(rawDuration);
+    if (!Number.isFinite(distance) || !Number.isFinite(duration)) return null;
+    distanceMetres += distance;
+    durationSeconds += duration;
+  }
+  return {distanceKm: distanceMetres / 1000, durationMinutes: durationSeconds / 60};
+}
+
+function refineMaintenanceRecommendationWithDirections_(item, target) {
+  const details = item._placementDetails || [];
+  let totalDistanceKm = 0;
+  let totalDurationMinutes = 0;
+  let totalRouteDistanceKm = 0;
+  let totalRouteDriveMinutes = 0;
+  const providers = [];
+  let complete = details.length > 0;
+  details.forEach(function (placement) {
     try {
-      if (item.sheet && item.row <= item.sheet.getLastRow()) item.sheet.deleteRow(item.row);
+      const metric = pmosDrivingInsertionImpact_(
+        placement.previousPoint,
+        target,
+        placement.nextPoint
+      );
+      if (!metric) { complete = false; return; }
+      totalDistanceKm += metric.addedDistanceKm;
+      totalDurationMinutes += metric.addedDurationMinutes;
+      const fullRoute = placement.insertedPoints.length >= 2
+        ? pmosDrivingRouteMetric_(placement.insertedPoints) : null;
+      if (!fullRoute) { complete = false; return; }
+      totalRouteDistanceKm += fullRoute.distanceKm;
+      totalRouteDriveMinutes += fullRoute.durationMinutes;
+      if (providers.indexOf(fullRoute.providerLabel) < 0) providers.push(fullRoute.providerLabel);
+    } catch (ignored) {
+      complete = false;
+    }
+  });
+  if (complete) {
+    item.addedDistanceKm = totalDistanceKm / details.length;
+    item.addedDurationMinutes = totalDurationMinutes / details.length;
+    item.routeDistanceKm = totalRouteDistanceKm / details.length;
+    item.routeDriveMinutes = totalRouteDriveMinutes / details.length;
+    item.serviceMinutes = getPmosRieSettings_().serviceMinutes;
+    item.estimatedRouteMinutes = item.routeDriveMinutes +
+      (Number(item.customerCount || 0) + 1) * item.serviceMinutes;
+    item.routeProvider = providers.join(' + ');
+    item.score = Math.max(0, Math.min(100, Math.round(
+      100 - Math.min(80, item.addedDurationMinutes * 3.5) -
+      Math.max(0, Number(item.customerCount || 0) - 15) * 0.7
+    )));
+  } else {
+    item.addedDurationMinutes = null;
+    item.routeDistanceKm = null;
+    item.routeDriveMinutes = null;
+    item.estimatedRouteMinutes = null;
+    item.serviceMinutes = getPmosRieSettings_().serviceMinutes;
+    item.routeProvider = '';
+  }
+  item.roadDataComplete = complete;
+  return item;
+}
+
+function pmosDrivingInsertionImpact_(previous, target, next) {
+  if (!previous && !next) {
+    return {addedDistanceKm: 0, addedDurationMinutes: 0};
+  }
+  if (!previous || !next) {
+    const edge = pmosDrivingRouteMetric_(previous ? [previous, target] : [target, next]);
+    return edge ? {
+      addedDistanceKm: edge.distanceKm,
+      addedDurationMinutes: edge.durationMinutes,
+      providerLabel: edge.providerLabel
+    } : null;
+  }
+  const inserted = pmosDrivingRouteMetric_([previous, target, next]);
+  const direct = pmosDrivingRouteMetric_([previous, next]);
+  if (!inserted || !direct) return null;
+  return {
+    addedDistanceKm: Math.max(0, inserted.distanceKm - direct.distanceKm),
+    addedDurationMinutes: Math.max(0, inserted.durationMinutes - direct.durationMinutes),
+    providerLabel: inserted.providerLabel
+  };
+}
+
+function pmosDrivingRouteMetric_(points) {
+  if (!Array.isArray(points) || points.length < 2 || points.some(function (point) { return !point; })) {
+    return null;
+  }
+  return routePmosWithRie_(points);
+}
+
+function listMaintenanceLayersForWeekDay_(routes, week, day) {
+  const layers = {};
+  (routes || []).forEach(function (row) {
+    const layer = String(row.layer || '').trim();
+    if (!layer || layers[layer]) return;
+    try {
+      const parsed = parseLayer_(layer);
+      if (parsed.week === Number(week) && parsed.day === day) layers[layer] = true;
     } catch (ignored) {}
   });
+  return Object.keys(layers).sort(routeSort_);
+}
+
+function resolveMaintenanceLayer_(routeTable, week, day, preferredLayer) {
+  const layerIndex = findHeaderIndex_(routeTable.headers, [
+    'Layer', 'Route Layer', 'Route Assignment'
+  ]);
+  if (layerIndex < 0) throw new Error('4-Week Route Template is missing the Layer column.');
+  const routes = routeTable.rows.map(function (row) {
+    return {layer: String(row[layerIndex] || '').trim()};
+  });
+  const matches = listMaintenanceLayersForWeekDay_(routes, week, day);
+  const preferred = String(preferredLayer || '').trim();
+  if (preferred && matches.indexOf(preferred) >= 0) return preferred;
+  if (matches.length === 1) return matches[0];
+  if (!matches.length) {
+    throw new Error('No Route Template layer exists for Week ' + week + ' - ' + day + '.');
+  }
+  throw new Error(
+    'More than one Route Template layer exists for Week ' + week + ' - ' + day +
+    '. Choose a route recommendation so PMOS can select the intended layer.'
+  );
 }
 
 function normalizeMaintenanceFrequency_(value) {
@@ -236,6 +526,15 @@ function parseMaintenanceStartDate_(value) {
     date.getDate() !== day
   ) {
     throw new Error('Service start date is invalid.');
+  }
+  const todayText = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');
+  if (text < todayText) {
+    throw new Error('Service start date cannot be before today (' + todayText + ').');
+  }
+  const settings = getRecurringCalendarSettings_();
+  const seasonEnd = Utilities.formatDate(settings.seasonEnd, PMOS.TIMEZONE, 'yyyy-MM-dd');
+  if (text > seasonEnd) {
+    throw new Error('Service start date is after the configured season end (' + seasonEnd + ').');
   }
   return date;
 }
@@ -293,6 +592,69 @@ function appendMappedMaintenanceRow_(sheet, table, valuesByHeader) {
   const row = mappedMaintenanceRow_(table.headers, valuesByHeader);
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, table.headers.length).setValues([row]);
   return row;
+}
+
+function readPmosHeaderTable_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) throw new Error('Sheet is empty: ' + sheet.getName());
+  const known = [
+    'customer id', 'calendar title', 'full name(s)', 'full address',
+    'layer', 'stop order', 'frequency'
+  ].map(normalizeSyncHeader_);
+  let headerIndex = 0;
+  let bestScore = -1;
+  values.slice(0, Math.min(10, values.length)).forEach(function (row, index) {
+    const normalized = row.map(normalizeSyncHeader_);
+    const score = known.reduce(function (total, header) {
+      return total + (normalized.indexOf(header) >= 0 ? 1 : 0);
+    }, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      headerIndex = index;
+    }
+  });
+  const headers = values[headerIndex].map(function (value) {
+    return String(value || '').trim();
+  });
+  return {
+    headerRow: headerIndex + 1,
+    headers: headers,
+    rows: values.slice(headerIndex + 1).filter(function (row) {
+      return row.some(function (value) { return value !== '' && value != null; });
+    })
+  };
+}
+
+function findFirstSheetByName_(spreadsheet, names) {
+  const candidates = names || [];
+  for (let index = 0; index < candidates.length; index++) {
+    const sheet = spreadsheet.getSheetByName(candidates[index]);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+function normalizeSyncHeader_(value) {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeSyncValue_(value) {
+  return normalize_(value);
+}
+
+function findHeaderIndex_(headers, candidates) {
+  const normalized = (headers || []).map(normalizeSyncHeader_);
+  const options = (candidates || []).map(normalizeSyncHeader_);
+  for (let index = 0; index < options.length; index++) {
+    const match = normalized.indexOf(options[index]);
+    if (match >= 0) return match;
+  }
+  return -1;
 }
 
 function nextMaintenanceStopForLayer_(routeTable, layer) {

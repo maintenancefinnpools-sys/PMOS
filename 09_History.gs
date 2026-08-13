@@ -34,7 +34,7 @@ function showRouteHistoryDialog() {
   ).setWidth(650).setHeight(500);
 
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'PMOS Route History');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Route History');
 }
 
 function restoreRouteVersion(versionId) {
@@ -117,4 +117,3 @@ function listRouteVersions_() {
     label: String(row[2])
   }));
 }
-

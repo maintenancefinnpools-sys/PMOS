@@ -25,6 +25,13 @@ const PMOS = {
   EDIT_TRIGGER_HANDLER: 'handlePmosSheetEdit'
 };
 
+const PMOS_RIE_CACHE_SHEET = 'PMOS Route Cache';
+const PMOS_RIE_CACHE_HEADERS = [
+  'Cache Key', 'Origin Latitude', 'Origin Longitude',
+  'Destination Latitude', 'Destination Longitude',
+  'Distance Metres', 'Duration Milliseconds', 'Provider', 'Profile', 'Calculated At'
+];
+
 const PMOS_CHEMISTRY = {
   PRODUCTS_SHEET: 'Chemical Products',
   USAGE_SHEET: 'Chemical Usage'
