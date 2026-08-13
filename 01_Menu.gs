@@ -10,8 +10,6 @@ function onOpen() {
     menu.addItem('Initialize PMOS', 'initializePmos');
   } else {
     menu
-      .addItem('Open Route Manager', 'showRouteManagerLink')
-      .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
           .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
@@ -32,7 +30,9 @@ function onOpen() {
           .addItem('Routing Settings', 'showPmosRoutingSettings')
       )
       .addItem('Update Center', 'showUpdateCenter')
-      .addItem('Update PMOS', 'updatePmos');
+      .addItem('Update PMOS', 'updatePmos')
+      .addSeparator()
+      .addItem('Open Route Manager', 'showRouteManagerLink');
   }
 
   menu.addToUi();
