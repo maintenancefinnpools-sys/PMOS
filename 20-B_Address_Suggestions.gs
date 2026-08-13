@@ -19,7 +19,13 @@ function suggestPmosAddresses(query, limit) {
   const candidates = [];
   const seen = {};
   const anchor = getPmosAddressSearchAnchor_();
-  const graphHopperResults = suggestPmosGraphHopperAddresses_(text, maximum, anchor);
+  let graphHopperResults = [];
+  let graphHopperError = null;
+  try {
+    graphHopperResults = suggestPmosGraphHopperAddresses_(text, maximum, anchor);
+  } catch (error) {
+    graphHopperError = error;
+  }
   graphHopperResults.forEach(function (resolved, index) {
     const key = normalizePmosAddressSearch_(resolved.address);
     if (seen[key]) return;
@@ -29,6 +35,23 @@ function suggestPmosAddresses(query, limit) {
     });
     candidates.push(seen[key]);
   });
+
+  // GraphHopper occasionally recognizes a valid Canadian address but omits a
+  // postal code or municipality, causing its otherwise useful hit to be
+  // rejected by PMOS's complete-address requirement. When no complete hit
+  // survives, confirm the user's full text with Google and return one clean
+  // canonical suggestion rather than presenting duplicate provider results.
+  if (!candidates.length) {
+    try {
+      const confirmed = resolvePmosAddressSuggestion(text);
+      candidates.push(Object.assign({}, confirmed, {
+        score: 1000,
+        distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(confirmed, anchor)
+      }));
+    } catch (googleError) {
+      if (graphHopperError) throw graphHopperError;
+    }
+  }
 
   candidates.sort(comparePmosAddressCandidates_);
   const output = candidates.slice(0, maximum).map(function (item) {
