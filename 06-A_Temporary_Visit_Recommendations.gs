@@ -5,8 +5,7 @@
 
 function recommendTemporaryVisitDates_(payload) {
   payload = payload || {};
-  const address = String(payload.address || '').trim();
-  if (!address) throw new Error('Enter the temporary customer address.');
+  const target = getVerifiedTemporaryVisitPoint_(payload);
 
 
   // The initial search covers six business days so it includes the same
@@ -18,7 +17,6 @@ function recommendTemporaryVisitDates_(payload) {
   today.setHours(0, 0, 0, 0);
   const calendar = getRecurringCalendar_();
   const geocoder = Maps.newGeocoder();
-  const target = geocodePmosAddress_(geocoder, address);
   const candidateDates = [];
 
 
@@ -109,6 +107,36 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
   }
 
 
+  let roadResult = null;
+  try {
+    const validRoute = [];
+    const validTitles = [];
+    points.forEach(function (point, index) {
+      if (!point) return;
+      validRoute.push(point);
+      validTitles.push(events[index] ? events[index].title : '');
+    });
+    const uniquePoints = [];
+    const pointIndexes = {};
+    [target].concat(validRoute).forEach(function (point) {
+      const normalized = normalizePmosRiePoint_(point);
+      const key = normalized.lat.toFixed(6) + ',' + normalized.lng.toFixed(6);
+      if (pointIndexes[key] == null) {
+        pointIndexes[key] = uniquePoints.length;
+        uniquePoints.push(normalized);
+      }
+    });
+    if (uniquePoints.length > 1) {
+      const matrix = matrixPmosWithRie_(uniquePoints);
+      roadResult = choosePmosMatrixInsertion_({
+        routePoints: validRoute,
+        routeTitles: validTitles
+      }, target, matrix, pointIndexes);
+      if (roadResult) bestPosition = roadResult.position;
+    }
+  } catch (ignored) {}
+
+  if (roadResult) bestAddedDistance = roadResult.addedDistanceKm;
   const centroidDistanceKm = snapshot.centroid ? pmosHaversineKm_(target, snapshot.centroid) : bestAddedDistance;
   // Use a deliberately forgiving absolute score. Date-search results are
   // labelled comparatively in the browser after all results found so far are
@@ -118,17 +146,20 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
   const distanceScore = Math.max(0, 100 - Math.min(70, detourRatio * 100));
   const continuityScore = Math.max(0, 100 - Math.min(45, centroidDistanceKm * 1.6));
   const loadPenalty = Math.max(0, events.length - 15) * 0.8;
-  const score = Math.max(0, Math.min(100, Math.round(distanceScore * 0.68 + continuityScore * 0.32 - loadPenalty)));
+  const score = roadResult
+    ? Math.max(0, Math.min(100, Math.round(100 - Math.min(80, roadResult.addedDurationMinutes * 3.5) - loadPenalty)))
+    : Math.max(0, Math.min(100, Math.round(distanceScore * 0.68 + continuityScore * 0.32 - loadPenalty)));
 
 
   let rating = 'Excellent', ratingClass = 'good', reason = 'Fits naturally into the actual route scheduled for this date.';
-  if (bestAddedDistance <= 3) {
+  const ratingMetric = roadResult ? roadResult.addedDurationMinutes : bestAddedDistance;
+  if (ratingMetric <= 5) {
     rating = 'Excellent'; ratingClass = 'good'; reason = 'Adds very little travel to the scheduled route.';
-  } else if (bestAddedDistance <= 8) {
+  } else if (ratingMetric <= 10) {
     rating = 'Very Good'; ratingClass = 'good'; reason = 'A practical insertion with only a modest detour.';
-  } else if (bestAddedDistance <= 15) {
+  } else if (ratingMetric <= 18) {
     rating = 'Good'; ratingClass = 'fair'; reason = 'Adds some travel but remains a reasonable route option.';
-  } else if (bestAddedDistance <= 25) {
+  } else if (ratingMetric <= 30) {
     rating = 'Fair'; ratingClass = 'fair'; reason = 'A longer detour, but potentially worthwhile depending on customer availability.';
   } else {
     rating = 'Last Resort'; ratingClass = 'poor'; reason = 'This is the best insertion found for the selected date, but it adds substantial travel.';
@@ -144,9 +175,15 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
     rotationWeek,
     customerCount: events.length,
     position: bestPosition,
-    previousName: bestPosition > 1 ? events[bestPosition - 2].title : '',
-    nextName: bestPosition <= events.length ? events[bestPosition - 1].title : '',
+    previousName: roadResult ? roadResult.previousName : (bestPosition > 1 ? events[bestPosition - 2].title : ''),
+    nextName: roadResult ? roadResult.nextName : (bestPosition <= events.length ? events[bestPosition - 1].title : ''),
     addedDistanceKm: bestAddedDistance,
+    addedDurationMinutes: roadResult ? roadResult.addedDurationMinutes : null,
+    routeDistanceKm: roadResult ? roadResult.routeDistanceKm : null,
+    routeDriveMinutes: roadResult ? roadResult.routeDurationMinutes : null,
+    estimatedRouteMinutes: roadResult ? roadResult.routeDurationMinutes + (events.length + 1) * getPmosRieSettings_().serviceMinutes : null,
+    routeProvider: roadResult ? 'GraphHopper' : '',
+    roadDataComplete: !!roadResult,
     centroidDistanceKm,
     score,
     rating,
@@ -203,16 +240,14 @@ function pmosRotationWeekForDate_(date, week1Monday) {
 
 function suggestTemporaryVisitPlacement_(payload) {
   payload = payload || {};
-  const address = String(payload.address || '').trim();
   const dates = Array.isArray(payload.dates) ? payload.dates.filter(Boolean) : [];
-  if (!address) throw new Error('Enter the temporary customer address.');
   if (!dates.length) throw new Error('Choose at least one visit date.');
 
 
   const serviceDate = parseTemporaryVisitDate_(dates[0]);
   const calendar = getRecurringCalendar_();
   const geocoder = Maps.newGeocoder();
-  const target = geocodePmosAddress_(geocoder, address);
+  const target = getVerifiedTemporaryVisitPoint_(payload);
   let selected = calculateTemporaryPlacementForDate_(
     calendar,
     geocoder,
@@ -240,39 +275,25 @@ function suggestTemporaryVisitPlacement_(payload) {
   }
 
 
-  // A selected date remains authoritative. PMOS only offers nearby weekday
-  // alternatives when another date within six working days either direction
-  // has a more efficient route.
-  const alternatives = [];
-  if (payload.includeNearby !== false) {
-    for (let offset = -6; offset <= 6; offset++) {
-      if (offset === 0) continue;
-      const candidateDate = addWorkingDays_(serviceDate, offset);
-      const candidate = calculateTemporaryPlacementForDate_(calendar, geocoder, target, candidateDate, 1);
-      if (!candidate) continue;
-      candidate.savingsKm = Math.max(0, Number(selected.addedDistanceKm || 0) - Number(candidate.addedDistanceKm || 0));
-      alternatives.push(candidate);
-    }
-    alternatives.sort(compareTemporaryVisitRecommendations_);
-  }
-
-
-  selected.nearbyAlternatives = alternatives.slice(0, 3);
-  selected.selectedDateIsBest = !selected.nearbyAlternatives.length ||
-    Number(selected.nearbyAlternatives[0].addedDistanceKm) >= Number(selected.addedDistanceKm);
+  // Once the user chooses a date, that date is authoritative. Only stop
+  // placement is recalculated; alternate dates belong in the date search.
+  selected.nearbyAlternatives = [];
+  selected.selectedDateIsBest = true;
   return selected;
 }
 
-function addWorkingDays_(date, amount) {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  const direction = amount < 0 ? -1 : 1;
-  let remaining = Math.abs(Math.floor(amount));
-  while (remaining > 0) {
-    result.setDate(result.getDate() + direction);
-    if (result.getDay() !== 0 && result.getDay() !== 6) remaining--;
+function getVerifiedTemporaryVisitPoint_(payload) {
+  payload = payload || {};
+  const address = String(payload.address || '').trim();
+  const details = payload.addressDetails || {};
+  if (!address) throw new Error('Enter the temporary customer address.');
+  if (!payload.addressVerified || !details.address) {
+    throw new Error('Choose a complete address from the suggestions before calculating a route.');
   }
-  return result;
+  if (String(details.address).trim().toLowerCase() !== address.toLowerCase()) {
+    throw new Error('The service address changed. Choose it from the suggestions again.');
+  }
+  return normalizePmosRiePoint_({lat: details.lat, lng: details.lng});
 }
 
 function geocodePmosAddress_(geocoder, address, allowFailure) {
@@ -329,4 +350,3 @@ function pmosHaversineKm_(a, b) {
 
   return 2 * earthRadiusKm * Math.asin(Math.sqrt(value));
 }
-
