@@ -11,10 +11,31 @@ function searchPmosCustomerProfiles(query) {
   return records.filter(function (record) {
     if (!cleanQuery) return true;
     return record.searchText.indexOf(cleanQuery) >= 0;
-  }).slice(0, 100).map(function (record) {
+  }).map(function (record) {
+    const lastName = normalizePmosCustomerSearch_(record.lastName);
+    const firstName = normalizePmosCustomerSearch_(record.firstName);
+    const listName = normalizePmosCustomerSearch_(record.listName);
+    let searchRank = 0;
+    if (cleanQuery) {
+      if (lastName === cleanQuery) searchRank = 500;
+      else if (lastName.indexOf(cleanQuery) === 0) searchRank = 400;
+      else if (listName.indexOf(cleanQuery) === 0) searchRank = 350;
+      else if (firstName.indexOf(cleanQuery) === 0) searchRank = 300;
+      else if (record.searchText.indexOf(' ' + cleanQuery) >= 0) searchRank = 200;
+      else searchRank = 100;
+    }
+    return {record: record, searchRank: searchRank};
+  }).sort(function (left, right) {
+    return right.searchRank - left.searchRank ||
+      left.record.lastName.localeCompare(right.record.lastName) ||
+      left.record.firstName.localeCompare(right.record.firstName) ||
+      left.record.customerId.localeCompare(right.record.customerId);
+  }).map(function (match) {
+    const record = match.record;
     return {
       customerId: record.customerId,
       displayName: record.displayName,
+      listName: record.listName,
       calendarTitle: record.calendarTitle,
       address: record.address,
       phone: record.phone,
@@ -79,6 +100,7 @@ function readPmosCustomerProfileRecords_() {
     ]) || '').trim();
     const fallbackName = String(value(row, ['Full Name(s)', 'Full Name']) || '').trim();
     const displayName = [firstName, lastName].filter(Boolean).join(' ') || fallbackName || customerId;
+    const listName = lastName && firstName ? lastName + ', ' + firstName : lastName || firstName || fallbackName || customerId;
     const calendarTitle = String(value(row, ['Calendar Title']) || '').trim();
     const address = String(value(row, [
       'Full Address', 'Service Address', 'Address', 'Street Address'
@@ -96,6 +118,7 @@ function readPmosCustomerProfileRecords_() {
       firstName: firstName,
       lastName: lastName,
       displayName: displayName,
+      listName: listName,
       calendarTitle: calendarTitle,
       address: address,
       phone: phone,
