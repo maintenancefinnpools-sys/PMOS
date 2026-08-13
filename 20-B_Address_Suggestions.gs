@@ -10,7 +10,7 @@ function suggestPmosAddresses(query, limit, preferGoogle) {
 
   const normalizedQuery = normalizePmosAddressSearch_(text);
   const responseCache = CacheService.getScriptCache();
-  const responseCacheKey = 'PMOS_ADDRESS_GH_GOOGLE_FALLBACK_V2_' + pmosAddressCacheDigest_(
+  const responseCacheKey = 'PMOS_ADDRESS_ONTARIO_FALLBACK_V3_' + pmosAddressCacheDigest_(
     normalizedQuery + '|' + maximum + '|' + (googleFirst ? 'GOOGLE_FIRST' : 'GRAPHHOPPER_FIRST')
   );
   const cachedResponse = responseCache.get(responseCacheKey);
@@ -23,6 +23,7 @@ function suggestPmosAddresses(query, limit, preferGoogle) {
   if (googleFirst) {
     try {
       const confirmed = resolvePmosAddressSuggestion(text);
+      if (!isPmosOntarioAddress_(confirmed)) return [];
       const output = [confirmed];
       responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
       return output;
@@ -38,6 +39,7 @@ function suggestPmosAddresses(query, limit, preferGoogle) {
     graphHopperError = error;
   }
   graphHopperResults.forEach(function (resolved, index) {
+    if (!isPmosOntarioAddress_(resolved)) return;
     const key = normalizePmosAddressSearch_(resolved.address);
     if (seen[key]) return;
     seen[key] = Object.assign(resolved, {
@@ -55,10 +57,12 @@ function suggestPmosAddresses(query, limit, preferGoogle) {
   if (!candidates.length) {
     try {
       const confirmed = resolvePmosAddressSuggestion(text);
-      candidates.push(Object.assign({}, confirmed, {
-        score: 1000,
-        distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(confirmed, anchor)
-      }));
+      if (isPmosOntarioAddress_(confirmed)) {
+        candidates.push(Object.assign({}, confirmed, {
+          score: 1000,
+          distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(confirmed, anchor)
+        }));
+      }
     } catch (googleError) {
       if (graphHopperError) throw graphHopperError;
     }
@@ -75,6 +79,14 @@ function suggestPmosAddresses(query, limit, preferGoogle) {
   // and an empty cache entry would prevent the Google confirmation fallback.
   if (output.length) responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
   return output;
+}
+
+function isPmosOntarioAddress_(address) {
+  const province = normalizePmosAddressSearch_(address && address.province);
+  const country = normalizePmosAddressSearch_(address && address.country);
+  const provinceMatches = province === 'ontario' || province === 'on';
+  const countryMatches = !country || country === 'canada' || country === 'ca';
+  return provinceMatches && countryMatches;
 }
 
 function preparePmosAddressSuggestions() {
