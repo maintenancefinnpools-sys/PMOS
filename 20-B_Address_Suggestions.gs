@@ -9,7 +9,7 @@ function suggestPmosAddresses(query, limit) {
 
   const normalizedQuery = normalizePmosAddressSearch_(text);
   const responseCache = CacheService.getScriptCache();
-  const responseCacheKey = 'PMOS_ADDRESS_GH_ONLY_V1_' + pmosAddressCacheDigest_(
+  const responseCacheKey = 'PMOS_ADDRESS_GH_GOOGLE_FALLBACK_V2_' + pmosAddressCacheDigest_(
     normalizedQuery + '|' + maximum
   );
   const cachedResponse = responseCache.get(responseCacheKey);
@@ -60,7 +60,9 @@ function suggestPmosAddresses(query, limit) {
     delete result.distanceFromServiceAreaKm;
     return result;
   });
-  responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
+  // Do not preserve a temporary provider miss. A later attempt may succeed,
+  // and an empty cache entry would prevent the Google confirmation fallback.
+  if (output.length) responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
   return output;
 }
 
