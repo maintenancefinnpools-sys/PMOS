@@ -12,6 +12,8 @@ function onOpen() {
     menu
       .addItem('Open Route Manager', 'showRouteManagerLink')
       .addSeparator()
+      .addItem('Customer Lookup', 'showCustomerLookup')
+      .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
           .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
