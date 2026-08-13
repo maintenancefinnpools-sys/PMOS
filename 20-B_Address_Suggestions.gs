@@ -2,15 +2,16 @@
  * GraphHopper-only live address suggestions shared by PMOS forms.
  * Google is used separately after selection to confirm the canonical address.
  */
-function suggestPmosAddresses(query, limit) {
+function suggestPmosAddresses(query, limit, preferGoogle) {
   const text = String(query || '').trim();
   const maximum = Math.max(1, Math.min(10, Number(limit || 6)));
   if (text.length < 3) return [];
+  const googleFirst = preferGoogle === true;
 
   const normalizedQuery = normalizePmosAddressSearch_(text);
   const responseCache = CacheService.getScriptCache();
-  const responseCacheKey = 'PMOS_ADDRESS_GH_ONLY_V1_' + pmosAddressCacheDigest_(
-    normalizedQuery + '|' + maximum
+  const responseCacheKey = 'PMOS_ADDRESS_ONTARIO_FALLBACK_V3_' + pmosAddressCacheDigest_(
+    normalizedQuery + '|' + maximum + '|' + (googleFirst ? 'GOOGLE_FIRST' : 'GRAPHHOPPER_FIRST')
   );
   const cachedResponse = responseCache.get(responseCacheKey);
   if (cachedResponse) {
@@ -19,8 +20,26 @@ function suggestPmosAddresses(query, limit) {
   const candidates = [];
   const seen = {};
   const anchor = getPmosAddressSearchAnchor_();
-  const graphHopperResults = suggestPmosGraphHopperAddresses_(text, maximum, anchor);
+  if (googleFirst) {
+    try {
+      const confirmed = resolvePmosAddressSuggestion(text);
+      if (!isPmosOntarioAddress_(confirmed)) return [];
+      const output = [confirmed];
+      responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
+      return output;
+    } catch (ignored) {
+      return [];
+    }
+  }
+  let graphHopperResults = [];
+  let graphHopperError = null;
+  try {
+    graphHopperResults = suggestPmosGraphHopperAddresses_(text, maximum, anchor);
+  } catch (error) {
+    graphHopperError = error;
+  }
   graphHopperResults.forEach(function (resolved, index) {
+    if (!isPmosOntarioAddress_(resolved)) return;
     const key = normalizePmosAddressSearch_(resolved.address);
     if (seen[key]) return;
     seen[key] = Object.assign(resolved, {
@@ -30,6 +49,25 @@ function suggestPmosAddresses(query, limit) {
     candidates.push(seen[key]);
   });
 
+  // GraphHopper occasionally recognizes a valid Canadian address but omits a
+  // postal code or municipality, causing its otherwise useful hit to be
+  // rejected by PMOS's complete-address requirement. When no complete hit
+  // survives, confirm the user's full text with Google and return one clean
+  // canonical suggestion rather than presenting duplicate provider results.
+  if (!candidates.length) {
+    try {
+      const confirmed = resolvePmosAddressSuggestion(text);
+      if (isPmosOntarioAddress_(confirmed)) {
+        candidates.push(Object.assign({}, confirmed, {
+          score: 1000,
+          distanceFromServiceAreaKm: pmosAddressDistanceFromAnchor_(confirmed, anchor)
+        }));
+      }
+    } catch (googleError) {
+      if (graphHopperError) throw graphHopperError;
+    }
+  }
+
   candidates.sort(comparePmosAddressCandidates_);
   const output = candidates.slice(0, maximum).map(function (item) {
     const result = Object.assign({}, item);
@@ -37,8 +75,18 @@ function suggestPmosAddresses(query, limit) {
     delete result.distanceFromServiceAreaKm;
     return result;
   });
-  responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
+  // Do not preserve a temporary provider miss. A later attempt may succeed,
+  // and an empty cache entry would prevent the Google confirmation fallback.
+  if (output.length) responseCache.put(responseCacheKey, JSON.stringify(output), 1800);
   return output;
+}
+
+function isPmosOntarioAddress_(address) {
+  const province = normalizePmosAddressSearch_(address && address.province);
+  const country = normalizePmosAddressSearch_(address && address.country);
+  const provinceMatches = province === 'ontario' || province === 'on';
+  const countryMatches = !country || country === 'canada' || country === 'ca';
+  return provinceMatches && countryMatches;
 }
 
 function preparePmosAddressSuggestions() {
