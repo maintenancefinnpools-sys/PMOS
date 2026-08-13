@@ -108,14 +108,15 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
 
 
   let roadResult = null;
+  let roadError = '';
+  const validRoute = [];
+  const validTitles = [];
+  points.forEach(function (point, index) {
+    if (!point) return;
+    validRoute.push(point);
+    validTitles.push(events[index] ? events[index].title : '');
+  });
   try {
-    const validRoute = [];
-    const validTitles = [];
-    points.forEach(function (point, index) {
-      if (!point) return;
-      validRoute.push(point);
-      validTitles.push(events[index] ? events[index].title : '');
-    });
     const uniquePoints = [];
     const pointIndexes = {};
     [target].concat(validRoute).forEach(function (point) {
@@ -132,9 +133,27 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
         routePoints: validRoute,
         routeTitles: validTitles
       }, target, matrix, pointIndexes);
-      if (roadResult) bestPosition = roadResult.position;
+      if (roadResult) {
+        bestPosition = roadResult.position;
+        roadResult.providerLabel = matrix.providerLabel || 'GraphHopper';
+      }
     }
-  } catch (ignored) {}
+  } catch (error) {
+    roadError = String(error && error.message || error);
+  }
+
+  if (!roadResult) {
+    try {
+      roadResult = calculateTemporaryDirectionsInsertion_(
+        validRoute,
+        validTitles,
+        target,
+        bestPosition
+      );
+    } catch (error) {
+      roadError = [roadError, String(error && error.message || error)].filter(Boolean).join(' | ');
+    }
+  }
 
   if (roadResult) bestAddedDistance = roadResult.addedDistanceKm;
   const centroidDistanceKm = snapshot.centroid ? pmosHaversineKm_(target, snapshot.centroid) : bestAddedDistance;
@@ -182,13 +201,37 @@ function calculateTemporaryPlacementForDate_(calendar, geocoder, target, service
     routeDistanceKm: roadResult ? roadResult.routeDistanceKm : null,
     routeDriveMinutes: roadResult ? roadResult.routeDurationMinutes : null,
     estimatedRouteMinutes: roadResult ? roadResult.routeDurationMinutes + (events.length + 1) * getPmosRieSettings_().serviceMinutes : null,
-    routeProvider: roadResult ? 'GraphHopper' : '',
+    routeProvider: roadResult ? roadResult.providerLabel : '',
     roadDataComplete: !!roadResult,
+    roadDataMessage: roadResult ? '' : roadError,
     centroidDistanceKm,
     score,
     rating,
     ratingClass,
     reason
+  };
+}
+
+function calculateTemporaryDirectionsInsertion_(route, titles, target, preferredPosition) {
+  const routePoints = (route || []).filter(Boolean);
+  if (!routePoints.length) return null;
+  const position = Math.max(1, Math.min(routePoints.length + 1, Number(preferredPosition || 1)));
+  const previous = position > 1 ? routePoints[position - 2] : null;
+  const next = position <= routePoints.length ? routePoints[position - 1] : null;
+  const impact = pmosDrivingInsertionImpact_(previous, target, next);
+  const inserted = routePoints.slice();
+  inserted.splice(position - 1, 0, target);
+  const fullRoute = inserted.length >= 2 ? pmosDrivingRouteMetric_(inserted) : null;
+  if (!impact || !fullRoute) return null;
+  return {
+    position: position,
+    previousName: position > 1 ? String((titles || [])[position - 2] || '') : '',
+    nextName: position <= routePoints.length ? String((titles || [])[position - 1] || '') : '',
+    addedDistanceKm: impact.addedDistanceKm,
+    addedDurationMinutes: impact.addedDurationMinutes,
+    routeDistanceKm: fullRoute.distanceKm,
+    routeDurationMinutes: fullRoute.durationMinutes,
+    providerLabel: fullRoute.providerLabel || impact.providerLabel || 'GPS routing provider'
   };
 }
 
