@@ -16,11 +16,11 @@ function onOpen() {
         SpreadsheetApp.getUi().createMenu('Customers')
           .addItem('Customer Lookup', 'showCustomerLookup')
           .addItem('Edit Customer Information', 'showEditCustomerInformationSearch')
-          .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
       )
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
+          .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
           .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
