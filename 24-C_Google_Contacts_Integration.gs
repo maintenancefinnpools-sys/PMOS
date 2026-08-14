@@ -1,6 +1,7 @@
 /** Google People API integration for Customer Profiles. */
 const PMOS_CONTACT_FIELDS_ = 'names,emailAddresses,phoneNumbers,addresses,biographies,externalIds,metadata';
 const PMOS_CONTACT_LINK_HEADERS_ = {
+  resourceNames: 'Google Contact Resource Names',
   resourceName: 'Google Contact Resource Name',
   etag: 'Google Contact ETag',
   syncedAt: 'Google Contact Last Synced'
@@ -8,24 +9,25 @@ const PMOS_CONTACT_LINK_HEADERS_ = {
 
 function getPmosGoogleContactState(customerId) {
   const customer = getPmosCustomerContactRecord_(customerId, false);
-  if (customer.resourceName) {
-    try {
-      const person = People.People.get(customer.resourceName, {personFields: PMOS_CONTACT_FIELDS_});
-      return buildPmosGoogleContactState_(customer, person, 'LINKED');
-    } catch (error) {
-      return {
-        status: 'BROKEN_LINK', customerId: customer.customerId,
-        message: 'The saved Google Contact link could not be opened. Relink the customer.',
-        error: error && error.message ? error.message : String(error), candidates: []
-      };
-    }
+  if (customer.resourceNames.length) {
+    const people = [];
+    const broken = [];
+    customer.resourceNames.forEach(function (resourceName) {
+      try { people.push(People.People.get(resourceName, {personFields: PMOS_CONTACT_FIELDS_})); }
+      catch (error) { broken.push(resourceName); }
+    });
+    if (people.length) return buildPmosGoogleHouseholdContactState_(customer, people, broken);
+    return {status: 'BROKEN_LINK', customerId: customer.customerId,
+      message: 'The saved Google Contact links could not be opened. Relink this household.', candidates: []};
   }
   const candidates = findPmosGoogleContactCandidates_(customer);
   const automaticMatches = candidates.filter(function (candidate) { return candidate.automaticMatch; });
-  if (automaticMatches.length === 1) {
-    const person = People.People.get(automaticMatches[0].resourceName, {personFields: PMOS_CONTACT_FIELDS_});
-    writePmosGoogleContactLink_(customer, person);
-    return buildPmosGoogleContactState_(getPmosCustomerContactRecord_(customerId, false), person, 'LINKED');
+  if (automaticMatches.length) {
+    const people = automaticMatches.map(function (candidate) {
+      return People.People.get(candidate.resourceName, {personFields: PMOS_CONTACT_FIELDS_});
+    });
+    writePmosGoogleContactLinks_(customer, people);
+    return buildPmosGoogleHouseholdContactState_(getPmosCustomerContactRecord_(customerId, false), people, []);
   }
   return {
     status: candidates.length ? 'CANDIDATES' : 'UNLINKED',
@@ -43,7 +45,9 @@ function linkPmosCustomerGoogleContact(customerId, resourceName) {
   if (!/^people\//.test(cleanResource)) throw new Error('Choose a valid Google Contact.');
   const person = People.People.get(cleanResource, {personFields: PMOS_CONTACT_FIELDS_});
   writePmosGoogleContactLink_(customer, person);
-  return buildPmosGoogleContactState_(getPmosCustomerContactRecord_(customerId, false), person, 'LINKED');
+  const fresh = getPmosCustomerContactRecord_(customerId, false);
+  const people = fresh.resourceNames.map(function (name) { return People.People.get(name, {personFields: PMOS_CONTACT_FIELDS_}); });
+  return buildPmosGoogleHouseholdContactState_(fresh, people, []);
 }
 
 function createPmosGoogleContact(customerId) {
@@ -89,10 +93,18 @@ function applyPmosGoogleContactSync(customerId, direction, expectedResourceName)
 function unlinkPmosCustomerGoogleContact(customerId) {
   const customer = getPmosCustomerContactRecord_(customerId, true);
   const values = customer.sheet.getRange(customer.rowNumber, 1, 1, customer.headers.length).getValues()[0];
+  values[customer.indexes.resourceNames] = '';
   values[customer.indexes.resourceName] = '';
   values[customer.indexes.etag] = '';
   values[customer.indexes.syncedAt] = '';
   customer.sheet.getRange(customer.rowNumber, 1, 1, values.length).setValues([values]);
+  return getPmosGoogleContactState(customerId);
+}
+
+function unlinkPmosCustomerGoogleContactPerson(customerId, resourceName) {
+  const customer = getPmosCustomerContactRecord_(customerId, true);
+  const remaining = customer.resourceNames.filter(function (name) { return name !== String(resourceName || ''); });
+  writePmosGoogleContactLinks_(customer, remaining);
   return getPmosGoogleContactState(customerId);
 }
 
@@ -214,29 +226,36 @@ function previewPmosGoogleContactsMassSync() {
   const peopleByResource = {};
   people.forEach(function (person) { peopleByResource[person.resourceName] = person; });
   const rows = customers.map(function (customer) {
-    let person = customer.resourceName ? peopleByResource[customer.resourceName] : null;
-    let status = person ? 'READY' : customer.resourceName ? 'BROKEN' : '';
-    let matchReason = person ? 'Already linked' : '';
+    let matchedPeople = customer.resourceNames.map(function (name) { return peopleByResource[name]; }).filter(Boolean);
+    let status = matchedPeople.length ? 'READY' : customer.resourceNames.length ? 'BROKEN' : '';
+    let matchReason = matchedPeople.length ? matchedPeople.length + ' household contact' + (matchedPeople.length === 1 ? '' : 's') + ' linked' : '';
     let candidates = [];
     if (!status) {
       candidates = findPmosGoogleContactCandidatesFromPeople_(customer, people);
       const automatic = candidates.filter(function (candidate) { return candidate.automaticMatch; });
-      if (automatic.length === 1) {
-        person = peopleByResource[automatic[0].resourceName]; status = 'READY'; matchReason = automatic[0].matchReason;
+      if (automatic.length) {
+        matchedPeople = automatic.map(function (candidate) { return peopleByResource[candidate.resourceName]; }).filter(Boolean);
+        status = 'READY'; matchReason = matchedPeople.length + ' safe household contact' + (matchedPeople.length === 1 ? '' : 's') + ' found';
       } else status = candidates.length ? 'REVIEW' : 'UNMATCHED';
     }
-    const contact = person ? normalizePmosGooglePerson_(person) : null;
-    const differences = contact ? comparePmosCustomerAndGoogleContact_(customer, contact) : [];
+    const contacts = matchedPeople.map(normalizePmosGooglePerson_);
+    const differences = contacts.reduce(function (all, contact) {
+      comparePmosCustomerAndGoogleContact_(customer, contact).forEach(function (item) {
+        if (all.indexOf(item.field) < 0) all.push(item.field);
+      }); return all;
+    }, []);
     return {
       customerId: customer.customerId,
       customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.customerId,
       customerAddress: customer.address, customerPhone: customer.phone, customerEmail: customer.email,
-      contactName: contact ? contact.displayName : '', resourceName: person ? person.resourceName : '',
+      contactName: contacts.map(function (contact) { return contact.displayName; }).join(', '),
+      resourceName: contacts.length ? contacts[0].resourceName : '',
+      resourceNames: contacts.map(function (contact) { return contact.resourceName; }),
       status: status, matchReason: matchReason,
       explanation: status === 'UNMATCHED' ? 'No name, address, phone, or email match was found.' :
         status === 'REVIEW' ? 'Name suggestions were found, but the address or contact details were not strong enough to link automatically.' :
           status === 'BROKEN' ? 'The previously linked Google Contact is no longer available.' : '',
-      differences: differences.map(function (item) { return item.field; }), candidates: candidates.slice(0, 5)
+      differences: differences, candidates: candidates.slice(0, 8)
     };
   });
   return {rows: rows,
@@ -248,24 +267,32 @@ function previewPmosGoogleContactsMassSync() {
 
 function applyPmosGoogleContactsMassSyncBatch(direction, selections) {
   const cleanDirection = String(direction || '').toUpperCase();
-  if (cleanDirection !== 'PULL' && cleanDirection !== 'PUSH') throw new Error('Choose Pull or Push.');
+  if (cleanDirection !== 'LINK' && cleanDirection !== 'PULL' && cleanDirection !== 'PUSH') throw new Error('Choose Link, Pull, or Push.');
   const batch = Array.isArray(selections) ? selections.slice(0, 12) : [];
   if (!batch.length) throw new Error('No customers were selected.');
   const results = [];
   batch.forEach(function (selection) {
     const customerId = String(selection.customerId || '').trim();
-    const resourceName = String(selection.resourceName || '').trim();
+    const requestedResources = parsePmosGoogleContactResourceNames_(selection.resourceNames || [], selection.resourceName);
     try {
       let customer = getPmosCustomerContactRecord_(customerId, true);
-      if (!customer.resourceName) {
-        const candidates = findPmosGoogleContactCandidates_(customer).filter(function (candidate) {
-          return candidate.automaticMatch && candidate.resourceName === resourceName;
+      if (cleanDirection === 'LINK') {
+        const safeResources = findPmosGoogleContactCandidates_(customer).filter(function (candidate) {
+          return candidate.automaticMatch;
+        }).map(function (candidate) { return candidate.resourceName; });
+        const approved = requestedResources.filter(function (resourceName) {
+          return customer.resourceNames.indexOf(resourceName) >= 0 || safeResources.indexOf(resourceName) >= 0;
         });
-        if (candidates.length !== 1) throw new Error('The safe match changed; review this customer again.');
-        writePmosGoogleContactLink_(customer, People.People.get(resourceName, {personFields: PMOS_CONTACT_FIELDS_}));
+        if (!approved.length || approved.length !== requestedResources.length) throw new Error('The safe household matches changed; review this customer again.');
+        writePmosGoogleContactLinks_(customer, customer.resourceNames.concat(approved));
+        results.push({customerId: customerId, ok: true}); return;
+      }
+      if (!customer.resourceName) {
+        if (requestedResources.length !== 1) throw new Error('Link household contacts before synchronizing an individual.');
+        writePmosGoogleContactLink_(customer, People.People.get(requestedResources[0], {personFields: PMOS_CONTACT_FIELDS_}));
         customer = getPmosCustomerContactRecord_(customerId, true);
       }
-      if (customer.resourceName !== resourceName) throw new Error('The linked contact changed; review this customer again.');
+      if (customer.resourceNames.length !== 1) throw new Error('This property has multiple people; synchronize them individually from the customer profile.');
       if (cleanDirection === 'PULL') pullGoogleContactToPmosCustomer_(customer);
       else pushPmosCustomerToGoogleContact_(customer);
       results.push({customerId: customerId, ok: true});
@@ -331,16 +358,20 @@ function normalizePmosGooglePerson_(person) {
 }
 
 function buildPmosGoogleContactState_(customer, person, status) {
-  const contact = normalizePmosGooglePerson_(person);
-  return {
-    status: status,
-    customerId: customer.customerId,
-    resourceName: contact.resourceName,
-    contact: contact,
-    differences: comparePmosCustomerAndGoogleContact_(customer, contact),
-    lastSynced: customer.syncedAt ? formatPmosCustomerProfileDate_(customer.syncedAt) : '',
-    candidates: []
-  };
+  return buildPmosGoogleHouseholdContactState_(customer, [person], []);
+}
+
+function buildPmosGoogleHouseholdContactState_(customer, people, broken) {
+  const contacts = people.map(function (person) {
+    const contact = normalizePmosGooglePerson_(person);
+    contact.differences = comparePmosCustomerAndGoogleContact_(customer, contact);
+    return contact;
+  });
+  return {status: 'LINKED', customerId: customer.customerId,
+    resourceName: contacts.length ? contacts[0].resourceName : '', contact: contacts[0] || {},
+    contacts: contacts, brokenResourceNames: broken || [],
+    differences: contacts.length ? contacts[0].differences : [],
+    lastSynced: customer.syncedAt ? formatPmosCustomerProfileDate_(customer.syncedAt) : '', candidates: []};
 }
 
 function comparePmosCustomerAndGoogleContact_(customer, contact) {
@@ -373,10 +404,20 @@ function formatPmosContactDifferenceSummary_(differences, direction) {
 }
 
 function writePmosGoogleContactLink_(customer, person) {
+  const existing = getPmosCustomerContactRecord_(customer.customerId, true).resourceNames;
+  writePmosGoogleContactLinks_(customer, existing.concat([person]));
+}
+
+function writePmosGoogleContactLinks_(customer, peopleOrResourceNames) {
   const fresh = getPmosCustomerContactRecord_(customer.customerId, true);
   const values = fresh.sheet.getRange(fresh.rowNumber, 1, 1, fresh.headers.length).getValues()[0];
-  values[fresh.indexes.resourceName] = person.resourceName || '';
-  values[fresh.indexes.etag] = person.etag || '';
+  const resources = peopleOrResourceNames.map(function (item) {
+    return typeof item === 'string' ? item : String(item.resourceName || '');
+  }).filter(Boolean).filter(function (value, index, all) { return all.indexOf(value) === index; });
+  const firstPerson = peopleOrResourceNames.find(function (item) { return item && typeof item !== 'string' && item.resourceName === resources[0]; });
+  values[fresh.indexes.resourceNames] = JSON.stringify(resources);
+  values[fresh.indexes.resourceName] = resources[0] || '';
+  values[fresh.indexes.etag] = firstPerson && firstPerson.etag || '';
   values[fresh.indexes.syncedAt] = new Date();
   fresh.sheet.getRange(fresh.rowNumber, 1, 1, values.length).setValues([values]);
 }
@@ -399,6 +440,7 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
     phone: index(['Primary Phone', 'Phone Number', 'Phone'], true),
     email: index(['Email', 'Email Address'], true),
     notes: index(['Customer Notes', 'Notes', 'Details'], false),
+    resourceNames: index([PMOS_CONTACT_LINK_HEADERS_.resourceNames], false),
     resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
     etag: index([PMOS_CONTACT_LINK_HEADERS_.etag], false),
     syncedAt: index([PMOS_CONTACT_LINK_HEADERS_.syncedAt], false)
@@ -413,6 +455,7 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
       firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
       address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
       email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      resourceNames: parsePmosGoogleContactResourceNames_(value('resourceNames'), value('resourceName')),
       resourceName: String(value('resourceName') || '').trim(),
       etag: String(value('etag') || '').trim(), syncedAt: value('syncedAt')
     };
@@ -437,6 +480,7 @@ function listPmosCustomerContactRecords_() {
     address: index(['Full Address', 'Service Address', 'Address', 'Street Address'], true),
     phone: index(['Primary Phone', 'Phone Number', 'Phone'], true), email: index(['Email', 'Email Address'], true),
     notes: index(['Customer Notes', 'Notes', 'Details'], false),
+    resourceNames: index([PMOS_CONTACT_LINK_HEADERS_.resourceNames], false),
     resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
     etag: index([PMOS_CONTACT_LINK_HEADERS_.etag], false), syncedAt: index([PMOS_CONTACT_LINK_HEADERS_.syncedAt], false)
   };
@@ -448,6 +492,7 @@ function listPmosCustomerContactRecords_() {
       firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
       address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
       email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      resourceNames: parsePmosGoogleContactResourceNames_(value('resourceNames'), value('resourceName')),
       resourceName: String(value('resourceName') || '').trim(), etag: String(value('etag') || '').trim(),
       syncedAt: value('syncedAt')};
   }).filter(Boolean);
@@ -461,6 +506,19 @@ function ensurePmosGoogleContactHeaders_(sheet) {
   });
   if (!missing.length) return;
   sheet.getRange(1, lastColumn + 1, 1, missing.length).setValues([missing]);
+}
+
+function parsePmosGoogleContactResourceNames_(pluralValue, legacyValue) {
+  let resources = [];
+  if (Array.isArray(pluralValue)) resources = pluralValue;
+  else if (String(pluralValue || '').trim()) {
+    try { resources = JSON.parse(String(pluralValue)); }
+    catch (error) { resources = String(pluralValue).split(/[\n,]+/); }
+  }
+  resources.push(String(legacyValue || '').trim());
+  return resources.map(function (value) { return String(value || '').trim(); }).filter(function (value, index, all) {
+    return /^people\//.test(value) && all.indexOf(value) === index;
+  });
 }
 
 function normalizePmosContactEmail_(value) {
