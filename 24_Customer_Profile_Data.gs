@@ -56,6 +56,9 @@ function getPmosCustomerProfile(customerId) {
 
   const routes = readPmosCustomerProfileRoutes_(record.customerId);
   const equipment = readPmosCustomerProfileEquipment_(record.customerId);
+  const routeWeeks = routes.map(function (route) { return Number(route.week || 0); }).filter(Boolean).filter(function (week, index, all) { return all.indexOf(week) === index; });
+  const routeDays = routes.map(function (route) { return String(route.day || ''); }).filter(Boolean).filter(function (day, index, all) { return all.indexOf(day) === index; });
+  const inferredFrequency = routeWeeks.length >= 4 ? (routeDays.length > 1 ? 'Twice Weekly' : 'Weekly') : routeWeeks.length === 2 ? 'Bi-Weekly' : routeWeeks.length === 1 ? 'Monthly' : '';
   return {
     customerId: record.customerId,
     displayName: record.displayName,
@@ -66,7 +69,7 @@ function getPmosCustomerProfile(customerId) {
     phone: record.phone,
     email: record.email,
     status: record.status,
-    frequency: record.frequency,
+    frequency: record.frequency || inferredFrequency,
     serviceStartDate: record.serviceStartDate,
     yearRound: record.yearRound,
     entryInformation: record.entryInformation,
