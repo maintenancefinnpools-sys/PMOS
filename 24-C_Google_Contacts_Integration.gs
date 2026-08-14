@@ -178,6 +178,7 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
       (contactFirst === customerFirst || (customerFirstSet && contactFirstSet === customerFirstSet));
     const fullNameMatch = customerFull && (contactFull === customerFull || contactLast === customerFull || customerLast === contactFull);
     const surnameMatch = customerLast && contactLast && customerLast === contactLast;
+    const givenNameOverlap = pmosContactNamesOverlap_(customerFirstSet, contactFirstSet);
     const nameMatch = !!(exactPartsMatch || fullNameMatch);
     const nameSuggestion = !!(nameMatch || surnameMatch);
     const addressMatch = customerAddress && contact.addresses.some(function (value) {
@@ -186,7 +187,7 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
         (customerPostal && contactPostal && customerPostal === contactPostal) ||
         (customerStreet && normalizePmosContactStreet_(value) === customerStreet);
     });
-    const automaticMatch = !!(nameMatch && addressMatch);
+    const automaticMatch = !!(emailMatch || phoneMatch || (addressMatch && (nameMatch || (surnameMatch && givenNameOverlap))));
     if (!emailMatch && !phoneMatch && !nameSuggestion && !addressMatch) return null;
     return {
       resourceName: person.resourceName,
@@ -195,8 +196,9 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
       email: contact.email,
       address: contact.address,
       automaticMatch: automaticMatch,
-      matchReason: automaticMatch ? 'Matching name and address' : emailMatch && phoneMatch ? 'Exact email and phone' :
-        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' : addressMatch ? 'Matching address — confirm before linking' :
+      matchReason: emailMatch && phoneMatch ? 'Exact email and phone' : emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' :
+        automaticMatch ? (nameMatch ? 'Matching name and address' : 'Matching surname, given name, and address') :
+        addressMatch ? 'Matching address — confirm before linking' :
           nameMatch ? 'Matching name — confirm before linking' : 'Matching last name — confirm before linking'
     };
   }).filter(Boolean).sort(function (a, b) {
@@ -464,7 +466,7 @@ function normalizePmosContactEmail_(value) {
 }
 
 function normalizePmosContactName_(value) {
-  return normalizePmosCustomerSearch_(String(value || '').replace(/&/g, ' and '))
+  return normalizePmosCustomerSearch_(String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and '))
     .replace(/\b(mr|mrs|ms|miss|dr)\b/g, '').replace(/\s+/g, ' ').trim();
 }
 
@@ -472,6 +474,16 @@ function normalizePmosContactGivenNameSet_(value) {
   return normalizePmosContactName_(value).split(' ').filter(function (part) {
     return part && part !== 'and';
   }).filter(function (part, index, parts) { return parts.indexOf(part) === index; }).sort().join(' ');
+}
+
+function pmosContactNamesOverlap_(left, right) {
+  const leftParts = String(left || '').split(' ').filter(Boolean);
+  const rightParts = String(right || '').split(' ').filter(Boolean);
+  return leftParts.some(function (part) {
+    return rightParts.some(function (other) {
+      return other === part || (part.length === 1 && other.charAt(0) === part) || (other.length === 1 && part.charAt(0) === other);
+    });
+  });
 }
 
 function normalizePmosContactPhone_(value) {
