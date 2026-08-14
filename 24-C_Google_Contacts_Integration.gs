@@ -204,7 +204,8 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
     const nameMatch = !!(exactPartsMatch || fullNameMatch);
     const nameSuggestion = !!(nameMatch || surnameMatch);
     const addressMatch = customer.address && contact.addresses.some(function (value) {
-      return pmosContactAddressesMatch_(customer.address, value);
+      return pmosContactAddressesMatch_(customer.address, value) ||
+        (surnameMatch && pmosContactAddressesLikelySame_(customer.address, value));
     });
     const surnameGivenMatch = !!(surnameMatch && givenNameOverlap);
     const automaticMatch = !!(emailMatch || phoneMatch || addressMatch);
@@ -617,4 +618,23 @@ function pmosContactAddressesMatch_(left, right) {
   const leftCore = pmosContactStreetCore_(left);
   const rightCore = pmosContactStreetCore_(right);
   return !!(leftCore && rightCore && leftCore === rightCore && /^\d/.test(leftCore));
+}
+
+function pmosContactAddressesLikelySame_(left, right) {
+  const civic = function (value) {
+    const match = normalizePmosContactAddress_(value).match(/\b(\d+[a-z]?)\b/);
+    return match ? match[1] : '';
+  };
+  const tokens = function (value) {
+    return normalizePmosContactStreet_(value).split(' ').filter(function (part) {
+      return part.length >= 3 && !/^\d/.test(part) &&
+        ['canada', 'ontario', 'unit', 'suite', 'apartment'].indexOf(part) < 0;
+    }).filter(function (part, index, all) { return all.indexOf(part) === index; });
+  };
+  const leftCivic = civic(left);
+  const rightCivic = civic(right);
+  if (!leftCivic || leftCivic !== rightCivic) return false;
+  const leftTokens = tokens(left);
+  const rightTokens = tokens(right);
+  return leftTokens.some(function (part) { return rightTokens.indexOf(part) >= 0; });
 }
