@@ -161,19 +161,30 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
   const phone = normalizePmosContactPhone_(customer.phone);
   const customerFirst = normalizePmosCustomerSearch_(customer.firstName);
   const customerLast = normalizePmosCustomerSearch_(customer.lastName);
+  const customerFull = normalizePmosCustomerSearch_([customer.firstName, customer.lastName].filter(Boolean).join(' '));
   const customerAddress = normalizePmosContactAddress_(customer.address);
+  const customerPostal = extractPmosContactPostalCode_(customer.address);
+  const customerStreet = normalizePmosContactStreet_(customer.address);
   return people.map(function (person) {
     const contact = normalizePmosGooglePerson_(person);
     const emailMatch = email && contact.emails.some(function (value) { return normalizePmosContactEmail_(value) === email; });
     const phoneMatch = phone && contact.phones.some(function (value) { return normalizePmosContactPhone_(value) === phone; });
-    const nameMatch = customerFirst && customerLast &&
-      normalizePmosCustomerSearch_(contact.firstName) === customerFirst &&
-      normalizePmosCustomerSearch_(contact.lastName) === customerLast;
+    const contactFirst = normalizePmosCustomerSearch_(contact.firstName);
+    const contactLast = normalizePmosCustomerSearch_(contact.lastName);
+    const contactFull = normalizePmosCustomerSearch_(contact.displayName);
+    const exactPartsMatch = customerFirst && customerLast && contactFirst === customerFirst && contactLast === customerLast;
+    const fullNameMatch = customerFull && (contactFull === customerFull || contactLast === customerFull || customerLast === contactFull);
+    const surnameMatch = customerLast && contactLast && customerLast === contactLast;
+    const nameMatch = !!(exactPartsMatch || fullNameMatch);
+    const nameSuggestion = !!(nameMatch || surnameMatch);
     const addressMatch = customerAddress && contact.addresses.some(function (value) {
-      return normalizePmosContactAddress_(value) === customerAddress;
+      const contactPostal = extractPmosContactPostalCode_(value);
+      return normalizePmosContactAddress_(value) === customerAddress ||
+        (customerPostal && contactPostal && customerPostal === contactPostal) ||
+        (customerStreet && normalizePmosContactStreet_(value) === customerStreet);
     });
     const automaticMatch = !!(nameMatch && addressMatch);
-    if (!emailMatch && !phoneMatch && !nameMatch) return null;
+    if (!emailMatch && !phoneMatch && !nameSuggestion) return null;
     return {
       resourceName: person.resourceName,
       displayName: contact.displayName,
@@ -181,8 +192,9 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
       email: contact.email,
       address: contact.address,
       automaticMatch: automaticMatch,
-      matchReason: automaticMatch ? 'Exact name and address' : emailMatch && phoneMatch ? 'Exact email and phone' :
-        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' : 'Exact name — confirm before linking'
+      matchReason: automaticMatch ? 'Matching name and address' : emailMatch && phoneMatch ? 'Exact email and phone' :
+        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' :
+          nameMatch ? 'Matching name — confirm before linking' : 'Matching last name — confirm before linking'
     };
   }).filter(Boolean).sort(function (a, b) {
     return a.displayName.localeCompare(b.displayName) || a.resourceName.localeCompare(b.resourceName);
@@ -431,5 +443,22 @@ function normalizePmosContactPhone_(value) {
 }
 
 function normalizePmosContactAddress_(value) {
-  return normalizePmosCustomerSearch_(value).replace(/\b(canada|ontario|on)\b/g, '').replace(/\s+/g, ' ').trim();
+  return normalizePmosCustomerSearch_(value)
+    .replace(/\b(canada|ontario|on)\b/g, '')
+    .replace(/\b(drive|drv)\b/g, 'dr').replace(/\b(street)\b/g, 'st')
+    .replace(/\b(road)\b/g, 'rd').replace(/\b(avenue)\b/g, 'ave')
+    .replace(/\b(boulevard)\b/g, 'blvd').replace(/\b(court)\b/g, 'ct')
+    .replace(/\b(crescent)\b/g, 'cres').replace(/\b(lane)\b/g, 'ln')
+    .replace(/\b(place)\b/g, 'pl').replace(/\b(highway)\b/g, 'hwy')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function extractPmosContactPostalCode_(value) {
+  const match = String(value || '').toUpperCase().match(/\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b/);
+  return match ? match[1] + match[2] : '';
+}
+
+function normalizePmosContactStreet_(value) {
+  const firstLine = String(value || '').split(',')[0];
+  return normalizePmosContactAddress_(firstLine).replace(/\b(unit|suite|apt|apartment)\s*[a-z0-9-]+\b/g, '').trim();
 }
