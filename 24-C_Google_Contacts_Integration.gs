@@ -159,9 +159,10 @@ function findPmosGoogleContactCandidates_(customer) {
 function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
   const email = normalizePmosContactEmail_(customer.email);
   const phone = normalizePmosContactPhone_(customer.phone);
-  const customerFirst = normalizePmosCustomerSearch_(customer.firstName);
-  const customerLast = normalizePmosCustomerSearch_(customer.lastName);
-  const customerFull = normalizePmosCustomerSearch_([customer.firstName, customer.lastName].filter(Boolean).join(' '));
+  const customerFirst = normalizePmosContactName_(customer.firstName);
+  const customerFirstSet = normalizePmosContactGivenNameSet_(customer.firstName);
+  const customerLast = normalizePmosContactName_(customer.lastName);
+  const customerFull = normalizePmosContactName_([customer.firstName, customer.lastName].filter(Boolean).join(' '));
   const customerAddress = normalizePmosContactAddress_(customer.address);
   const customerPostal = extractPmosContactPostalCode_(customer.address);
   const customerStreet = normalizePmosContactStreet_(customer.address);
@@ -169,10 +170,12 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
     const contact = normalizePmosGooglePerson_(person);
     const emailMatch = email && contact.emails.some(function (value) { return normalizePmosContactEmail_(value) === email; });
     const phoneMatch = phone && contact.phones.some(function (value) { return normalizePmosContactPhone_(value) === phone; });
-    const contactFirst = normalizePmosCustomerSearch_(contact.firstName);
-    const contactLast = normalizePmosCustomerSearch_(contact.lastName);
-    const contactFull = normalizePmosCustomerSearch_(contact.displayName);
-    const exactPartsMatch = customerFirst && customerLast && contactFirst === customerFirst && contactLast === customerLast;
+    const contactFirst = normalizePmosContactName_(contact.firstName);
+    const contactFirstSet = normalizePmosContactGivenNameSet_(contact.firstName);
+    const contactLast = normalizePmosContactName_(contact.lastName);
+    const contactFull = normalizePmosContactName_(contact.displayName);
+    const exactPartsMatch = customerFirst && customerLast && contactLast === customerLast &&
+      (contactFirst === customerFirst || (customerFirstSet && contactFirstSet === customerFirstSet));
     const fullNameMatch = customerFull && (contactFull === customerFull || contactLast === customerFull || customerLast === contactFull);
     const surnameMatch = customerLast && contactLast && customerLast === contactLast;
     const nameMatch = !!(exactPartsMatch || fullNameMatch);
@@ -458,6 +461,17 @@ function ensurePmosGoogleContactHeaders_(sheet) {
 
 function normalizePmosContactEmail_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizePmosContactName_(value) {
+  return normalizePmosCustomerSearch_(String(value || '').replace(/&/g, ' and '))
+    .replace(/\b(mr|mrs|ms|miss|dr)\b/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizePmosContactGivenNameSet_(value) {
+  return normalizePmosContactName_(value).split(' ').filter(function (part) {
+    return part && part !== 'and';
+  }).filter(function (part, index, parts) { return parts.indexOf(part) === index; }).sort().join(' ');
 }
 
 function normalizePmosContactPhone_(value) {
