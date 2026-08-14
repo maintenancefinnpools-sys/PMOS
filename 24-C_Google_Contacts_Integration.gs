@@ -184,7 +184,7 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
         (customerStreet && normalizePmosContactStreet_(value) === customerStreet);
     });
     const automaticMatch = !!(nameMatch && addressMatch);
-    if (!emailMatch && !phoneMatch && !nameSuggestion) return null;
+    if (!emailMatch && !phoneMatch && !nameSuggestion && !addressMatch) return null;
     return {
       resourceName: person.resourceName,
       displayName: contact.displayName,
@@ -193,7 +193,7 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
       address: contact.address,
       automaticMatch: automaticMatch,
       matchReason: automaticMatch ? 'Matching name and address' : emailMatch && phoneMatch ? 'Exact email and phone' :
-        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' :
+        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' : addressMatch ? 'Matching address — confirm before linking' :
           nameMatch ? 'Matching name — confirm before linking' : 'Matching last name — confirm before linking'
     };
   }).filter(Boolean).sort(function (a, b) {
@@ -280,6 +280,25 @@ function listPmosGoogleContacts_() {
     pageToken = response.nextPageToken || '';
   } while (pageToken);
   return results;
+}
+
+function searchPmosGoogleContactsForManualLink(query) {
+  const clean = normalizePmosCustomerSearch_(query);
+  if (clean.length < 2) throw new Error('Enter at least two characters to search Google Contacts.');
+  const terms = clean.split(' ').filter(Boolean);
+  return listPmosGoogleContacts_().map(function (person) {
+    const contact = normalizePmosGooglePerson_(person);
+    const haystack = normalizePmosCustomerSearch_([
+      contact.displayName, contact.addresses.join(' '), contact.phones.join(' '), contact.emails.join(' ')
+    ].join(' '));
+    const matchedTerms = terms.filter(function (term) { return haystack.indexOf(term) >= 0; }).length;
+    if (!matchedTerms) return null;
+    const startsWithName = normalizePmosCustomerSearch_(contact.displayName).indexOf(clean) === 0;
+    return {resourceName: contact.resourceName, displayName: contact.displayName, address: contact.address,
+      phone: contact.phone, email: contact.email, score: matchedTerms * 10 + (startsWithName ? 5 : 0)};
+  }).filter(Boolean).sort(function (a, b) {
+    return b.score - a.score || a.displayName.localeCompare(b.displayName);
+  }).slice(0, 25).map(function (contact) { delete contact.score; return contact; });
 }
 
 function normalizePmosGooglePerson_(person) {
