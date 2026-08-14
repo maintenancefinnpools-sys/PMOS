@@ -574,7 +574,7 @@ function normalizePmosContactPhone_(value) {
 }
 
 function normalizePmosContactAddress_(value) {
-  return normalizePmosCustomerSearch_(value)
+  return normalizePmosCustomerSearch_(String(value || '').replace(/[.]/g, ' '))
     .replace(/\b(canada|ontario|on)\b/g, '')
     .replace(/\b(drive|drv)\b/g, 'dr').replace(/\b(street)\b/g, 'st')
     .replace(/\b(road)\b/g, 'rd').replace(/\b(avenue)\b/g, 'ave')
@@ -589,7 +589,7 @@ function normalizePmosContactAddress_(value) {
 }
 
 function extractPmosContactPostalCode_(value) {
-  const match = String(value || '').toUpperCase().match(/\b([A-Z]\d[A-Z])\s?(\d[A-Z]\d)\b/);
+  const match = String(value || '').toUpperCase().match(/\b([A-Z]\d[A-Z])[\s-]?(\d[A-Z]\d)\b/);
   return match ? match[1] + match[2] : '';
 }
 
