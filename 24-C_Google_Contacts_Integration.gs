@@ -1,5 +1,5 @@
 /** Google People API integration for Customer Profiles. */
-const PMOS_CONTACT_FIELDS_ = 'names,emailAddresses,phoneNumbers,addresses,externalIds,metadata';
+const PMOS_CONTACT_FIELDS_ = 'names,emailAddresses,phoneNumbers,addresses,biographies,externalIds,metadata';
 const PMOS_CONTACT_LINK_HEADERS_ = {
   resourceName: 'Google Contact Resource Name',
   etag: 'Google Contact ETag',
@@ -100,7 +100,7 @@ function pushPmosCustomerToGoogleContact_(customer) {
   const latest = People.People.get(customer.resourceName, {personFields: PMOS_CONTACT_FIELDS_});
   const payload = buildPmosGooglePerson_(customer, latest);
   const updated = People.People.updateContact(payload, latest.resourceName, {
-    updatePersonFields: 'names,emailAddresses,phoneNumbers,addresses,externalIds',
+    updatePersonFields: 'names,emailAddresses,phoneNumbers,addresses,biographies,externalIds',
     personFields: PMOS_CONTACT_FIELDS_
   });
   writePmosGoogleContactLink_(customer, updated);
@@ -120,6 +120,7 @@ function pullGoogleContactToPmosCustomer_(customer) {
     values[fresh.indexes.address] = contact.address;
     values[fresh.indexes.phone] = contact.phone;
     values[fresh.indexes.email] = contact.email;
+    if (fresh.indexes.notes >= 0) values[fresh.indexes.notes] = contact.notes;
     values[fresh.indexes.resourceName] = person.resourceName;
     values[fresh.indexes.etag] = person.etag || '';
     values[fresh.indexes.syncedAt] = new Date();
@@ -140,6 +141,7 @@ function buildPmosGooglePerson_(customer, latest) {
     emailAddresses: customer.email ? [{value: customer.email, type: 'work'}] : [],
     phoneNumbers: customer.phone ? [{value: customer.phone, type: 'mobile'}] : [],
     addresses: customer.address ? [{formattedValue: customer.address, type: 'work'}] : [],
+    biographies: customer.notes ? [{value: customer.notes, contentType: 'TEXT_PLAIN'}] : [],
     externalIds: externalIds
   };
   if (latest) {
@@ -205,6 +207,7 @@ function normalizePmosGooglePerson_(person) {
   const addresses = (person.addresses || []).map(function (item) {
     return String(item.formattedValue || [item.streetAddress, item.city, item.region, item.postalCode, item.country].filter(Boolean).join(', ')).trim();
   }).filter(Boolean);
+  const biographies = (person.biographies || []).map(function (item) { return String(item.value || '').trim(); }).filter(Boolean);
   return {
     resourceName: String(person.resourceName || ''),
     etag: String(person.etag || ''),
@@ -213,7 +216,8 @@ function normalizePmosGooglePerson_(person) {
     displayName: String(primaryName.displayName || [primaryName.givenName, primaryName.familyName].filter(Boolean).join(' ') || 'Unnamed contact').trim(),
     email: emails[0] || '', emails: emails,
     phone: phones[0] || '', phones: phones,
-    address: addresses[0] || '', addresses: addresses
+    address: addresses[0] || '', addresses: addresses,
+    notes: biographies[0] || ''
   };
 }
 
@@ -236,7 +240,8 @@ function comparePmosCustomerAndGoogleContact_(customer, contact) {
     ['Last name', 'lastName', function (v) { return normalizePmosCustomerSearch_(v); }],
     ['Phone', 'phone', normalizePmosContactPhone_],
     ['Email', 'email', normalizePmosContactEmail_],
-    ['Address', 'address', function (v) { return normalizePmosCustomerSearch_(v); }]
+    ['Address', 'address', function (v) { return normalizePmosCustomerSearch_(v); }],
+    ['Customer notes', 'notes', function (v) { return String(v || '').trim(); }]
   ];
   return fields.map(function (field) {
     const pmosValue = String(customer[field[1]] || '').trim();
@@ -284,6 +289,7 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
     address: index(['Full Address', 'Service Address', 'Address', 'Street Address'], true),
     phone: index(['Primary Phone', 'Phone Number', 'Phone'], true),
     email: index(['Email', 'Email Address'], true),
+    notes: index(['Customer Notes', 'Notes', 'Details'], false),
     resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
     etag: index([PMOS_CONTACT_LINK_HEADERS_.etag], false),
     syncedAt: index([PMOS_CONTACT_LINK_HEADERS_.syncedAt], false)
@@ -297,7 +303,8 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
       customerId: cleanId,
       firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
       address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
-      email: String(value('email') || '').trim(), resourceName: String(value('resourceName') || '').trim(),
+      email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      resourceName: String(value('resourceName') || '').trim(),
       etag: String(value('etag') || '').trim(), syncedAt: value('syncedAt')
     };
   }
