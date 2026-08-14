@@ -16,7 +16,20 @@ function getPmosGoogleContactState(customerId) {
       try { people.push(People.People.get(resourceName, {personFields: PMOS_CONTACT_FIELDS_})); }
       catch (error) { broken.push(resourceName); }
     });
-    if (people.length) return buildPmosGoogleHouseholdContactState_(customer, people, broken);
+    if (people.length) {
+      const allPeople = listPmosGoogleContacts_();
+      const linkedNames = people.map(function (person) { return person.resourceName; });
+      const additions = findPmosGoogleContactCandidatesFromPeople_(customer, allPeople).filter(function (candidate) {
+        return candidate.automaticMatch && linkedNames.indexOf(candidate.resourceName) < 0;
+      }).map(function (candidate) {
+        return allPeople.find(function (person) { return person.resourceName === candidate.resourceName; });
+      }).filter(Boolean);
+      if (additions.length) {
+        Array.prototype.push.apply(people, additions);
+        writePmosGoogleContactLinks_(customer, people);
+      }
+      return buildPmosGoogleHouseholdContactState_(getPmosCustomerContactRecord_(customerId, false), people, broken);
+    }
     return {status: 'BROKEN_LINK', customerId: customer.customerId,
       message: 'The saved Google Contact links could not be opened. Relink this household.', candidates: []};
   }
@@ -175,9 +188,6 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
   const customerFirstSet = normalizePmosContactGivenNameSet_(customer.firstName);
   const customerLast = normalizePmosContactName_(customer.lastName);
   const customerFull = normalizePmosContactName_([customer.firstName, customer.lastName].filter(Boolean).join(' '));
-  const customerAddress = normalizePmosContactAddress_(customer.address);
-  const customerPostal = extractPmosContactPostalCode_(customer.address);
-  const customerStreet = normalizePmosContactStreet_(customer.address);
   return people.map(function (person) {
     const contact = normalizePmosGooglePerson_(person);
     const emailMatch = email && contact.emails.some(function (value) { return normalizePmosContactEmail_(value) === email; });
@@ -193,11 +203,8 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
     const givenNameOverlap = pmosContactNamesOverlap_(customerFirstSet, contactFirstSet);
     const nameMatch = !!(exactPartsMatch || fullNameMatch);
     const nameSuggestion = !!(nameMatch || surnameMatch);
-    const addressMatch = customerAddress && contact.addresses.some(function (value) {
-      const contactPostal = extractPmosContactPostalCode_(value);
-      return normalizePmosContactAddress_(value) === customerAddress ||
-        (customerPostal && contactPostal && customerPostal === contactPostal) ||
-        (customerStreet && normalizePmosContactStreet_(value) === customerStreet);
+    const addressMatch = customer.address && contact.addresses.some(function (value) {
+      return pmosContactAddressesMatch_(customer.address, value);
     });
     const surnameGivenMatch = !!(surnameMatch && givenNameOverlap);
     const automaticMatch = !!(emailMatch || phoneMatch || addressMatch);
@@ -229,10 +236,17 @@ function previewPmosGoogleContactsMassSync() {
     let matchedPeople = customer.resourceNames.map(function (name) { return peopleByResource[name]; }).filter(Boolean);
     let status = matchedPeople.length ? 'READY' : customer.resourceNames.length ? 'BROKEN' : '';
     let matchReason = matchedPeople.length ? matchedPeople.length + ' household contact' + (matchedPeople.length === 1 ? '' : 's') + ' linked' : '';
-    let candidates = [];
-    if (!status) {
-      candidates = findPmosGoogleContactCandidatesFromPeople_(customer, people);
-      const automatic = candidates.filter(function (candidate) { return candidate.automaticMatch; });
+    let candidates = findPmosGoogleContactCandidatesFromPeople_(customer, people);
+    const automatic = candidates.filter(function (candidate) { return candidate.automaticMatch; });
+    const linkedNames = matchedPeople.map(function (person) { return person.resourceName; });
+    const additions = automatic.filter(function (candidate) { return linkedNames.indexOf(candidate.resourceName) < 0; });
+    if (additions.length) {
+      additions.forEach(function (candidate) {
+        const person = peopleByResource[candidate.resourceName]; if (person) matchedPeople.push(person);
+      });
+      status = 'READY';
+      matchReason = additions.length + ' additional household contact' + (additions.length === 1 ? '' : 's') + ' found';
+    } else if (!status) {
       if (automatic.length) {
         matchedPeople = automatic.map(function (candidate) { return peopleByResource[candidate.resourceName]; }).filter(Boolean);
         status = 'READY'; matchReason = matchedPeople.length + ' safe household contact' + (matchedPeople.length === 1 ? '' : 's') + ' found';
@@ -340,9 +354,16 @@ function normalizePmosGooglePerson_(person) {
   const primaryName = names.find(function (item) { return item.metadata && item.metadata.primary; }) || names[0] || {};
   const emails = (person.emailAddresses || []).map(function (item) { return String(item.value || '').trim(); }).filter(Boolean);
   const phones = (person.phoneNumbers || []).map(function (item) { return String(item.value || '').trim(); }).filter(Boolean);
-  const addresses = (person.addresses || []).map(function (item) {
+  const formattedAddresses = (person.addresses || []).map(function (item) {
     return String(item.formattedValue || [item.streetAddress, item.city, item.region, item.postalCode, item.country].filter(Boolean).join(', ')).trim();
   }).filter(Boolean);
+  const addresses = (person.addresses || []).reduce(function (all, item) {
+    [item.formattedValue, item.streetAddress,
+      [item.streetAddress, item.city, item.region, item.postalCode, item.country].filter(Boolean).join(', ')
+    ].forEach(function (value) {
+      const clean = String(value || '').trim(); if (clean && all.indexOf(clean) < 0) all.push(clean);
+    }); return all;
+  }, []);
   const biographies = (person.biographies || []).map(function (item) { return String(item.value || '').trim(); }).filter(Boolean);
   return {
     resourceName: String(person.resourceName || ''),
@@ -352,7 +373,7 @@ function normalizePmosGooglePerson_(person) {
     displayName: String(primaryName.displayName || [primaryName.givenName, primaryName.familyName].filter(Boolean).join(' ') || 'Unnamed contact').trim(),
     email: emails[0] || '', emails: emails,
     phone: phones[0] || '', phones: phones,
-    address: addresses[0] || '', addresses: addresses,
+    address: formattedAddresses[0] || addresses[0] || '', addresses: addresses,
     notes: biographies[0] || ''
   };
 }
@@ -559,6 +580,10 @@ function normalizePmosContactAddress_(value) {
     .replace(/\b(boulevard)\b/g, 'blvd').replace(/\b(court)\b/g, 'ct')
     .replace(/\b(crescent)\b/g, 'cres').replace(/\b(lane)\b/g, 'ln')
     .replace(/\b(place)\b/g, 'pl').replace(/\b(highway)\b/g, 'hwy')
+    .replace(/\b(terrace)\b/g, 'terr').replace(/\b(trail)\b/g, 'trl')
+    .replace(/\b(parkway)\b/g, 'pkwy').replace(/\b(circle)\b/g, 'cir')
+    .replace(/\b(north)\b/g, 'n').replace(/\b(south)\b/g, 's')
+    .replace(/\b(east)\b/g, 'e').replace(/\b(west)\b/g, 'w')
     .replace(/\s+/g, ' ').trim();
 }
 
@@ -568,6 +593,28 @@ function extractPmosContactPostalCode_(value) {
 }
 
 function normalizePmosContactStreet_(value) {
-  const firstLine = String(value || '').split(',')[0];
+  const withoutLeadingUnit = String(value || '').replace(/^\s*(unit|suite|apt|apartment)\s*[a-z0-9-]+\s*[,#-]\s*/i, '');
+  const firstLine = withoutLeadingUnit.split(/[,\n\r]/)[0];
   return normalizePmosContactAddress_(firstLine).replace(/\b(unit|suite|apt|apartment)\s*[a-z0-9-]+\b/g, '').trim();
+}
+
+function pmosContactStreetCore_(value) {
+  return normalizePmosContactStreet_(value)
+    .replace(/\b(st|rd|dr|ave|blvd|ct|cres|ln|pl|hwy|terr|trl|pkwy|cir)\b/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function pmosContactAddressesMatch_(left, right) {
+  const leftPostal = extractPmosContactPostalCode_(left);
+  const rightPostal = extractPmosContactPostalCode_(right);
+  if (leftPostal && rightPostal && leftPostal === rightPostal) return true;
+  const leftFull = normalizePmosContactAddress_(left);
+  const rightFull = normalizePmosContactAddress_(right);
+  if (leftFull && leftFull === rightFull) return true;
+  const leftStreet = normalizePmosContactStreet_(left);
+  const rightStreet = normalizePmosContactStreet_(right);
+  if (leftStreet && leftStreet === rightStreet) return true;
+  const leftCore = pmosContactStreetCore_(left);
+  const rightCore = pmosContactStreetCore_(right);
+  return !!(leftCore && rightCore && leftCore === rightCore && /^\d/.test(leftCore));
 }
