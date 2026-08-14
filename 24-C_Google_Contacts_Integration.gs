@@ -21,12 +21,18 @@ function getPmosGoogleContactState(customerId) {
     }
   }
   const candidates = findPmosGoogleContactCandidates_(customer);
+  const automaticMatches = candidates.filter(function (candidate) { return candidate.automaticMatch; });
+  if (automaticMatches.length === 1) {
+    const person = People.People.get(automaticMatches[0].resourceName, {personFields: PMOS_CONTACT_FIELDS_});
+    writePmosGoogleContactLink_(customer, person);
+    return buildPmosGoogleContactState_(getPmosCustomerContactRecord_(customerId, false), person, 'LINKED');
+  }
   return {
     status: candidates.length ? 'CANDIDATES' : 'UNLINKED',
     customerId: customer.customerId,
     message: candidates.length
       ? 'Possible Google Contacts were found. Choose one only after confirming its details.'
-      : 'No exact phone or email match was found.',
+      : 'No matching Google Contact was found.',
     candidates: candidates
   };
 }
@@ -148,18 +154,30 @@ function findPmosGoogleContactCandidates_(customer) {
   const people = listPmosGoogleContacts_();
   const email = normalizePmosContactEmail_(customer.email);
   const phone = normalizePmosContactPhone_(customer.phone);
+  const customerFirst = normalizePmosCustomerSearch_(customer.firstName);
+  const customerLast = normalizePmosCustomerSearch_(customer.lastName);
+  const customerAddress = normalizePmosContactAddress_(customer.address);
   return people.map(function (person) {
     const contact = normalizePmosGooglePerson_(person);
     const emailMatch = email && contact.emails.some(function (value) { return normalizePmosContactEmail_(value) === email; });
     const phoneMatch = phone && contact.phones.some(function (value) { return normalizePmosContactPhone_(value) === phone; });
-    if (!emailMatch && !phoneMatch) return null;
+    const nameMatch = customerFirst && customerLast &&
+      normalizePmosCustomerSearch_(contact.firstName) === customerFirst &&
+      normalizePmosCustomerSearch_(contact.lastName) === customerLast;
+    const addressMatch = customerAddress && contact.addresses.some(function (value) {
+      return normalizePmosContactAddress_(value) === customerAddress;
+    });
+    const automaticMatch = !!(nameMatch && addressMatch);
+    if (!emailMatch && !phoneMatch && !nameMatch) return null;
     return {
       resourceName: person.resourceName,
       displayName: contact.displayName,
       phone: contact.phone,
       email: contact.email,
       address: contact.address,
-      matchReason: emailMatch && phoneMatch ? 'Exact email and phone' : emailMatch ? 'Exact email' : 'Exact phone'
+      automaticMatch: automaticMatch,
+      matchReason: automaticMatch ? 'Exact name and address' : emailMatch && phoneMatch ? 'Exact email and phone' :
+        emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' : 'Exact name — confirm before linking'
     };
   }).filter(Boolean).sort(function (a, b) {
     return a.displayName.localeCompare(b.displayName) || a.resourceName.localeCompare(b.resourceName);
@@ -303,4 +321,8 @@ function normalizePmosContactEmail_(value) {
 function normalizePmosContactPhone_(value) {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.length > 10 && digits.charAt(0) === '1' ? digits.slice(1) : digits;
+}
+
+function normalizePmosContactAddress_(value) {
+  return normalizePmosCustomerSearch_(value).replace(/\b(canada|ontario|on)\b/g, '').replace(/\s+/g, ' ').trim();
 }
