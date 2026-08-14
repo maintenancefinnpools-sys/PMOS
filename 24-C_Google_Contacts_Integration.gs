@@ -223,8 +223,12 @@ function previewPmosGoogleContactsMassSync() {
     return {
       customerId: customer.customerId,
       customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.customerId,
+      customerAddress: customer.address, customerPhone: customer.phone, customerEmail: customer.email,
       contactName: contact ? contact.displayName : '', resourceName: person ? person.resourceName : '',
       status: status, matchReason: matchReason,
+      explanation: status === 'UNMATCHED' ? 'No name, address, phone, or email match was found.' :
+        status === 'REVIEW' ? 'Name suggestions were found, but the address or contact details were not strong enough to link automatically.' :
+          status === 'BROKEN' ? 'The previously linked Google Contact is no longer available.' : '',
       differences: differences.map(function (item) { return item.field; }), candidates: candidates.slice(0, 5)
     };
   });
