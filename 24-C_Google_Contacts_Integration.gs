@@ -153,7 +153,10 @@ function buildPmosGooglePerson_(customer, latest) {
 }
 
 function findPmosGoogleContactCandidates_(customer) {
-  const people = listPmosGoogleContacts_();
+  return findPmosGoogleContactCandidatesFromPeople_(customer, listPmosGoogleContacts_());
+}
+
+function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
   const email = normalizePmosContactEmail_(customer.email);
   const phone = normalizePmosContactPhone_(customer.phone);
   const customerFirst = normalizePmosCustomerSearch_(customer.firstName);
@@ -184,6 +187,70 @@ function findPmosGoogleContactCandidates_(customer) {
   }).filter(Boolean).sort(function (a, b) {
     return a.displayName.localeCompare(b.displayName) || a.resourceName.localeCompare(b.resourceName);
   });
+}
+
+function previewPmosGoogleContactsMassSync() {
+  const customers = listPmosCustomerContactRecords_();
+  const people = listPmosGoogleContacts_();
+  const peopleByResource = {};
+  people.forEach(function (person) { peopleByResource[person.resourceName] = person; });
+  const rows = customers.map(function (customer) {
+    let person = customer.resourceName ? peopleByResource[customer.resourceName] : null;
+    let status = person ? 'READY' : customer.resourceName ? 'BROKEN' : '';
+    let matchReason = person ? 'Already linked' : '';
+    let candidates = [];
+    if (!status) {
+      candidates = findPmosGoogleContactCandidatesFromPeople_(customer, people);
+      const automatic = candidates.filter(function (candidate) { return candidate.automaticMatch; });
+      if (automatic.length === 1) {
+        person = peopleByResource[automatic[0].resourceName]; status = 'READY'; matchReason = 'Exact name and address';
+      } else status = candidates.length ? 'REVIEW' : 'UNMATCHED';
+    }
+    const contact = person ? normalizePmosGooglePerson_(person) : null;
+    const differences = contact ? comparePmosCustomerAndGoogleContact_(customer, contact) : [];
+    return {
+      customerId: customer.customerId,
+      customerName: [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.customerId,
+      contactName: contact ? contact.displayName : '', resourceName: person ? person.resourceName : '',
+      status: status, matchReason: matchReason,
+      differences: differences.map(function (item) { return item.field; }), candidates: candidates.slice(0, 5)
+    };
+  });
+  return {rows: rows,
+    ready: rows.filter(function (row) { return row.status === 'READY'; }).length,
+    review: rows.filter(function (row) { return row.status === 'REVIEW'; }).length,
+    unmatched: rows.filter(function (row) { return row.status === 'UNMATCHED'; }).length,
+    broken: rows.filter(function (row) { return row.status === 'BROKEN'; }).length};
+}
+
+function applyPmosGoogleContactsMassSyncBatch(direction, selections) {
+  const cleanDirection = String(direction || '').toUpperCase();
+  if (cleanDirection !== 'PULL' && cleanDirection !== 'PUSH') throw new Error('Choose Pull or Push.');
+  const batch = Array.isArray(selections) ? selections.slice(0, 12) : [];
+  if (!batch.length) throw new Error('No customers were selected.');
+  const results = [];
+  batch.forEach(function (selection) {
+    const customerId = String(selection.customerId || '').trim();
+    const resourceName = String(selection.resourceName || '').trim();
+    try {
+      let customer = getPmosCustomerContactRecord_(customerId, true);
+      if (!customer.resourceName) {
+        const candidates = findPmosGoogleContactCandidates_(customer).filter(function (candidate) {
+          return candidate.automaticMatch && candidate.resourceName === resourceName;
+        });
+        if (candidates.length !== 1) throw new Error('The safe match changed; review this customer again.');
+        writePmosGoogleContactLink_(customer, People.People.get(resourceName, {personFields: PMOS_CONTACT_FIELDS_}));
+        customer = getPmosCustomerContactRecord_(customerId, true);
+      }
+      if (customer.resourceName !== resourceName) throw new Error('The linked contact changed; review this customer again.');
+      if (cleanDirection === 'PULL') pullGoogleContactToPmosCustomer_(customer);
+      else pushPmosCustomerToGoogleContact_(customer);
+      results.push({customerId: customerId, ok: true});
+    } catch (error) {
+      results.push({customerId: customerId, ok: false, error: error && error.message ? error.message : String(error)});
+    }
+  });
+  return {direction: cleanDirection, results: results};
 }
 
 function listPmosGoogleContacts_() {
@@ -309,6 +376,39 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
     };
   }
   throw new Error('Customer ID ' + cleanId + ' was not found.');
+}
+
+function listPmosCustomerContactRecords_() {
+  const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [PMOS.CUSTOMERS_SHEET, 'Customer Database', 'Customer List']);
+  if (!sheet) throw new Error('Customers sheet was not found.');
+  ensurePmosGoogleContactHeaders_(sheet);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(function (value) { return String(value || '').trim(); });
+  const index = function (aliases, required) {
+    const found = findHeaderIndex_(headers, aliases);
+    if (required && found < 0) throw new Error('Customers is missing ' + aliases[0] + '.');
+    return found;
+  };
+  const indexes = {
+    id: index(['Customer ID'], true), firstName: index(['First Name'], true),
+    lastName: index(['Last Name', 'Customer Name', 'Name', 'Customer'], true),
+    address: index(['Full Address', 'Service Address', 'Address', 'Street Address'], true),
+    phone: index(['Primary Phone', 'Phone Number', 'Phone'], true), email: index(['Email', 'Email Address'], true),
+    notes: index(['Customer Notes', 'Notes', 'Details'], false),
+    resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
+    etag: index([PMOS_CONTACT_LINK_HEADERS_.etag], false), syncedAt: index([PMOS_CONTACT_LINK_HEADERS_.syncedAt], false)
+  };
+  return values.slice(1).map(function (row, offset) {
+    const value = function (key) { return indexes[key] >= 0 ? row[indexes[key]] : ''; };
+    const customerId = String(value('id') || '').trim();
+    if (!customerId) return null;
+    return {sheet: sheet, headers: headers, indexes: indexes, rowNumber: offset + 2, customerId: customerId,
+      firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
+      address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
+      email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      resourceName: String(value('resourceName') || '').trim(), etag: String(value('etag') || '').trim(),
+      syncedAt: value('syncedAt')};
+  }).filter(Boolean);
 }
 
 function ensurePmosGoogleContactHeaders_(sheet) {
