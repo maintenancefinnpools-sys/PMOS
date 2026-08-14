@@ -28,6 +28,8 @@ function onOpen() {
         SpreadsheetApp.getUi().createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
+          .addSeparator()
+          .addItem('Update Permissions', 'updatePmosPermissions')
       )
       .addItem('Update Center', 'showUpdateCenter')
       .addItem('Update PMOS', 'updatePmos')
