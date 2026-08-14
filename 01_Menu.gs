@@ -13,7 +13,6 @@ function onOpen() {
       .addItem('Open Route Manager', 'showRouteManagerLink')
       .addSeparator()
       .addItem('Customer Lookup', 'showCustomerLookup')
-      .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
@@ -33,6 +32,7 @@ function onOpen() {
         SpreadsheetApp.getUi().createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
+          .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
       )
       .addItem('Update Center', 'showUpdateCenter')
       .addItem('Update PMOS', 'updatePmos');
