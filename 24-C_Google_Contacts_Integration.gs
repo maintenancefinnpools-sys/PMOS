@@ -608,7 +608,13 @@ function pmosContactStreetCore_(value) {
 function pmosContactAddressesMatch_(left, right) {
   const leftPostal = extractPmosContactPostalCode_(left);
   const rightPostal = extractPmosContactPostalCode_(right);
-  if (leftPostal && rightPostal && leftPostal === rightPostal) return true;
+  const civic = function (value) {
+    const match = normalizePmosContactStreet_(value).match(/\b(\d+[a-z]?)\b/);
+    return match ? match[1] : '';
+  };
+  const leftCivic = civic(left);
+  const rightCivic = civic(right);
+  if (leftPostal && rightPostal && leftPostal === rightPostal && leftCivic && leftCivic === rightCivic) return true;
   const leftFull = normalizePmosContactAddress_(left);
   const rightFull = normalizePmosContactAddress_(right);
   if (leftFull && leftFull === rightFull) return true;
