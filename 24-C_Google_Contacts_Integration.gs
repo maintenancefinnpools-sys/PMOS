@@ -187,7 +187,8 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
         (customerPostal && contactPostal && customerPostal === contactPostal) ||
         (customerStreet && normalizePmosContactStreet_(value) === customerStreet);
     });
-    const automaticMatch = !!(emailMatch || phoneMatch || (addressMatch && (nameMatch || (surnameMatch && givenNameOverlap))));
+    const surnameGivenMatch = !!(surnameMatch && givenNameOverlap);
+    const automaticMatch = !!(emailMatch || phoneMatch || addressMatch);
     if (!emailMatch && !phoneMatch && !nameSuggestion && !addressMatch) return null;
     return {
       resourceName: person.resourceName,
@@ -197,7 +198,8 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
       address: contact.address,
       automaticMatch: automaticMatch,
       matchReason: emailMatch && phoneMatch ? 'Exact email and phone' : emailMatch ? 'Exact email' : phoneMatch ? 'Exact phone' :
-        automaticMatch ? (nameMatch ? 'Matching name and address' : 'Matching surname, given name, and address') :
+        automaticMatch ? (nameMatch ? 'Matching name and address' : surnameGivenMatch ?
+          'Matching surname, given name, and address' : 'Unique matching service address') :
         addressMatch ? 'Matching address — confirm before linking' :
           nameMatch ? 'Matching name — confirm before linking' : 'Matching last name — confirm before linking'
     };
@@ -220,7 +222,7 @@ function previewPmosGoogleContactsMassSync() {
       candidates = findPmosGoogleContactCandidatesFromPeople_(customer, people);
       const automatic = candidates.filter(function (candidate) { return candidate.automaticMatch; });
       if (automatic.length === 1) {
-        person = peopleByResource[automatic[0].resourceName]; status = 'READY'; matchReason = 'Exact name and address';
+        person = peopleByResource[automatic[0].resourceName]; status = 'READY'; matchReason = automatic[0].matchReason;
       } else status = candidates.length ? 'REVIEW' : 'UNMATCHED';
     }
     const contact = person ? normalizePmosGooglePerson_(person) : null;
