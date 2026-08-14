@@ -13,6 +13,7 @@ function onOpen() {
       .addItem('Open Route Manager', 'showRouteManagerLink')
       .addSeparator()
       .addItem('Customer Lookup', 'showCustomerLookup')
+      .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
       .addSeparator()
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
