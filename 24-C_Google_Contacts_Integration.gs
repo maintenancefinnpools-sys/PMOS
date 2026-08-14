@@ -203,12 +203,16 @@ function findPmosGoogleContactCandidatesFromPeople_(customer, people) {
     const givenNameOverlap = pmosContactNamesOverlap_(customerFirstSet, contactFirstSet);
     const nameMatch = !!(exactPartsMatch || fullNameMatch);
     const nameSuggestion = !!(nameMatch || surnameMatch);
+    const customerCivic = extractPmosContactCivicNumber_(customer.address);
+    const contactCivics = contact.addresses.map(extractPmosContactCivicNumber_).filter(Boolean);
+    const civicConflict = customerCivic && contactCivics.length && contactCivics.indexOf(customerCivic) < 0;
+    if (civicConflict && !nameSuggestion) return null;
     const addressMatch = customer.address && contact.addresses.some(function (value) {
       return pmosContactAddressesMatch_(customer.address, value) ||
         (surnameMatch && pmosContactAddressesLikelySame_(customer.address, value));
     });
     const surnameGivenMatch = !!(surnameMatch && givenNameOverlap);
-    const automaticMatch = !!(emailMatch || phoneMatch || addressMatch);
+    const automaticMatch = !!(!civicConflict && (emailMatch || phoneMatch || addressMatch));
     if (!emailMatch && !phoneMatch && !nameSuggestion && !addressMatch) return null;
     return {
       resourceName: person.resourceName,
@@ -270,7 +274,10 @@ function previewPmosGoogleContactsMassSync() {
       explanation: status === 'UNMATCHED' ? 'No name, address, phone, or email match was found.' :
         status === 'REVIEW' ? 'Name suggestions were found, but the address or contact details were not strong enough to link automatically.' :
           status === 'BROKEN' ? 'The previously linked Google Contact is no longer available.' : '',
-      differences: differences, candidates: candidates.slice(0, 8)
+      differences: differences,
+      candidates: (status === 'READY' ? candidates.filter(function (candidate) {
+        return candidate.automaticMatch;
+      }) : candidates).slice(0, 8)
     };
   });
   return {rows: rows,
@@ -593,6 +600,11 @@ function extractPmosContactPostalCode_(value) {
   return match ? match[1] + match[2] : '';
 }
 
+function extractPmosContactCivicNumber_(value) {
+  const match = normalizePmosContactStreet_(value).match(/\b(\d+[a-z]?)\b/);
+  return match ? match[1] : '';
+}
+
 function normalizePmosContactStreet_(value) {
   const withoutLeadingUnit = String(value || '').replace(/^\s*(unit|suite|apt|apartment)\s*[a-z0-9-]+\s*[,#-]\s*/i, '');
   const firstLine = withoutLeadingUnit.split(/[,\n\r]/)[0];
@@ -608,12 +620,8 @@ function pmosContactStreetCore_(value) {
 function pmosContactAddressesMatch_(left, right) {
   const leftPostal = extractPmosContactPostalCode_(left);
   const rightPostal = extractPmosContactPostalCode_(right);
-  const civic = function (value) {
-    const match = normalizePmosContactStreet_(value).match(/\b(\d+[a-z]?)\b/);
-    return match ? match[1] : '';
-  };
-  const leftCivic = civic(left);
-  const rightCivic = civic(right);
+  const leftCivic = extractPmosContactCivicNumber_(left);
+  const rightCivic = extractPmosContactCivicNumber_(right);
   if (leftPostal && rightPostal && leftPostal === rightPostal && leftCivic && leftCivic === rightCivic) return true;
   const leftFull = normalizePmosContactAddress_(left);
   const rightFull = normalizePmosContactAddress_(right);
