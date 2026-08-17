@@ -51,7 +51,9 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
       operations.push(buildPmosCalendarOperationInput_(
         PMOS_OPERATION.UPDATE,
         seriesKey,
-        'Recurring Calendar series differs from the desired plan.',
+        comparison.liveVerified
+          ? 'Live Calendar fields differ from the desired recurring plan.'
+          : 'Recurring Calendar series differs from the desired plan.',
         wanted,
         existing,
         settings,
@@ -61,7 +63,9 @@ function buildPmosCalendarSyncPlan(desiredSeries, currentSeries, options) {
       operations.push(buildPmosCalendarOperationInput_(
         PMOS_OPERATION.SKIP,
         seriesKey,
-        'Recurring Calendar series is already synchronized.',
+        comparison.liveVerified && existing.signature !== wanted.signature
+          ? 'Calendar already matches the desired plan; only the stored registry signature is stale.'
+          : 'Recurring Calendar series is already synchronized.',
         wanted,
         existing,
         settings,
@@ -246,18 +250,114 @@ function indexPmosCalendarSeries_(records) {
   return index;
 }
 
-/** Registry signatures are authoritative when present on both records. */
+/**
+ * Matching registry signatures are a fast-path. When signatures differ, use a
+ * real observed occurrence when available so a stale fingerprint cannot cause
+ * a needless Calendar rewrite.
+ */
 function buildPmosCalendarSeriesComparison_(current, desired) {
+  // Identity reconciliation deliberately preserves the existing Google series.
+  // Force one UPDATE so the executor can rewrite its managed metadata and move
+  // the registry row from the legacy key to the current Customer ID. Without
+  // this, a visually identical event would be skipped and re-reconciled on
+  // every future audit.
+  if (current && desired && current.metadata && current.metadata.identityReconciled) {
+    return {
+      before: {
+        seriesKey: current.metadata.previousSeriesKey || current.seriesKey
+      },
+      after: {
+        seriesKey: desired.seriesKey
+      },
+      liveVerified: false
+    };
+  }
+
+  if (current && desired && current.signature && desired.signature &&
+      current.signature === desired.signature) {
+    return {
+      before: { signature: current.signature },
+      after: { signature: desired.signature },
+      liveVerified: false
+    };
+  }
+
+  const hasLiveOccurrence = Boolean(
+    current && current.start && current.end &&
+    current.metadata && current.metadata.liveOccurrenceVerified
+  );
+  if (hasLiveOccurrence) {
+    return {
+      before: calendarSeriesLiveComparableRecord_(current),
+      after: calendarSeriesLiveComparableRecord_(desired),
+      liveVerified: true
+    };
+  }
+
   if (current && desired && current.signature && desired.signature) {
     return {
       before: { signature: current.signature },
-      after: { signature: desired.signature }
+      after: { signature: desired.signature },
+      liveVerified: false
     };
   }
+
   return {
     before: calendarSeriesComparableRecord_(current),
-    after: calendarSeriesComparableRecord_(desired)
+    after: calendarSeriesComparableRecord_(desired),
+    liveVerified: false
   };
+}
+
+/**
+ * Compare what the user can actually see in Google Calendar. Absolute dates are
+ * intentionally reduced to local clock time because the observed occurrence
+ * and the desired series seed may be different dates in the same recurrence.
+ */
+function calendarSeriesLiveComparableRecord_(record) {
+  if (!record) return null;
+  return {
+    title: record.title || null,
+    startTime: pmosCalendarLocalClock_(record.start),
+    endTime: pmosCalendarLocalClock_(record.end),
+    durationMinutes: pmosCalendarDurationMinutes_(record.start, record.end),
+    location: record.location || null,
+    description: stripPmosCalendarManagedMetadata_(record.description)
+  };
+}
+
+function pmosCalendarLocalClock_(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return null;
+  try {
+    return Utilities.formatDate(date, PMOS.TIMEZONE, 'HH:mm:ss');
+  } catch (error) {
+    return ('0' + date.getUTCHours()).slice(-2) + ':' +
+      ('0' + date.getUTCMinutes()).slice(-2) + ':' +
+      ('0' + date.getUTCSeconds()).slice(-2);
+  }
+}
+
+function pmosCalendarDurationMinutes_(start, end) {
+  if (!start || !end) return null;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
+  return Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+}
+
+function stripPmosCalendarManagedMetadata_(value) {
+  const lines = String(value || '').replace(/\r\n?/g, '\n').split('\n')
+    .filter(function (line) {
+      return !/^\s*PMOS_[A-Z0-9_]+\s*=/.test(String(line || ''));
+    })
+    .map(function (line) {
+      return String(line || '').replace(/[ \t]+/g, ' ').trim();
+    });
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  return lines.length ? lines.join('\n') : null;
 }
 
 function calendarSeriesComparableRecord_(record) {
