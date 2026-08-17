@@ -15,7 +15,8 @@ function ensureAppSettingsSheet_() {
     ['Calendar Year', new Date().getFullYear(), 'Year used for seasonal schedule dates.'],
     ['Season Start', new Date(new Date().getFullYear(), 3, 1), 'First date for seasonal maintenance.'],
     ['Season End', new Date(new Date().getFullYear(), 10, 30), 'Last date for seasonal maintenance.'],
-    ['Daily Route Start', '6:00 AM', 'Start time used when calculating route event times.']
+    ['Daily Route Start', '6:00 AM', 'Start time used when calculating route event times.'],
+    ['Event Duration Minutes', 60, 'Length of each recurring maintenance Calendar event, in minutes.']
   ];
 
   if (sheet.getLastRow() === 0) {
