@@ -50,7 +50,7 @@ function getRecurringCalendarSettings_() {
       new Date(year, 10, 30)
     ),
     eventDurationMinutes: positiveNumberOrDefault_(
-      base.eventDurationMinutes,
+      map['Event Duration Minutes'],
       60
     ),
     routeStart: base.routeStart || map['Daily Route Start'] || '6:00 AM'
