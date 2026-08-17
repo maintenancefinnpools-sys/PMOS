@@ -16,7 +16,7 @@ function openPmosJobEngine(initialType) {
     CALENDAR_AUDIT: {
       label: 'Calendar Plan Audit',
       icon: '▣',
-      description: 'Open the authoritative read-only audit and Review Session workflow.',
+      description: '',
       mode: 'audit'
     },
     CALENDAR_SYNC: {
