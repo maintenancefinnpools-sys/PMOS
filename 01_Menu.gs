@@ -12,6 +12,7 @@ function onOpen() {
     menu
       .addItem('Open Route Manager', 'showRouteManagerLink')
       .addSeparator()
+      // Keep customer workflows together as the first operational submenu.
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Customers')
           .addItem('Customer Lookup', 'showCustomerLookup')
