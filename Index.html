@@ -2,33 +2,41 @@
 <html>
   <head>
     <base target="_top">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;700;900&display=swap" rel="stylesheet">
     <?!= include('Stylesheet'); ?>
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell">
       <aside class="sidebar" id="sidebar">
+        <button class="sidebar-collapse" id="sidebarCollapse" type="button" title="Hide navigation" aria-label="Hide navigation">
+          <span class="close-icon">‹</span><span class="open-icon">☰</span>
+        </button>
         <div class="brand">
-          <div class="brand-mark">P</div>
+          <img src="https://www.finnpools.ca/images/logo_only.png" class="brand-logo" alt="Finn Pools">
           <div>
             <strong>PMOS</strong>
-            <span>v<?= pmosVersion ?></span>
+            <span>Route Manager</span>
           </div>
         </div>
 
-        <nav class="nav" aria-label="Primary navigation">
-          <button class="nav-item active" data-view="dashboard">Dashboard</button>
-          <button class="nav-item" data-view="routes">Route Manager</button>
-          <button class="nav-item" data-view="history">Route History</button>
-          <button class="nav-item" data-view="calendar">Calendar</button>
-          <button class="nav-item" data-view="chemistry">Chemistry</button>
-          <button class="nav-item" data-view="jobs">Job Center</button>
-          <button class="nav-item" data-view="settings">Settings</button>
-          <button class="nav-item" data-view="featurelab">Feature Lab</button>
-        </nav>
+        <div class="sidebar-inner">
+          <nav class="nav" aria-label="Primary navigation">
+            <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
+            <button class="nav-item" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
+            <button class="nav-item" data-view="history"><span class="nav-icon">↶</span><span>Route History</span></button>
+            <button class="nav-item" data-view="calendar"><span class="nav-icon">▣</span><span>Calendar</span></button>
+            <button class="nav-item" data-view="chemistry"><span class="nav-icon">◌</span><span>Chemistry</span></button>
+            <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>Job Center</span></button>
+            <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+            <button class="nav-item" data-view="featurelab"><span class="nav-icon">◇</span><span>Feature Lab</span></button>
+          </nav>
 
-        <div class="sidebar-footer">
-          <span class="status-dot" id="connectionDot"></span>
-          <span id="connectionText">Connecting…</span>
+          <div class="sidebar-footer">
+            <span class="status-dot" id="connectionDot"></span>
+            <span id="connectionText">Connecting…</span>
+          </div>
         </div>
       </aside>
 
