@@ -135,6 +135,7 @@ function pushPmosCustomerToGoogleContact_(customer) {
 function pullGoogleContactToPmosCustomer_(customer) {
   const person = People.People.get(customer.resourceName, {personFields: PMOS_CONTACT_FIELDS_});
   const contact = normalizePmosGooglePerson_(person);
+  const contactNotes = parsePmosCustomerContactNotes_(contact.notes);
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   try {
@@ -145,7 +146,8 @@ function pullGoogleContactToPmosCustomer_(customer) {
     values[fresh.indexes.address] = contact.address;
     values[fresh.indexes.phone] = contact.phone;
     values[fresh.indexes.email] = contact.email;
-    if (fresh.indexes.notes >= 0) values[fresh.indexes.notes] = contact.notes;
+    if (contactNotes.structured && fresh.indexes.entryInformation >= 0) values[fresh.indexes.entryInformation] = contactNotes.entryInformation;
+    if (fresh.indexes.notes >= 0) values[fresh.indexes.notes] = contactNotes.notes;
     values[fresh.indexes.resourceName] = person.resourceName;
     values[fresh.indexes.etag] = person.etag || '';
     values[fresh.indexes.syncedAt] = new Date();
@@ -161,12 +163,13 @@ function buildPmosGooglePerson_(customer, latest) {
     return !(item && item.type === 'customer' && /^PMOS-/.test(String(item.value || '')));
   });
   externalIds.push({value: customer.customerId, type: 'customer'});
+  const contactNotes = buildPmosCustomerContactNotes_(customer);
   const person = {
     names: [{givenName: customer.firstName, familyName: customer.lastName}],
     emailAddresses: customer.email ? [{value: customer.email, type: 'work'}] : [],
     phoneNumbers: customer.phone ? [{value: customer.phone, type: 'mobile'}] : [],
     addresses: customer.address ? [{formattedValue: customer.address, type: 'work'}] : [],
-    biographies: customer.notes ? [{value: customer.notes, contentType: 'TEXT_PLAIN'}] : [],
+    biographies: contactNotes ? [{value: contactNotes, contentType: 'TEXT_PLAIN'}] : [],
     externalIds: externalIds
   };
   if (latest) {
@@ -175,6 +178,20 @@ function buildPmosGooglePerson_(customer, latest) {
     person.metadata = latest.metadata;
   }
   return person;
+}
+
+function buildPmosCustomerContactNotes_(customer) {
+  const parts = [];
+  if (customer.entryInformation) parts.push('ENTRY INFORMATION\n' + customer.entryInformation);
+  if (customer.notes) parts.push('CUSTOMER NOTES\n' + customer.notes);
+  return parts.join('\n\n');
+}
+
+function parsePmosCustomerContactNotes_(value) {
+  const text = String(value || '').replace(/\r\n?/g, '\n').trim();
+  const match = text.match(/^ENTRY INFORMATION\s*\n([\s\S]*?)(?:\n\s*\nCUSTOMER NOTES\s*\n([\s\S]*))?$/i);
+  return match ? {structured: true, entryInformation: String(match[1] || '').trim(), notes: String(match[2] || '').trim()}
+    : {structured: false, entryInformation: '', notes: text};
 }
 
 function findPmosGoogleContactCandidates_(customer) {
@@ -404,17 +421,19 @@ function buildPmosGoogleHouseholdContactState_(customer, people, broken) {
 }
 
 function comparePmosCustomerAndGoogleContact_(customer, contact) {
+  const googleNotes = parsePmosCustomerContactNotes_(contact.notes);
   const fields = [
     ['First name', 'firstName', function (v) { return normalizePmosCustomerSearch_(v); }],
     ['Last name', 'lastName', function (v) { return normalizePmosCustomerSearch_(v); }],
     ['Phone', 'phone', normalizePmosContactPhone_],
     ['Email', 'email', normalizePmosContactEmail_],
     ['Address', 'address', function (v) { return normalizePmosCustomerSearch_(v); }],
+    ['Entry information', 'entryInformation', function (v) { return String(v || '').trim(); }],
     ['Customer notes', 'notes', function (v) { return String(v || '').trim(); }]
   ];
   return fields.map(function (field) {
     const pmosValue = String(customer[field[1]] || '').trim();
-    const googleValue = String(contact[field[1]] || '').trim();
+    const googleValue = String(field[1] === 'entryInformation' ? (googleNotes.structured ? googleNotes.entryInformation : customer.entryInformation) : field[1] === 'notes' ? googleNotes.notes : contact[field[1]] || '').trim();
     return field[2](pmosValue) === field[2](googleValue) ? null : {
       field: field[0], key: field[1], pmos: pmosValue, google: googleValue
     };
@@ -468,6 +487,7 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
     address: index(['Full Address', 'Service Address', 'Address', 'Street Address'], true),
     phone: index(['Primary Phone', 'Phone Number', 'Phone'], true),
     email: index(['Email', 'Email Address'], true),
+    entryInformation: index(['Entry Information', 'Entry Notes'], false),
     notes: index(['Customer Notes', 'Notes', 'Details'], false),
     resourceNames: index([PMOS_CONTACT_LINK_HEADERS_.resourceNames], false),
     resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
@@ -483,7 +503,7 @@ function getPmosCustomerContactRecord_(customerId, ensureWritableColumns) {
       customerId: cleanId,
       firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
       address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
-      email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      email: String(value('email') || '').trim(), entryInformation: String(value('entryInformation') || '').trim(), notes: String(value('notes') || '').trim(),
       resourceNames: parsePmosGoogleContactResourceNames_(value('resourceNames'), value('resourceName')),
       resourceName: String(value('resourceName') || '').trim(),
       etag: String(value('etag') || '').trim(), syncedAt: value('syncedAt')
@@ -508,6 +528,7 @@ function listPmosCustomerContactRecords_() {
     lastName: index(['Last Name', 'Customer Name', 'Name', 'Customer'], true),
     address: index(['Full Address', 'Service Address', 'Address', 'Street Address'], true),
     phone: index(['Primary Phone', 'Phone Number', 'Phone'], true), email: index(['Email', 'Email Address'], true),
+    entryInformation: index(['Entry Information', 'Entry Notes'], false),
     notes: index(['Customer Notes', 'Notes', 'Details'], false),
     resourceNames: index([PMOS_CONTACT_LINK_HEADERS_.resourceNames], false),
     resourceName: index([PMOS_CONTACT_LINK_HEADERS_.resourceName], false),
@@ -520,7 +541,7 @@ function listPmosCustomerContactRecords_() {
     return {sheet: sheet, headers: headers, indexes: indexes, rowNumber: offset + 2, customerId: customerId,
       firstName: String(value('firstName') || '').trim(), lastName: String(value('lastName') || '').trim(),
       address: String(value('address') || '').trim(), phone: String(value('phone') || '').trim(),
-      email: String(value('email') || '').trim(), notes: String(value('notes') || '').trim(),
+      email: String(value('email') || '').trim(), entryInformation: String(value('entryInformation') || '').trim(), notes: String(value('notes') || '').trim(),
       resourceNames: parsePmosGoogleContactResourceNames_(value('resourceNames'), value('resourceName')),
       resourceName: String(value('resourceName') || '').trim(), etag: String(value('etag') || '').trim(),
       syncedAt: value('syncedAt')};
