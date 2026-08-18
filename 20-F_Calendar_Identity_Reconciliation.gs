@@ -47,6 +47,11 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
     current,
     function(record) { return normalizePmosCalendarIdentityText_(record && record.title); }
   );
+  const looseTitleCountParity = buildPmosCalendarIdentityCountParity_(
+    desired,
+    current,
+    function(record) { return normalizePmosCalendarLooseTitle_(record && record.title); }
+  );
   const customerParityDesired = unmatchedDesired.filter(function(record) {
     return customerCountParity[effectivePmosCalendarCustomerId_(record)] === true;
   });
@@ -58,6 +63,12 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
   });
   const titleParityCurrent = unmatchedCurrent.filter(function(record) {
     return titleCountParity[normalizePmosCalendarIdentityText_(record && record.title)] === true;
+  });
+  const looseTitleParityDesired = unmatchedDesired.filter(function(record) {
+    return looseTitleCountParity[normalizePmosCalendarLooseTitle_(record && record.title)] === true;
+  });
+  const looseTitleParityCurrent = unmatchedCurrent.filter(function(record) {
+    return looseTitleCountParity[normalizePmosCalendarLooseTitle_(record && record.title)] === true;
   });
 
   // Strongest recovery: same customer and same normalized layer.
@@ -83,6 +94,23 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
     'TITLE_AND_LAYER',
     function(record) {
       const title = normalizePmosCalendarIdentityText_(record && record.title);
+      const layer = effectivePmosCalendarLayer_(record);
+      return title && layer ? title + '|' + layer : '';
+    }
+  );
+
+  // Conservative spelling-variation fallback for legacy IDs. Removing vowels
+  // allows a minor variant such as Hollinder/Hollander to resolve, but only
+  // when the customer owns the same number of desired and current series and
+  // exactly one record exists on the same normalized route layer.
+  matchPmosCalendarIdentityPass_(
+    looseTitleParityDesired,
+    looseTitleParityCurrent,
+    remappedCurrentKeys,
+    reconciliations,
+    'LOOSE_TITLE_AND_LAYER',
+    function(record) {
+      const title = normalizePmosCalendarLooseTitle_(record && record.title);
       const layer = effectivePmosCalendarLayer_(record);
       return title && layer ? title + '|' + layer : '';
     }
@@ -367,6 +395,17 @@ function normalizePmosCalendarIdentityText_(value) {
     .toUpperCase()
     .replace(/[\u2011\u2013\u2014-]+/g, ' ')
     .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizePmosCalendarLooseTitle_(value) {
+  return normalizePmosCalendarIdentityText_(value)
+    .split(' ')
+    .map(function(part) {
+      return part.length > 2 ? part.replace(/[AEIOUY]/g, '') : part;
+    })
+    .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
