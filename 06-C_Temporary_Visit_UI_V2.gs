@@ -8,7 +8,6 @@ function showTemporaryVisitSchedulerV2() {
 </style></head><body>
 <h2>Add Temporary Visit(s)</h2><div class="muted">Enter the service address first. PMOS will suggest the best upcoming route placements while you complete the customer details.</div>
 <div class="grid">
-<div class="section">Service location</div>
 <label class="full">Service address<div class="address-wrap"><input id="address" autocomplete="off" placeholder="Begin typing address"><div id="addressList" class="address-list"></div></div></label><div id="addressStatus" class="address-status"></div><div id="addressDetails" class="address-details"></div>
 <div class="section">Customer & contact information</div>
 <label>Last name<input id="lastName" autocomplete="family-name"></label><label>First name<input id="firstName" autocomplete="given-name"></label><label>Phone<input id="phone" autocomplete="tel" inputmode="numeric" maxlength="16" placeholder="(___) ___ - ____"></label><label>Email<input id="email" type="email" autocomplete="email"></label>
