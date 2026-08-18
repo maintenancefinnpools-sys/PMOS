@@ -1,0 +1,31 @@
+name: Fast stable Temporary Visit suggestions
+on:
+  push:
+    branches: [pmos-development]
+    paths: ['.github/workflows/fast-stable-temp-suggestions.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pmos-development
+      - name: Parallelize route analysis but reveal only final best suggestions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('06-D_Temporary_Visit_UI_V3.gs')
+          s=p.read_text()
+          old="function loadDateSuggestions(){if(!selectedAddress)return;var token=++dateRequest;dateSuggestions.style.display='block';dateSuggestions.innerHTML='<b>Best upcoming dates</b><div class=\"muted\" style=\"margin-top:5px\">Comparing upcoming weekday routes…</div>';google.script.run.withSuccessHandler(function(result){if(token!==dateRequest)return;renderDates((result&&result.recommendations)||[]);addressMessage('Route suggestions ready below.')}).withFailureHandler(function(e){if(token!==dateRequest)return;dateSuggestions.innerHTML='<b>Best upcoming dates</b><div class=\"muted\" style=\"margin-top:5px\">'+(e&&e.message?e.message:String(e))+'</div>';addressMessage('Address confirmed, but route suggestions could not load.',true)}).recommendTemporaryVisitDates({address:address.value,addressVerified:true,addressDetails:selectedAddress,startOffsetWorkingDays:0,workdayCount:6,maxResults:3})}"
+          new="function loadDateSuggestions(){if(!selectedAddress)return;var token=++dateRequest,results=[],finished=0,errors=0,total=6;dateSuggestions.style.display='block';dateSuggestions.innerHTML='<b>Best upcoming dates</b><div id=\"routeSearchProgress\" class=\"muted\" style=\"margin-top:5px\">Comparing 0 of '+total+' upcoming weekday routes…</div>';function finishOne(){if(token!==dateRequest)return;finished++;var progress=document.getElementById('routeSearchProgress');if(progress)progress.textContent='Comparing '+finished+' of '+total+' upcoming weekday routes…';if(finished<total)return;var ranked=results.slice().sort(function(a,b){if(Number(a.score||0)!==Number(b.score||0))return Number(b.score||0)-Number(a.score||0);if(Number(a.addedDurationMinutes||0)!==Number(b.addedDurationMinutes||0))return Number(a.addedDurationMinutes||0)-Number(b.addedDurationMinutes||0);return Number(a.addedDistanceKm||0)-Number(b.addedDistanceKm||0)}).slice(0,3);renderDates(ranked);if(ranked.length)addressMessage('Route suggestions ready below.');else addressMessage(errors?'Route suggestions could not be completed.':'No weekday route suggestions were available.',errors>0)}for(var offset=0;offset<total;offset++)(function(dayOffset){google.script.run.withSuccessHandler(function(result){if(token!==dateRequest)return;var recs=(result&&result.recommendations)||[];if(recs.length)results=results.concat(recs);finishOne()}).withFailureHandler(function(){if(token!==dateRequest)return;errors++;finishOne()}).recommendTemporaryVisitDates({address:address.value,addressVerified:true,addressDetails:selectedAddress,startOffsetWorkingDays:dayOffset,workdayCount:1,maxResults:1})})(offset)}"
+          if old not in s:
+              raise SystemExit('loadDateSuggestions target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
+          git add 06-D_Temporary_Visit_UI_V3.gs
+          git commit -m 'Speed Temporary Visit route suggestions without reshuffling cards'
+          git push origin HEAD:pmos-development
