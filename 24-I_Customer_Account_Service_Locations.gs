@@ -161,6 +161,17 @@ function createPmosAdditionalServiceLocation(input) {
     primaryServiceLocation: false
   });
 
+  if ((!Array.isArray(payload.recommendedPlacements) || !payload.recommendedPlacements.length) && request.manualRoute) {
+    payload.recommendedPlacements = buildPmosCustomerEditorManualPlacements_(
+      payload.frequency || 'Weekly',
+      request.manualRoute
+    );
+    payload.day = request.manualRoute.day;
+    payload.secondDay = request.manualRoute.secondDay || '';
+    payload.week = request.manualRoute.week || 1;
+    payload.stop = request.manualRoute.stop || 1;
+  }
+
   const result = createMaintenanceCustomerAndAutoSync(payload);
   result.account = getPmosCustomerAccount_(result.customerId);
   return result;
