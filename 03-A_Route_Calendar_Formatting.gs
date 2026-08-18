@@ -6,14 +6,16 @@
 
 function buildRouteDescription_(row, parsed) {
   const parts = [];
-  if (row.customerId) parts.push('PMOS_CUSTOMER_ID=' + row.customerId);
-  if (row.fullName) parts.push(row.fullName);
-  if (row.entry) parts.push('', 'ENTRY', row.entry);
-  parts.push('', parsed.day + ' • Rotation Week ' + parsed.week);
-  if (row.frequency) parts.push(row.frequency);
-  if (row.phone) parts.push('', 'PHONE: ' + row.phone);
-  if (row.notes) parts.push('', 'NOTES', row.notes);
-  return parts.join('\n').trim();
+  if (row.entry) parts.push('ENTRY INFORMATION', row.entry);
+  if (row.notes) parts.push(parts.length ? '' : null, 'CUSTOMER NOTES', row.notes);
+  const service = [];
+  if (row.fullName) service.push(row.fullName);
+  service.push(parsed.day + ' • Rotation Week ' + parsed.week);
+  if (row.frequency) service.push(row.frequency);
+  if (row.phone) service.push('PHONE: ' + row.phone);
+  if (service.length) parts.push(parts.length ? '' : null, 'SERVICE DETAILS', service.join('\n'));
+  if (row.customerId) parts.push('', 'PMOS_CUSTOMER_ID=' + row.customerId);
+  return parts.filter(function (part) { return part !== null; }).join('\n').trim();
 }
 
 function routeTimeForOrder_(eventDate, order, settings) {
