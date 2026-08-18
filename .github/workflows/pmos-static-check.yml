@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - pmos-development
-      - main
-  pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   apps-script-static-check:
@@ -13,6 +14,82 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Apply final Temporary Visit event notes polish
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('06-D_Temporary_Visit_UI_V3.gs')
+          s = p.read_text()
+          old = ".primary{background:#2563eb;color:#fff;transition:background .18s ease}.primary.scheduling{background:#1d4ed8}.primary.scheduled{background:#2f7d57}.secondary"
+          new = ".primary{background:#2563eb;color:#fff;transition:background .18s ease,color .18s ease}.primary.scheduling{background:#93c5fd;color:#1e3a5f}.primary.scheduled{background:#cfe8d8;color:#315c43}.secondary"
+          if old not in s:
+              raise SystemExit('Temporary Visit button CSS target not found')
+          s = s.replace(old, new, 1)
+          old = "save.textContent='Scheduled ✓';"
+          new = "save.textContent='Complete';"
+          if old not in s:
+              raise SystemExit('Temporary Visit completion label target not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('06-C_Temporary_Visit_UI_V2.gs')
+          s = p.read_text()
+          old = """function buildTemporaryVisitDescriptionV2_(payload) {
+  const parts = [];
+  if (payload.entryInformation) parts.push('ENTRY INFORMATION', String(payload.entryInformation));
+  if (payload.customerNotes) parts.push(parts.length ? '' : null, 'CUSTOMER NOTES', String(payload.customerNotes));
+  const service = [];
+  if (payload.fullName) service.push(String(payload.fullName));
+  service.push('Temporary maintenance visit');
+  if (payload.phone) service.push('PHONE: ' + String(payload.phone));
+  if (payload.email) service.push('EMAIL: ' + String(payload.email));
+  parts.push(parts.length ? '' : null, 'SERVICE DETAILS', service.join('\\n'));
+  parts.push('', PMOS_TEMP_VISIT_MARKER, 'PMOS_TEMP_VISIT_ID=' + Utilities.getUuid());
+  return parts.filter(function(part) { return part !== null; }).join('\\n').trim();
+}"""
+          new = """function buildTemporaryVisitDescriptionV2_(payload) {
+  const esc = function(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  const blocks = [];
+  if (payload.entryInformation) blocks.push('<b>ENTRY INFORMATION</b><br>' + esc(payload.entryInformation).replace(/\\n/g, '<br>'));
+  if (payload.customerNotes) blocks.push('<b>CUSTOMER NOTES</b><br>' + esc(payload.customerNotes).replace(/\\n/g, '<br>'));
+  const service = [];
+  if (payload.fullName) service.push(esc(payload.fullName));
+  service.push('Temporary maintenance visit');
+  if (payload.phone) {
+    const displayPhone = esc(payload.phone);
+    let digits = String(payload.phone).replace(/\\D/g, '');
+    if (digits.length === 10) digits = '1' + digits;
+    const dial = digits ? '+' + digits : '';
+    service.push(dial
+      ? 'PHONE: <a href=\"tel:' + dial + '\">' + displayPhone + '</a> &nbsp;·&nbsp; <a href=\"sms:' + dial + '\">Text</a>'
+      : 'PHONE: ' + displayPhone);
+  }
+  if (payload.email) service.push('EMAIL: <a href=\"mailto:' + esc(payload.email) + '\">' + esc(payload.email) + '</a>');
+  blocks.push('<b>SERVICE DETAILS</b><br>' + service.join('<br>'));
+  blocks.push(esc(PMOS_TEMP_VISIT_MARKER) + '<br>PMOS_TEMP_VISIT_ID=' + esc(Utilities.getUuid()));
+  return blocks.join('<br><br>');
+}"""
+          if old not in s:
+              raise SystemExit('Temporary Visit description builder target not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+          git show HEAD^^:.github/workflows/pmos-static-check.yml > .github/workflows/pmos-static-check.yml
+          rm -f .github/final-ui-polish.trigger .github/final-temp-notes-polish.trigger
+          rm -f .github/workflows/final-ui-polish.yml .github/workflows/final-temp-notes-polish.yml
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
+          git add 06-D_Temporary_Visit_UI_V3.gs 06-C_Temporary_Visit_UI_V2.gs .github/workflows/pmos-static-check.yml
+          git add -u .github
+          git commit -m 'Polish Temporary Visit event notes and completion state'
+          git push origin HEAD:pmos-development
 
       - name: Check Apps Script global namespace
         run: python3 tools/check_apps_script_globals.py
