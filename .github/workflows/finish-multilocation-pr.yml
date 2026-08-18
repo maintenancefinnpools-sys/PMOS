@@ -21,14 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import re, pathlib, base64, gzip
-          text = pathlib.Path('.github/workflows/finish-multilocation.yml').read_text()
-          match = re.search(r"echo '([^']+)' \| base64 -d \| gzip -d > /tmp/finish_multilocation\.py", text)
-          if not match:
-              raise SystemExit('Could not locate staged multi-location patch payload.')
-          pathlib.Path('/tmp/finish_multilocation.py').write_bytes(gzip.decompress(base64.b64decode(match.group(1))))
-          PY
+          base64 -d .github/finish-multilocation-payload.b64 | gzip -d > /tmp/finish_multilocation.py
 
       - name: Apply and validate multi-location support
         shell: bash
@@ -67,6 +60,8 @@ jobs:
           rm -f \
             .github/finish-multilocation-error.txt \
             .github/finish-multilocation.trigger \
+            .github/finish-multilocation-payload.b64 \
+            .github/finish-multilocation-pr.trigger* \
             .github/workflows/finish-multilocation.yml \
             .github/workflows/finish-multilocation-pr.yml
           git add -A
