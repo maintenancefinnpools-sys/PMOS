@@ -17,17 +17,30 @@ jobs:
           ref: pmos-development
           fetch-depth: 0
 
-      - name: Apply and validate multi-location support
+      - name: Apply compatibility patch and validate
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f .github/multiloc-ready ]; then
-            echo 'Split multi-location patches are still being staged.'
-            exit 0
-          fi
-          for patch in .github/multiloc-patches/*.py; do
-            python3 "$patch"
-          done
+          base64 -d .github/finish-multilocation-payload.b64 | gzip -d > /tmp/finish_multilocation.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/finish_multilocation.py')
+          s = p.read_text()
+          old = '''replace_once(
+              '03_Route_Manager.gs',
+              "  const idCol = headers.indexOf('Customer ID');",
+              "  const idCol = headers.indexOf('Customer ID');\\n  const serviceLocationCol = headers.indexOf('Service Location ID');"
+          )'''
+          new = '''replace_once(
+              '03_Route_Manager.gs',
+              "  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');",
+              "  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');\\n  const serviceLocationCol = headers.indexOf('Service Location ID');"
+          )'''
+          if old not in s:
+              raise SystemExit('Could not locate Route Manager patch correction target.')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          python3 /tmp/finish_multilocation.py
           python3 tools/check_apps_script_globals.py
           python3 tools/report_unused_apps_script_globals.py
           : > /tmp/pmos-combined.js
