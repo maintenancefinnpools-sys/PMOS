@@ -49,9 +49,15 @@ function scheduleTemporaryVisitsV2(payload) {
   payload = payload || {};
   const title = String(payload.title || '').trim();
   const address = String(payload.address || '').trim();
-  const requests = (Array.isArray(payload.visits) ? payload.visits : []).map(function(item) {
+  let requests = (Array.isArray(payload.visits) ? payload.visits : []).map(function(item) {
     return {date: String(item.date || '').trim(), stopPosition: Math.max(1, Math.floor(Number(item.stopPosition || 1)))};
   }).filter(function(item) { return item.date; });
+  if (!requests.length && Array.isArray(payload.dates)) {
+    const stops = Array.isArray(payload.stopPositions) ? payload.stopPositions : [];
+    requests = payload.dates.map(function(date, index) {
+      return {date: String(date || '').trim(), stopPosition: Math.max(1, Math.floor(Number(stops[index] || 1)))};
+    }).filter(function(item) { return item.date; });
+  }
   if (!title) throw new Error('Enter a Calendar title or customer surname.');
   if (!address) throw new Error('Enter the service address.');
   getVerifiedTemporaryVisitPoint_(payload);
