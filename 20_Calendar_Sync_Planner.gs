@@ -256,6 +256,23 @@ function indexPmosCalendarSeries_(records) {
  * a needless Calendar rewrite.
  */
 function buildPmosCalendarSeriesComparison_(current, desired) {
+  // Identity reconciliation deliberately preserves the existing Google series.
+  // Force one UPDATE so the executor can rewrite its managed metadata and move
+  // the registry row from the legacy key to the current Customer ID. Without
+  // this, a visually identical event would be skipped and re-reconciled on
+  // every future audit.
+  if (current && desired && current.metadata && current.metadata.identityReconciled) {
+    return {
+      before: {
+        seriesKey: current.metadata.previousSeriesKey || current.seriesKey
+      },
+      after: {
+        seriesKey: desired.seriesKey
+      },
+      liveVerified: false
+    };
+  }
+
   if (current && desired && current.signature && desired.signature &&
       current.signature === desired.signature) {
     return {

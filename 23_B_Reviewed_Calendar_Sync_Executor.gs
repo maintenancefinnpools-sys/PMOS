@@ -631,6 +631,12 @@ function applyReviewedRecurringUpdate_(desired, current, seriesKey, calendar, tr
     'Active',
     transactionId
   );
+  const previousSeriesKey = String(
+    current && current.metadata && current.metadata.previousSeriesKey || ''
+  ).trim();
+  if (previousSeriesKey && previousSeriesKey !== seriesKey) {
+    deleteReviewedSeriesRegistryRowExact_(previousSeriesKey, seriesId);
+  }
   markPmosCalendarTransactionRegistryApplied_(transactionId, seriesId);
 
   return {action:'UPDATE', id:seriesId};

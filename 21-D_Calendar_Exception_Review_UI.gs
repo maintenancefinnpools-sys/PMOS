@@ -62,11 +62,11 @@ function showCalendarDeletionExceptionsReview() {
 
   const html = HtmlService.createHtmlOutput(buildPmosAuditReviewHtml_(
     'Suggested Calendar Deletions', body, footer, script + '<style>' +
-      '.delete-instructions{background:#fee2e2;color:#7f1d1d}' +
-      '.delete-toolbar{background:#fff1f2;border-color:#fda4af}.delete-toolbar.partial{background:#ffe4e6;border-color:#fb7185}.delete-toolbar.all{background:#fecdd3;border-color:#f43f5e}' +
-      '.deletion-exception{border-left:5px solid #dc2626}.deletion-exception .exception-badge{display:none}' +
-      '.deletion-exception.selected-exception{background:#f8fafc;border-left-color:#64748b;opacity:.82}' +
-      '.deletion-exception.selected-exception .exception-badge{display:inline-block;background:#e2e8f0;color:#334155;border-radius:999px;padding:4px 11px;font-size:13px;font-weight:900;letter-spacing:.2px}' +
+      '.delete-instructions{background:#f4e3e5;color:#293944;border-color:#deb9be;border-left-color:#a6535d}' +
+      '.delete-toolbar{background:#f2f5f6;border-color:#d2dade}.delete-toolbar.partial{background:#e4f0f5;border-color:#75c4e5}.delete-toolbar.all{background:#d7ebf3;border-color:#017db1}' +
+      '.deletion-exception{border-left:5px solid #a6535d}.deletion-exception .exception-badge{display:none}' +
+      '.deletion-exception.selected-exception{background:#edf1f3;border-left-color:#017db1;opacity:1}' +
+      '.deletion-exception.selected-exception .exception-badge{display:inline-block;background:#e4f0f5;color:#0f5470;border:1px solid #bfd9e5;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:900;letter-spacing:.2px}' +
       '.row-top{display:flex!important;align-items:center;gap:8px}.row-top .heading{margin-right:auto}' +
     '</style>'
   )).setWidth(800).setHeight(700);
