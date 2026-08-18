@@ -33,8 +33,8 @@ jobs:
           )'''
           new = '''replace_once(
               '03_Route_Manager.gs',
-              "  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');",
-              "  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');\\n  const serviceLocationCol = headers.indexOf('Service Location ID');"
+              "  const mapLabelCol = headers.indexOf('Map Label');\\n  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');",
+              "  const mapLabelCol = headers.indexOf('Map Label');\\n  const titleCol = headers.indexOf('Calendar Title');\\n  const idCol = headers.indexOf('Customer ID');\\n  const serviceLocationCol = headers.indexOf('Service Location ID');"
           )'''
           if old not in s:
               raise SystemExit('Could not locate Route Manager patch correction target.')
