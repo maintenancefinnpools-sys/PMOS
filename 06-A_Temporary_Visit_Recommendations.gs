@@ -283,7 +283,7 @@ function pmosRotationWeekForDate_(date, week1Monday) {
 
 function suggestTemporaryVisitPlacement_(payload) {
   payload = payload || {};
-  const dates = Array.isArray(payload.dates) ? payload.dates.filter(Boolean) : [];
+  const dates = Array.isArray(payload.dates) ? payload.dates.filter(Boolean) : (payload.date ? [payload.date] : []);
   if (!dates.length) throw new Error('Choose at least one visit date.');
 
 
