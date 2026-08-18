@@ -19,7 +19,7 @@ function onOpen() {
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
           .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
-          .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
+          .addItem('Schedule Temporary Visit', 'showTemporaryVisitSchedulerV2')
           .addSeparator()
           .addItem('Calendar Plan Audit', 'openPmosCalendarAuditInJobCenter')
           .addItem('PMOS Job Center', 'openPmosJobEngine')
