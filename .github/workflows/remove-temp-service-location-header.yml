@@ -1,6 +1,9 @@
 name: Remove Temporary Visit Service Location Header
 on:
-  workflow_dispatch:
+  push:
+    branches: [pmos-development]
+    paths:
+      - '.github/workflows/remove-temp-service-location-header.yml'
 permissions:
   contents: write
 jobs:
