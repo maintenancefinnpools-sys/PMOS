@@ -36,13 +36,14 @@ function recommendMaintenanceClientRotations(input) {
   if (frequency === 'Weekly') {
     days.forEach(function (day) { candidates.push({day: day, weeks: [1, 2, 3, 4]}); });
   } else if (frequency === 'Biweekly') {
-    days.forEach(function (day) {
-      candidates.push({day: day, weeks: [1, 3]});
-      candidates.push({day: day, weeks: [2, 4]});
+    [[1, 3], [2, 4]].forEach(function (weeks) {
+      days.forEach(function (day) {
+        candidates.push({day: day, weeks: weeks.slice()});
+      });
     });
   } else if (frequency === 'Monthly') {
-    days.forEach(function (day) {
-      [1, 2, 3, 4].forEach(function (week) {
+    [1, 2, 3, 4].forEach(function (week) {
+      days.forEach(function (day) {
         candidates.push({day: day, weeks: [week]});
       });
     });
@@ -58,7 +59,12 @@ function recommendMaintenanceClientRotations(input) {
     }
   }
 
-  const scored = candidates
+  const candidateStart = Math.max(0, Math.floor(Number(input.candidateStart || 0)));
+  const candidateCount = input.candidateCount == null
+    ? candidates.length
+    : Math.max(1, Math.floor(Number(input.candidateCount || 1)));
+  const candidatesToScore = candidates.slice(candidateStart, candidateStart + candidateCount);
+  const scored = candidatesToScore
     .map(function (candidate) {
       return scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate);
     })
