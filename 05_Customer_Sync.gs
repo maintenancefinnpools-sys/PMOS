@@ -5,9 +5,6 @@
 
 function synchronizeCustomerDatabase_(markPending) {
   ensureSupportSheets_();
-  if (typeof ensurePmosServiceLocationInfrastructure_ === 'function') {
-    ensurePmosServiceLocationInfrastructure_();
-  }
   const idsCreated = ensureCustomerIds_();
   const namesBackfilled = backfillPmosCustomerNameColumns_();
   ensureRouteCustomerIdColumn_();
@@ -18,16 +15,12 @@ function synchronizeCustomerDatabase_(markPending) {
   const headers = values[0].map(v => String(v).trim());
 
   const idCol = headers.indexOf('Customer ID');
-  const serviceLocationCol = headers.indexOf('Service Location ID');
   const layerCol = headers.indexOf('Layer');
   const titleCol = headers.indexOf('Calendar Title');
   const mapLabelCol = headers.indexOf('Map Label');
   const fullNameCol = headers.indexOf('Full Name(s)');
   const addressCol = headers.indexOf('Full Address');
   const frequencyCol = headers.indexOf('Frequency');
-  const serviceStartCol = headers.indexOf('Service Start Date');
-  const yearRoundCol = headers.indexOf('Year Round');
-  const statusCol = headers.indexOf('Status');
   const entryCol = headers.indexOf('Entry Information');
   const notesCol = headers.indexOf('Customer Notes');
 
@@ -40,8 +33,6 @@ function synchronizeCustomerDatabase_(markPending) {
 
   for (let index = 1; index < values.length; index++) {
     const routeId = String(values[index][idCol] || '').trim();
-    const serviceLocationId = serviceLocationCol >= 0
-      ? String(values[index][serviceLocationCol] || '').trim() : '';
     const customer = resolvePmosCustomerSyncRouteCustomer_(
       values[index],
       {
@@ -54,7 +45,13 @@ function synchronizeCustomerDatabase_(markPending) {
       customerLookup
     );
 
-    if (routeId && !customer) {
+    // Customers is authoritative. A route row carrying a stable Customer ID
+    // that no longer exists is an orphan created by customer deletion; remove
+    // every occurrence and mark its layer for Calendar reconciliation.
+    if (
+      routeId &&
+      !customer
+    ) {
       const layer = String(values[index][layerCol] || '').trim();
       if (layer) changedLayers.add(layer);
       routeRowsToDelete.push(index + 1);
@@ -77,10 +74,8 @@ function synchronizeCustomerDatabase_(markPending) {
 
     const layer = String(values[index][layerCol] || '').trim();
     const canonicalId = String(customer['Customer ID'] || routeId || '').trim();
-    const routeOwner = canonicalId
-      ? canonicalId + (serviceLocationId ? '|' + serviceLocationId : '')
-      : '';
-    const routeIdentity = routeOwner && layer ? routeOwner + '|' + layer : '';
+    const routeIdentity = canonicalId && layer
+      ? canonicalId + '|' + layer : '';
     if (routeIdentity && resolvedRouteIdentities[routeIdentity]) {
       changedLayers.add(layer);
       routeRowsToDelete.push(index + 1);
@@ -89,28 +84,18 @@ function synchronizeCustomerDatabase_(markPending) {
     }
     if (routeIdentity) resolvedRouteIdentities[routeIdentity] = index + 1;
 
-    // Customer ID and household name remain account-level. Every other service
-    // field belongs to the child location when Service Location ID is present.
-    const updates = serviceLocationId
-      ? [
-        [idCol, customer['Customer ID']],
-        [fullNameCol, customer['Full Name(s)']]
-      ]
-      : [
-        [idCol, customer['Customer ID']],
-        [titleCol, customer['Calendar Title']],
-        [fullNameCol, customer['Full Name(s)']],
-        [addressCol, customer['Full Address']],
-        [frequencyCol, customer['Frequency']],
-        [serviceStartCol, customer['Service Start Date'] || customer['Start Date']],
-        [yearRoundCol, customer['Year Round'] || customer['Year-Round'] || customer.Season],
-        [statusCol, customer.Status || 'Active'],
-        [entryCol, buildCustomerEntryInformation_(customer)],
-        [notesCol, customer['Customer Notes']]
-      ];
+    const updates = [
+      [idCol, customer['Customer ID']],
+      [titleCol, customer['Calendar Title']],
+      [fullNameCol, customer['Full Name(s)']],
+      [addressCol, customer['Full Address']],
+      [frequencyCol, customer['Frequency']],
+      [entryCol, buildCustomerEntryInformation_(customer)],
+      [notesCol, customer['Customer Notes']]
+    ].filter(item => item[0] >= 0);
 
     let changed = false;
-    updates.filter(item => item[0] >= 0).forEach(([column, value]) => {
+    updates.forEach(([column, value]) => {
       const normalizedValue = value == null ? '' : value;
       if (String(values[index][column] || '') !== String(normalizedValue)) {
         values[index][column] = normalizedValue;
@@ -120,6 +105,7 @@ function synchronizeCustomerDatabase_(markPending) {
 
     if (changed) {
       routeRowsUpdated++;
+      const layer = String(values[index][layerCol] || '').trim();
       if (layer) changedLayers.add(layer);
     }
   }
@@ -139,11 +125,17 @@ function synchronizeCustomerDatabase_(markPending) {
       .setValues(values.slice(1));
   }
 
+  // Delete bottom-up so stored sheet row numbers remain valid.
   routeRowsToDelete.sort(function(left, right) { return right - left; })
     .forEach(function(rowNumber) {
       routeSheet.deleteRow(rowNumber);
     });
 
+  /*
+   * Route IDs captured before migration may contain legacy identities. Re-read
+   * the route IDs only after canonical IDs have been written back so migrated
+   * customers are not mistaken for missing customers and duplicated.
+   */
   const currentRouteCustomerIds = new Set(
     readRouteCustomerIdsWithoutCustomerLookup_()
   );
@@ -487,14 +479,10 @@ function readRouteCustomerIdsWithoutCustomerLookup_() {
   const values = sheet.getDataRange().getValues();
   const headers = values[0].map(v => String(v).trim());
   const idCol = headers.indexOf('Customer ID');
-  const serviceLocationCol = headers.indexOf('Service Location ID');
 
   if (idCol < 0) return [];
 
   return values.slice(1)
-    .filter(function(row) {
-      return serviceLocationCol < 0 || !String(row[serviceLocationCol] || '').trim();
-    })
     .map(row => String(row[idCol] || '').trim())
     .filter(Boolean);
 }

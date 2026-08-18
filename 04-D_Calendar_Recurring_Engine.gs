@@ -119,10 +119,8 @@ function buildRecurringSeriesPlan_(routeReader) {
       ? null
       : endOfDay_(settings.seasonEnd);
 
-    const seriesOwner = row.customerId
-      ? row.customerId + (row.serviceLocationId ? '|' + row.serviceLocationId : '')
-      : normalize_(row.title);
-    const seriesKey = `${seriesOwner}|${row.layer}`;
+    const seriesKey =
+      `${row.customerId || normalize_(row.title)}|${row.layer}`;
 
     const description =
       buildRouteDescription_(row, parsed) +
@@ -131,8 +129,6 @@ function buildRecurringSeriesPlan_(routeReader) {
     const plan = {
       seriesKey,
       customerId: row.customerId || '',
-      serviceLocationId: row.serviceLocationId || '',
-      serviceLocationName: row.serviceLocationName || '',
       layer: row.layer,
       title: row.title,
       start,
@@ -191,7 +187,7 @@ function areEquivalentPmosRecurringRouteRows_(left, right) {
   const a = left || {};
   const b = right || {};
   const textFields = [
-    'customerId', 'serviceLocationId', 'layer', 'title', 'fullName', 'address', 'frequency',
+    'customerId', 'layer', 'title', 'fullName', 'address', 'frequency',
     'entry', 'notes', 'phone', 'secondaryPhone', 'email', 'sanitization',
     'automation'
   ];

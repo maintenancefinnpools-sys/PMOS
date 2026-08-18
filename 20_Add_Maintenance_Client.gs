@@ -27,11 +27,8 @@ function recommendMaintenanceClientRotations(input) {
     lng: input.addressDetails.lng
   });
   const excludedCustomerId = String(input.excludeCustomerId || '').trim().toUpperCase();
-  const excludedServiceLocationId = String(input.excludeServiceLocationId || '').trim().toUpperCase();
   const routes = readRoutesInPhysicalOrder_().filter(function (route) {
-    if (normalize_(route.status || 'Active') !== 'active') return false;
-    if (!excludedCustomerId || String(route.customerId || '').trim().toUpperCase() !== excludedCustomerId) return true;
-    return String(route.serviceLocationId || '').trim().toUpperCase() !== excludedServiceLocationId;
+    return !excludedCustomerId || String(route.customerId || '').trim().toUpperCase() !== excludedCustomerId;
   });
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const candidates = [];

@@ -150,21 +150,23 @@ function readExistingPmosCalendarRoutes_() {
     if (title) customersByTitle[normalize_(title)] = customer;
   });
 
-  const rows = routeValues.slice(1)
+  return routeValues.slice(1)
     .filter(pmosCalendarRowHasData_)
     .map(function (row, rowIndex) {
       const route = pmosCalendarRowObject_(routeHeaders, row);
       const routeTitle = String(route['Calendar Title'] || '').trim();
       const routeId = String(route['Customer ID'] || '').trim();
-      const serviceLocationId = String(route['Service Location ID'] || '').trim();
-      const serviceLocationName = String(route['Service Location Name'] || '').trim();
-      const isAdditionalLocation = Boolean(serviceLocationId);
       const customer = customersById[routeId] ||
         customersByTitle[normalize_(routeTitle)] || {};
+      // The Route Template is the scheduling source of truth. When it carries
+      // an explicit Customer ID, preserve that identity even if the fallback
+      // title lookup resolves to a different Customers-sheet record.
       const customerId = String(routeId || customer['Customer ID'] || '').trim();
-      const title = String(isAdditionalLocation
-        ? (routeTitle || serviceLocationName || customer['Calendar Title'] || customer['Full Name(s)'] || '')
-        : (customer['Calendar Title'] || routeTitle || customer['Full Name(s)'] || route['Full Name(s)'] || '')
+      // Calendar Title is preferred, but a populated route must not disappear
+      // merely because that optional display field is blank in one route copy.
+      const title = String(
+        customer['Calendar Title'] || routeTitle ||
+        customer['Full Name(s)'] || route['Full Name(s)'] || ''
       ).trim();
       const layer = String(route.Layer || '').trim();
       if ((customerId || title) && (!layer || !title)) {
@@ -173,66 +175,33 @@ function readExistingPmosCalendarRoutes_() {
           ' cannot produce a Calendar series: Layer and customer title are required.'
         );
       }
-      const status = String(isAdditionalLocation
-        ? (route.Status || 'Active')
-        : (customer.Status || route.Status || 'Active')).trim() || 'Active';
-      const yearRoundText = isAdditionalLocation
-        ? (route['Year Round'] || route['Year-Round'] || route.Season || '')
-        : (customer['Year Round'] || customer['Year-Round'] || customer.Season || route['Year Round'] || '');
+      const yearRoundText = customer['Year Round'] || customer['Year-Round'] || customer.Season || '';
 
       return {
-        key: customerId
-          ? customerId + (serviceLocationId ? '|' + serviceLocationId : '')
-          : title,
+        key: customerId || title,
         sourceRow: rowIndex + 2,
         customerId: customerId,
-        serviceLocationId: serviceLocationId,
-        serviceLocationName: serviceLocationName,
-        status: status,
         layer: layer,
         order: Number(route['Stop Order'] || 0),
         title: title,
         fullName: String(customer['Full Name(s)'] || route['Full Name(s)'] || title),
-        address: String(isAdditionalLocation
-          ? (route['Full Address'] || route['Service Address'] || route.Address || '')
-          : (customer['Full Address'] || route['Full Address'] || '')),
-        frequency: String(isAdditionalLocation
-          ? (route.Frequency || '')
-          : (customer.Frequency || route.Frequency || '')),
-        entry: isAdditionalLocation
-          ? String(route['Entry Information'] || '')
-          : (buildCustomerEntryInformation_(customer) || String(route['Entry Information'] || '')),
-        notes: String(isAdditionalLocation
-          ? (route['Customer Notes'] || '')
-          : (customer['Customer Notes'] || route['Customer Notes'] || '')),
+        address: String(customer['Full Address'] || route['Full Address'] || ''),
+        frequency: String(customer.Frequency || route.Frequency || ''),
+        entry: buildCustomerEntryInformation_(customer) ||
+          String(route['Entry Information'] || ''),
+        notes: String(customer['Customer Notes'] || route['Customer Notes'] || ''),
         phone: String(customer['Primary Phone'] || ''),
         secondaryPhone: String(customer['Secondary Phone'] || ''),
         email: String(customer.Email || ''),
-        serviceStartDate: isAdditionalLocation
-          ? (route['Service Start Date'] || route['Start Date'] || '')
-          : (customer['Service Start Date'] || customer['Start Date'] || route['Service Start Date'] || ''),
-        sanitization: String(isAdditionalLocation
-          ? (route['Sanitization Type(s)'] || '')
-          : (customer['Sanitization Type(s)'] || route['Sanitization Type(s)'] || '')),
-        automation: String(isAdditionalLocation
-          ? (route.Automation || '')
-          : (customer.Automation || route.Automation || '')),
+        sanitization: String(customer['Sanitization Type(s)'] || ''),
+        automation: String(customer.Automation || ''),
         yearRound: normalize_(yearRoundText).indexOf('year round') >= 0 ||
-          normalize_(yearRoundText) === 'yes'
+          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
       };
     })
     .filter(function (row) {
-      return row.layer && row.title && normalize_(row.status || 'Active') === 'active';
+      return row.layer && row.title;
     });
-
-  // Paused / inactive rows remain in the Route Template, but active Calendar
-  // stops close up around them instead of leaving empty time slots.
-  const activeOrderByLayer = {};
-  rows.forEach(function(row) {
-    activeOrderByLayer[row.layer] = (activeOrderByLayer[row.layer] || 0) + 1;
-    row.order = activeOrderByLayer[row.layer];
-  });
-  return rows;
 }
 
 /** Reads the Calendar Series Registry without creating or repairing it. */
