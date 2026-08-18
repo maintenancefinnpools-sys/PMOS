@@ -38,7 +38,13 @@ jobs:
           )'''
           if old not in s:
               raise SystemExit('Could not locate Route Manager patch correction target.')
-          p.write_text(s.replace(old, new, 1))
+          s = s.replace(old, new, 1)
+          s = s.replace(
+              "raise SystemExit(f'{path}: expected one target, found {text.count(old)}')",
+              "raise SystemExit(f'{path}: expected one target, found {text.count(old)}; target={old[:260]!r}')",
+              1
+          )
+          p.write_text(s)
           PY
           python3 /tmp/finish_multilocation.py
           python3 tools/check_apps_script_globals.py
