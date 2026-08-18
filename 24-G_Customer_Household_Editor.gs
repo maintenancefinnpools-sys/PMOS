@@ -22,7 +22,7 @@ function savePmosCustomerEditorExistingHouseholdContacts(customerId, submittedCo
   const customer = getPmosCustomerContactRecord_(customerId, false);
   const state = getPmosGoogleContactState(customerId);
   if (!state || state.status !== 'LINKED') {
-    return {updated: 0, unlinked: 0};
+    return {updated: 0, unlinked: 0, deleted: 0, protected: 0};
   }
 
   const linked = Array.isArray(state.contacts) ? state.contacts : [];
@@ -31,8 +31,11 @@ function savePmosCustomerEditorExistingHouseholdContacts(customerId, submittedCo
     return !primary || contact.resourceName !== primary.resourceName;
   });
   const allowed = {};
+  const contactByResource = {};
   additional.forEach(function (contact) {
-    if (contact.resourceName) allowed[contact.resourceName] = true;
+    if (!contact.resourceName) return;
+    allowed[contact.resourceName] = true;
+    contactByResource[contact.resourceName] = contact;
   });
 
   const submitted = Array.isArray(submittedContacts) ? submittedContacts : [];
@@ -75,13 +78,73 @@ function savePmosCustomerEditorExistingHouseholdContacts(customerId, submittedCo
     resourceName = String(resourceName || '').trim();
     if (resourceName && allowed[resourceName]) removeSet[resourceName] = true;
   });
+
+  let deleted = 0;
+  let protectedCount = 0;
+  const ui = SpreadsheetApp.getUi();
+  Object.keys(removeSet).forEach(function (resourceName) {
+    const contact = contactByResource[resourceName] || {};
+    const safety = getPmosCustomerEditorContactDeleteSafety_(customerId, resourceName);
+    if (!safety.canDelete) {
+      protectedCount += 1;
+      return;
+    }
+
+    const displayName = String(contact.displayName || [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'this contact');
+    const choice = ui.alert(
+      'Delete Google Contact?',
+      'Remove ' + displayName + ' from this customer.\n\n' +
+      'Do you also want to permanently delete this person from Google Contacts?\n\n' +
+      'Yes = delete from Google Contacts.\nNo = remove from this customer only.',
+      ui.ButtonSet.YES_NO
+    );
+    if (choice !== ui.Button.YES) return;
+
+    try {
+      People.People.deleteContact(resourceName);
+      deleted += 1;
+    } catch (error) {
+      throw new Error(
+        'PMOS could not delete ' + displayName + ' from Google Contacts. ' +
+        'The contact has not been removed from this customer. ' +
+        (error && error.message ? error.message : String(error))
+      );
+    }
+  });
+
   const remainingResources = customer.resourceNames.filter(function (resourceName) {
     return !removeSet[resourceName];
   });
   const unlinked = Object.keys(removeSet).length;
   if (unlinked) writePmosGoogleContactLinks_(customer, remainingResources);
 
-  return {updated: updated, unlinked: unlinked};
+  return {updated: updated, unlinked: unlinked, deleted: deleted, protected: protectedCount};
+}
+
+function getPmosCustomerEditorContactDeleteSafety_(customerId, resourceName) {
+  const cleanCustomerId = String(customerId || '').trim();
+  const cleanResourceName = String(resourceName || '').trim();
+  if (!cleanCustomerId || !cleanResourceName) return {canDelete: false, reason: 'INVALID'};
+
+  const linkedElsewhere = listPmosCustomerContactRecords_().some(function (record) {
+    return String(record.customerId || '').trim() !== cleanCustomerId &&
+      Array.isArray(record.resourceNames) && record.resourceNames.indexOf(cleanResourceName) >= 0;
+  });
+  if (linkedElsewhere) return {canDelete: false, reason: 'LINKED_ELSEWHERE'};
+
+  let person;
+  try {
+    person = People.People.get(cleanResourceName, {personFields: PMOS_CONTACT_FIELDS_});
+  } catch (error) {
+    return {canDelete: false, reason: 'CONTACT_UNAVAILABLE'};
+  }
+
+  const createdForCustomer = (person.externalIds || []).some(function (item) {
+    return item && item.type === 'customer' && String(item.value || '').trim() === cleanCustomerId;
+  });
+  if (!createdForCustomer) return {canDelete: false, reason: 'NOT_PMOS_OWNED'};
+
+  return {canDelete: true, reason: 'PMOS_OWNED'};
 }
 
 function findPmosCustomerEditorPrimaryContact_(customer, contacts) {
