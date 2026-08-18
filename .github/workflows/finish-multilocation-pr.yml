@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d .github/finish-multilocation-payload.b64 | gzip -d > /tmp/finish_multilocation.py
+          base64 -d .github/finish-multilocation-payload-v2.b64 | gzip -d > /tmp/finish_multilocation.py
 
       - name: Apply and validate multi-location support
         shell: bash
@@ -51,8 +51,10 @@ jobs:
             git reset --hard HEAD
             cp /tmp/multilocation-run.log .github/finish-multilocation-error.txt
             git add .github/finish-multilocation-error.txt
-            git commit -m 'Record multi-location patch failure'
-            git push origin HEAD:pmos-development
+            if ! git diff --cached --quiet; then
+              git commit -m 'Record multi-location patch failure'
+              git push origin HEAD:pmos-development
+            fi
             cat /tmp/multilocation-run.log
             exit "$rc"
           fi
@@ -61,6 +63,7 @@ jobs:
             .github/finish-multilocation-error.txt \
             .github/finish-multilocation.trigger \
             .github/finish-multilocation-payload.b64 \
+            .github/finish-multilocation-payload-v2.b64 \
             .github/finish-multilocation-pr.trigger* \
             .github/workflows/finish-multilocation.yml \
             .github/workflows/finish-multilocation-pr.yml
