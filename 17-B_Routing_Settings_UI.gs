@@ -1,4 +1,17 @@
 /** Secure Routing Settings dialog. API keys never leave Script Properties after submission. */
+const PMOS_RIE_EXTERNAL_REQUEST_SCOPE = 'https://www.googleapis.com/auth/script.external_request';
+
+function updatePmosPermissions() {
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  SpreadsheetApp.getUi().alert(
+    'PMOS permissions are up to date. Routing and other authorized services are ready to use.'
+  );
+}
+
+function requirePmosRoutingPermission_() {
+  ScriptApp.requireScopes(ScriptApp.AuthMode.FULL, [PMOS_RIE_EXTERNAL_REQUEST_SCOPE]);
+}
+
 function getPmosRieSettingsForUi() {
   return getPmosRieSettings_();
 }
@@ -40,6 +53,7 @@ function clearPmosGraphHopperApiKey() {
 }
 
 function testPmosRieProvider(input) {
+  requirePmosRoutingPermission_();
   if (input) savePmosRieSettings(input);
   const result = routePmosWithRie_([
     {lat: 43.2557, lng: -79.8711},
