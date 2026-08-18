@@ -56,6 +56,8 @@ function getPmosCustomerProfile(customerId) {
 
   const routes = readPmosCustomerProfileRoutes_(record.customerId);
   const equipment = readPmosCustomerProfileEquipment_(record.customerId);
+  const serviceLocations = typeof getPmosCustomerServiceLocationsForProfile_ === 'function'
+    ? getPmosCustomerServiceLocationsForProfile_(record.customerId) : [];
   const routeWeeks = routes.map(function (route) { return Number(route.week || 0); }).filter(Boolean).filter(function (week, index, all) { return all.indexOf(week) === index; });
   const routeDays = routes.map(function (route) { return String(route.day || ''); }).filter(Boolean).filter(function (day, index, all) { return all.indexOf(day) === index; });
   const inferredFrequency = routeWeeks.length >= 4 ? (routeDays.length > 1 ? 'Twice Weekly' : 'Weekly') : routeWeeks.length === 2 ? 'Bi-Weekly' : routeWeeks.length === 1 ? 'Monthly' : '';
@@ -76,7 +78,8 @@ function getPmosCustomerProfile(customerId) {
     notes: record.notes,
     routes: routes,
     equipmentSummary: equipment.summary,
-    bodiesOfWater: equipment.bodies
+    bodiesOfWater: equipment.bodies,
+    serviceLocations: serviceLocations
   };
 }
 
@@ -148,8 +151,11 @@ function readPmosCustomerProfileEquipment_(customerId) {
   const sheet = SpreadsheetApp.getActive().getSheetByName('PMOS Customer Equipment');
   if (!sheet || sheet.getLastRow() < 2) return {summary: '', bodies: []};
   const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(function(value) { return String(value || '').trim(); });
+  const serviceLocationIndex = headers.indexOf('Service Location ID');
   for (let index = 1; index < values.length; index++) {
     if (String(values[index][0] || '').trim() !== customerId) continue;
+    if (serviceLocationIndex >= 0 && String(values[index][serviceLocationIndex] || '').trim()) continue;
     const summary = String(values[index][2] || '').trim();
     const json = String(values[index][3] || '').trim();
     if (!json) return {summary: summary, bodies: []};
@@ -166,7 +172,7 @@ function readPmosCustomerProfileEquipment_(customerId) {
   return {summary: '', bodies: []};
 }
 
-function readPmosCustomerProfileRoutes_(customerId) {
+function readPmosCustomerProfileRoutes_(customerId, serviceLocationId) {
   const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
     PMOS.ROUTES_SHEET, 'PMOS 4-Week Route Template', 'Route Template'
   ]);
@@ -175,9 +181,12 @@ function readPmosCustomerProfileRoutes_(customerId) {
   const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
   const layerIndex = findHeaderIndex_(table.headers, ['Layer', 'Route Layer']);
   const orderIndex = findHeaderIndex_(table.headers, ['Stop Order', 'Route Order', 'Order']);
+  const serviceLocationIndex = findHeaderIndex_(table.headers, ['Service Location ID']);
+  const wantedLocationId = String(serviceLocationId || '').trim();
   if (idIndex < 0 || layerIndex < 0) return [];
   return table.rows.filter(function (row) {
-    return String(row[idIndex] || '').trim() === customerId;
+    const rowLocationId = serviceLocationIndex >= 0 ? String(row[serviceLocationIndex] || '').trim() : '';
+    return String(row[idIndex] || '').trim() === customerId && rowLocationId === wantedLocationId;
   }).map(function (row) {
     const layer = String(row[layerIndex] || '').trim();
     let parsed = {};

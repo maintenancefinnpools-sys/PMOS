@@ -40,7 +40,7 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
   const customerCountParity = buildPmosCalendarIdentityCountParity_(
     desired,
     current,
-    function(record) { return effectivePmosCalendarCustomerId_(record); }
+    function(record) { return effectivePmosCalendarOwnerId_(record); }
   );
   const titleCountParity = buildPmosCalendarIdentityCountParity_(
     desired,
@@ -126,7 +126,7 @@ function reconcilePmosCalendarSeriesIdentities_(desiredSeries, verifiedState) {
     remappedCurrentKeys,
     reconciliations,
     'CUSTOMER_ID_SERIES_PAIR',
-    function(record) { return effectivePmosCalendarCustomerId_(record); },
+    function(record) { return effectivePmosCalendarOwnerId_(record); },
     customerCountParity
   );
 
@@ -314,7 +314,7 @@ function readPmosCalendarLayerParts_(record) {
   let raw = String(record && record.layer || '').trim();
   if (!raw) {
     const key = String(record && record.seriesKey || '').trim();
-    if (key.indexOf('|') >= 0) raw = key.substring(key.indexOf('|') + 1).trim();
+    if (key.indexOf('|') >= 0) raw = key.substring(key.lastIndexOf('|') + 1).trim();
   }
   if (!raw) return {layer: '', week: 0, day: '', routeDay: ''};
 
@@ -367,6 +367,22 @@ function buildPmosCalendarMappedTargetIndex_(mappings) {
   return targets;
 }
 
+function effectivePmosCalendarOwnerId_(record) {
+  const customerId = effectivePmosCalendarCustomerId_(record);
+  if (!customerId) return '';
+  const directLocation = String(record && record.serviceLocationId || '').trim().toUpperCase();
+  if (directLocation) return customerId + '|' + directLocation;
+  const rowLocation = String(record && record.row && record.row.serviceLocationId || '').trim().toUpperCase();
+  if (rowLocation) return customerId + '|' + rowLocation;
+  const key = String(record && record.seriesKey || '').trim();
+  const parts = key.split('|');
+  if (parts.length >= 3) {
+    const locationId = String(parts[1] || '').trim().toUpperCase();
+    if (locationId) return customerId + '|' + locationId;
+  }
+  return customerId;
+}
+
 function effectivePmosCalendarCustomerId_(record) {
   const direct = String(record && record.customerId || '').trim();
   if (direct) return direct.toUpperCase();
@@ -379,7 +395,7 @@ function effectivePmosCalendarLayer_(record) {
   let value = String(record && record.layer || '').trim();
   if (!value) {
     const key = String(record && record.seriesKey || '').trim();
-    if (key.indexOf('|') >= 0) value = key.substring(key.indexOf('|') + 1).trim();
+    if (key.indexOf('|') >= 0) value = key.substring(key.lastIndexOf('|') + 1).trim();
   }
   if (!value) return '';
   try {

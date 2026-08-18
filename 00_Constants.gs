@@ -3,14 +3,14 @@
  * Spreadsheet data remains the authoritative source of truth.
  */
 
-const PMOS_VERSION = '1.9.0';
+const PMOS_VERSION = '1.10.0';
 
 // Active recurring-calendar rotation anchor:
 // Monday July 13, 2026 is Week 1, so the first new visits begin
 // Thursday July 16, 2026 in Week 1.
 const PMOS_RECURRING_WEEK1_MONDAY = new Date(2026, 6, 13, 12, 0, 0, 0);
 
-const PMOS_MIN_SCHEMA_VERSION = 5;
+const PMOS_MIN_SCHEMA_VERSION = 6;
 
 const PMOS = {
   ROUTES_SHEET: '4-Week Route Template',

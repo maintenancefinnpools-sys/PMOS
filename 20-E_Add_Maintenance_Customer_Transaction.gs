@@ -50,13 +50,17 @@ function createMaintenanceCustomer(input) {
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
-      'Email', 'Frequency', 'Service Start Date', 'Entry Information',
+      'Email', 'Status', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
       'Filter', 'Heater', 'Robot(s)', 'Cover', 'Bodies of Water',
       'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
-      'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
+      'Customer ID', 'Service Location ID', 'Service Location Name',
+      'Calendar Title', 'Full Name(s)', 'Full Address', 'Frequency',
+      'Service Start Date', 'Year Round', 'Status', 'Entry Information',
+      'Customer Notes', 'Sanitization Type(s)', 'Automation',
+      'Layer', 'Stop Order', 'Map Label'
     ]);
 
     customerTable = readPmosHeaderTable_(customersSheet);
@@ -147,7 +151,7 @@ function ensureMaintenanceCustomerEquipmentSheet_(spreadsheet) {
   if (!sheet) sheet = ss.insertSheet(sheetName);
   const headers = [
     'Customer ID', 'Calendar Title', 'Equipment Summary',
-    'Equipment Details JSON', 'Updated At'
+    'Equipment Details JSON', 'Updated At', 'Service Location ID', 'Location Name'
   ];
   const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
   if (headers.some(function (header, index) {
@@ -368,8 +372,10 @@ function hasActiveAddedMaintenanceCalendarSync_(properties) {
   });
 }
 
-function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayers) {
+function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayers, options) {
   const id = String(customerId || '').trim();
+  options = options || {};
+  const serviceLocationId = String(options.serviceLocationId || '').trim();
   const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
     return String(layer || '').trim();
   }).filter(Boolean)));
@@ -384,7 +390,7 @@ function scheduleAddedMaintenanceCustomerCalendarSync_(customerId, affectedLayer
     const now = new Date().toISOString();
     PropertiesService.getDocumentProperties().setProperty(
       addedMaintenanceCalendarSyncKey_(id),
-      JSON.stringify({customerId: id, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
+      JSON.stringify({customerId: id, serviceLocationId: serviceLocationId, affectedLayers: layers, status: 'SCHEDULED', phase: 'CUSTOMER_REFRESH', progress: 2, processedOperations: 0, totalOperations: 0, createdAt: now, updatedAt: now, attempts: 0, refreshComplete: false})
     );
     ensureAddedMaintenanceCalendarSyncTrigger_();
   } finally {
@@ -455,7 +461,8 @@ function runAddedMaintenanceCustomerCalendarSyncWorker_() {
         state.totalOperations = Number(progress.totalOperations || 0);
         state.updatedAt = new Date().toISOString();
         properties.setProperty(item.key, JSON.stringify(state));
-      }
+      },
+      state.serviceLocationId || ''
     );
     state.status = 'COMPLETE';
     state.progress = 100;
@@ -490,8 +497,9 @@ function getAddedMaintenanceCustomerCalendarSyncStatus(customerId) {
   return state;
 }
 
-function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers, progressCallback) {
+function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers, progressCallback, serviceLocationId) {
   const id = String(customerId || '').trim();
+  const targetLocationId = String(serviceLocationId || '').trim();
   if (!id) throw new Error('Automatic Calendar Sync is missing the new Customer ID.');
   const layers = Array.from(new Set((affectedLayers || []).map(function (layer) {
     return String(layer || '').trim();
@@ -521,6 +529,7 @@ function synchronizeAddedMaintenanceCustomerCalendar_(customerId, affectedLayers
     });
     const newCustomerSeries = (built.desiredSeries || []).filter(function (series) {
       return String(series.customerId || '').trim() === id &&
+        String(series.serviceLocationId || '').trim() === targetLocationId &&
         layers.indexOf(String(series.layer || '').trim()) >= 0;
     });
     if (newCustomerSeries.length !== layers.length) {

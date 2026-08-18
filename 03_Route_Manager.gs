@@ -13,6 +13,7 @@ function normalizeRoutesFromPhysicalOrder_(markPending) {
   const mapLabelCol = headers.indexOf('Map Label');
   const titleCol = headers.indexOf('Calendar Title');
   const idCol = headers.indexOf('Customer ID');
+  const serviceLocationCol = headers.indexOf('Service Location ID');
 
   if (layerCol < 0 || orderCol < 0 || mapLabelCol < 0 || titleCol < 0) {
     throw new Error('Route sheet needs Layer, Stop Order, Map Label, and Calendar Title columns.');
@@ -37,8 +38,11 @@ function normalizeRoutesFromPhysicalOrder_(markPending) {
     counters[layer] = (counters[layer] || 0) + 1;
     const order = counters[layer];
     const mapLabel = String(order).padStart(2, '0') + ' - ' + title;
-    const key = idCol >= 0 && String(values[index][idCol] || '').trim()
-      ? String(values[index][idCol]).trim()
+    const customerId = idCol >= 0 ? String(values[index][idCol] || '').trim() : '';
+    const serviceLocationId = serviceLocationCol >= 0
+      ? String(values[index][serviceLocationCol] || '').trim() : '';
+    const key = customerId
+      ? customerId + (serviceLocationId ? '|' + serviceLocationId : '')
       : title;
 
     if (!rowsByLayer[layer]) rowsByLayer[layer] = [];
@@ -212,6 +216,7 @@ function saveRouteOrder(payload) {
   const layerCol = headers.indexOf('Layer');
   const titleCol = headers.indexOf('Calendar Title');
   const idCol = headers.indexOf('Customer ID');
+  const serviceLocationCol = headers.indexOf('Service Location ID');
   const routeRows = [];
 
   values.slice(1).forEach(function (row) {
@@ -222,7 +227,10 @@ function saveRouteOrder(payload) {
   routeRows.forEach(function (row) {
     const title = String(row[titleCol] || '').trim();
     const id = idCol >= 0 ? String(row[idCol] || '').trim() : '';
-    byKey[id || title] = row;
+    const serviceLocationId = serviceLocationCol >= 0
+      ? String(row[serviceLocationCol] || '').trim() : '';
+    const key = id ? id + (serviceLocationId ? '|' + serviceLocationId : '') : title;
+    byKey[key] = row;
   });
   const orderedRows = payload.customerKeys
     .map(function (key) { return byKey[String(key)]; })
@@ -259,29 +267,64 @@ function readRoutesInPhysicalOrder_() {
       routeHeaders.forEach(function (header, index) { obj[header] = row[index]; });
       const routeTitle = String(obj['Calendar Title'] || '').trim();
       const routeId = String(obj['Customer ID'] || '').trim();
+      const serviceLocationId = String(obj['Service Location ID'] || '').trim();
+      const serviceLocationName = String(obj['Service Location Name'] || '').trim();
+      const isAdditionalLocation = Boolean(serviceLocationId);
       const customer = customers.byId[routeId] ||
         customers.byTitle[normalize_(routeTitle)] || {};
       const customerId = String(customer['Customer ID'] || routeId).trim();
-      const title = String(customer['Calendar Title'] || routeTitle).trim();
+      const title = String(isAdditionalLocation
+        ? (routeTitle || serviceLocationName || customer['Calendar Title'] || '')
+        : (customer['Calendar Title'] || routeTitle || '')).trim();
+      const address = String(isAdditionalLocation
+        ? (obj['Full Address'] || obj['Service Address'] || obj.Address || '')
+        : (customer['Full Address'] || obj['Full Address'] || '')).trim();
+      const frequency = String(isAdditionalLocation
+        ? (obj.Frequency || '')
+        : (customer.Frequency || obj.Frequency || '')).trim();
+      const entry = isAdditionalLocation
+        ? String(obj['Entry Information'] || '').trim()
+        : (buildCustomerEntryInformation_(customer) || String(obj['Entry Information'] || ''));
+      const notes = String(isAdditionalLocation
+        ? (obj['Customer Notes'] || '')
+        : (customer['Customer Notes'] || obj['Customer Notes'] || '')).trim();
+      const status = String(isAdditionalLocation
+        ? (obj.Status || 'Active')
+        : (customer.Status || obj.Status || 'Active')).trim() || 'Active';
+      const serviceStartDate = isAdditionalLocation
+        ? (obj['Service Start Date'] || obj['Start Date'] || '')
+        : (customer['Service Start Date'] || customer['Start Date'] || obj['Service Start Date'] || '');
+      const yearRoundSource = isAdditionalLocation
+        ? (obj['Year Round'] || obj['Year-Round'] || obj.Season || '')
+        : (customer['Year Round'] || customer['Year-Round'] || customer.Season || obj['Year Round'] || '');
       return {
-        key: customerId || title,
+        key: customerId
+          ? customerId + (serviceLocationId ? '|' + serviceLocationId : '')
+          : title,
         customerId: customerId,
+        serviceLocationId: serviceLocationId,
+        serviceLocationName: serviceLocationName,
+        status: status,
         layer: String(obj.Layer || '').trim(),
         order: Number(obj['Stop Order'] || 0),
         title: title,
         fullName: String(customer['Full Name(s)'] || obj['Full Name(s)'] || title),
-        address: String(customer['Full Address'] || obj['Full Address'] || ''),
-        frequency: String(customer.Frequency || obj.Frequency || ''),
-        entry: buildCustomerEntryInformation_(customer) || String(obj['Entry Information'] || ''),
-        notes: String(customer['Customer Notes'] || obj['Customer Notes'] || ''),
+        address: address,
+        frequency: frequency,
+        entry: entry,
+        notes: notes,
         phone: String(customer['Primary Phone'] || ''),
         secondaryPhone: String(customer['Secondary Phone'] || ''),
         email: String(customer.Email || ''),
-        serviceStartDate: customer['Service Start Date'] || customer['Start Date'] || '',
-        sanitization: String(customer['Sanitization Type(s)'] || ''),
-        automation: String(customer.Automation || ''),
-        yearRound: normalize_(customer['Year Round'] || customer['Year-Round'] || customer.Season || '').includes('year round') ||
-          normalize_(customer['Year Round'] || customer['Year-Round'] || '') === 'yes'
+        serviceStartDate: serviceStartDate,
+        sanitization: String(isAdditionalLocation
+          ? (obj['Sanitization Type(s)'] || '')
+          : (customer['Sanitization Type(s)'] || obj['Sanitization Type(s)'] || '')),
+        automation: String(isAdditionalLocation
+          ? (obj.Automation || '')
+          : (customer.Automation || obj.Automation || '')),
+        yearRound: normalize_(yearRoundSource).indexOf('year round') >= 0 ||
+          normalize_(yearRoundSource) === 'yes'
       };
     })
     .filter(function (row) { return row.layer && row.title; });

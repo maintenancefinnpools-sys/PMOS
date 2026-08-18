@@ -23,6 +23,9 @@ function initializePmos() {
   ensureUpdateCenterSheet_();
   ensureFeatureLabSheet_();
   ensureSupportSheets_();
+  if (typeof ensurePmosServiceLocationInfrastructure_ === 'function') {
+    ensurePmosServiceLocationInfrastructure_();
+  }
   installOrRefreshTriggers_();
   protectCalculatedColumns_();
   normalizeRoutesFromPhysicalOrder_(false);
@@ -116,6 +119,9 @@ function runPmosMigrations_() {
   ensureUpdateCenterSheet_();
   ensureFeatureLabSheet_();
   ensureSupportSheets_();
+  if (typeof ensurePmosServiceLocationInfrastructure_ === 'function') {
+    ensurePmosServiceLocationInfrastructure_();
+  }
 
   const props = PropertiesService.getDocumentProperties();
   const schema = Number(props.getProperty('PMOS_SCHEMA_VERSION') || 0);
@@ -138,6 +144,10 @@ function runPmosMigrations_() {
 
   if (schema < 5) {
     ensureRecurringSeriesRegistry_();
+  }
+
+  if (schema < 6 && typeof ensurePmosServiceLocationInfrastructure_ === 'function') {
+    ensurePmosServiceLocationInfrastructure_();
   }
 }
 
