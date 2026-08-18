@@ -92,15 +92,28 @@ function scheduleTemporaryVisitsV2(payload) {
 }
 
 function buildTemporaryVisitDescriptionV2_(payload) {
-  const parts = [];
-  if (payload.entryInformation) parts.push('ENTRY INFORMATION', String(payload.entryInformation));
-  if (payload.customerNotes) parts.push(parts.length ? '' : null, 'CUSTOMER NOTES', String(payload.customerNotes));
+  const esc = function(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  const blocks = [];
+  if (payload.entryInformation) blocks.push('<b>ENTRY INFORMATION</b><br>' + esc(payload.entryInformation).replace(/\n/g, '<br>'));
+  if (payload.customerNotes) blocks.push('<b>CUSTOMER NOTES</b><br>' + esc(payload.customerNotes).replace(/\n/g, '<br>'));
   const service = [];
-  if (payload.fullName) service.push(String(payload.fullName));
+  if (payload.fullName) service.push(esc(payload.fullName));
   service.push('Temporary maintenance visit');
-  if (payload.phone) service.push('PHONE: ' + String(payload.phone));
-  if (payload.email) service.push('EMAIL: ' + String(payload.email));
-  parts.push(parts.length ? '' : null, 'SERVICE DETAILS', service.join('\n'));
-  parts.push('', PMOS_TEMP_VISIT_MARKER, 'PMOS_TEMP_VISIT_ID=' + Utilities.getUuid());
-  return parts.filter(function(part) { return part !== null; }).join('\n').trim();
+  if (payload.phone) {
+    const displayPhone = esc(payload.phone);
+    let digits = String(payload.phone).replace(/\D/g, '');
+    if (digits.length === 10) digits = '1' + digits;
+    const dial = digits ? '+' + digits : '';
+    service.push(dial
+      ? 'PHONE: <a href="tel:' + dial + '">' + displayPhone + '</a> &nbsp;·&nbsp; <a href="sms:' + dial + '">Text</a>'
+      : 'PHONE: ' + displayPhone);
+  }
+  if (payload.email) service.push('EMAIL: <a href="mailto:' + esc(payload.email) + '">' + esc(payload.email) + '</a>');
+  blocks.push('<b>SERVICE DETAILS</b><br>' + service.join('<br>'));
+  blocks.push(esc(PMOS_TEMP_VISIT_MARKER) + '<br>PMOS_TEMP_VISIT_ID=' + esc(Utilities.getUuid()));
+  return blocks.join('<br><br>');
 }
