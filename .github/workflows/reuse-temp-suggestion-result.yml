@@ -30,7 +30,8 @@ jobs:
           p.write_text(s.replace(old,new,1))
           PY
           git config user.name 'PMOS GitHub Actions'
-          git config user.email 'maintenance.finnpools@gmail.com'
+          git config user.email 'maintenancefinnpools@gmail.com'
           git add 06-D_Temporary_Visit_UI_V3.gs
           git commit -m 'Reuse Temporary Visit suggestion routing result'
           git push origin HEAD:pmos-development
+# trigger
