@@ -1,0 +1,31 @@
+name: Fix Temporary Visit V3 client escape
+on:
+  push:
+    branches: [pmos-development]
+    paths: ['.github/workflows/fix-temp-v3-client-escape.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pmos-development
+      - name: Fix embedded client newline escaping
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('06-D_Temporary_Visit_UI_V3.gs')
+          s=p.read_text()
+          old="lines.join('\\n')"
+          new="lines.join('\\\\n')"
+          if old not in s:
+              raise SystemExit('client newline target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
+          git add 06-D_Temporary_Visit_UI_V3.gs
+          git commit -m 'Fix Temporary Visit V3 client initialization'
+          git push origin HEAD:pmos-development
