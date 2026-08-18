@@ -1,0 +1,54 @@
+name: Patch Temporary Visit Address Search
+on:
+  push:
+    branches: [pmos-development]
+    paths: ['.github/temp-address-search.trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pmos-development
+      - name: Align Temporary Visit address lookup with Add Maintenance Client
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('06-C_Temporary_Visit_UI_V2.gs')
+          s=p.read_text()
+
+          s=s.replace('<input id="address" autocomplete="off" placeholder="Begin typing address">', '<input id="address" autocomplete="off" placeholder="Begin typing address" onfocus="queueAddress()" onpaste="setTimeout(queueAddress,0)">', 1)
+
+          old="var selectedAddress=null,addressTimer=null,addressToken=0,addressOptions=[],activeAddress=-1,dateToken=0,visitCount=0,calendarTitleEdited=false;"
+          new="var selectedAddress=null,addressTimer=null,addressToken=0,addressOptions=[],activeAddress=-1,addressCache={},lastAddressItems=[],dateToken=0,visitCount=0,calendarTitleEdited=false;"
+          if old in s:
+              s=s.replace(old,new,1)
+
+          pat=r"function renderAddresses\(items\)\{.*?\}\nfunction setAddressActive"
+          repl="""function renderAddresses(items){addressOptions=items||[];activeAddress=-1;addressList.innerHTML='';if(!addressOptions.length){closeAddresses();addressMessage('No address suggestions found yet. Continue typing.');return}addressOptions.forEach(function(item,index){var b=document.createElement('button');b.type='button';b.className='address-option';b.textContent=item.address;b.onmousedown=function(e){e.preventDefault();chooseAddress(index)};addressList.appendChild(b)});addressList.style.display='block';addressMessage('Address suggestions ready. Select the correct address.')}
+function setAddressActive"""
+          s,n=re.subn(pat,repl,s,count=1,flags=re.S)
+          if n!=1: raise SystemExit('renderAddresses function not found')
+
+          pat=r"function chooseAddress\(index\)\{.*?\}\nfunction queueAddress"
+          repl="""function chooseAddress(index){var item=addressOptions[index];if(!item)return;closeAddresses();addressMessage('Confirming the selected address…');google.script.run.withSuccessHandler(function(result){selectedAddress=result;address.value=result.address;addressDetails.textContent='Confirmed: '+result.address;addressDetails.style.display='block';addressMessage('Address confirmed. Searching for the best route options…');loadDateSuggestions()}).withFailureHandler(function(e){clearConfirmed();addressMessage('Address confirmation failed: '+(e&&e.message?e.message:String(e)))}).confirmPmosSelectedAddress(item)}
+function queueAddress"""
+          s,n=re.subn(pat,repl,s,count=1,flags=re.S)
+          if n!=1: raise SystemExit('chooseAddress function not found')
+
+          pat=r"function queueAddress\(\)\{.*?\}\nfunction loadDateSuggestions"
+          repl="""function queueAddress(){clearTimeout(addressTimer);var q=address.value.trim(),key=q.toLowerCase(),token=++addressToken;if(selectedAddress&&q.toLowerCase()!==String(selectedAddress.address||'').toLowerCase())clearConfirmed();if(q.length<3){closeAddresses();addressMessage(q?'Type at least 3 address characters to see suggestions.':'');return}addressMessage('Loading address suggestions…');var immediate=addressCache[key]||lastAddressItems.filter(function(item){return String(item.address||'').toLowerCase().indexOf(key)>=0});if(immediate.length)renderAddresses(immediate);if(addressCache[key])return;addressTimer=setTimeout(function(){google.script.run.withSuccessHandler(function(items){items=items||[];addressCache[key]=items;lastAddressItems=items;if(token!==addressToken){var current=String(address.value||'').trim().toLowerCase(),matches=items.filter(function(item){return String(item.address||'').toLowerCase().indexOf(current)>=0});if(matches.length)renderAddresses(matches);return}renderAddresses(items)}).withFailureHandler(function(e){if(token!==addressToken)return;if(!immediate.length)closeAddresses();addressMessage('Address suggestions could not load: '+(e&&e.message?e.message:String(e)))}).suggestPmosAddresses(q,6)},160)}
+function loadDateSuggestions"""
+          s,n=re.subn(pat,repl,s,count=1,flags=re.S)
+          if n!=1: raise SystemExit('queueAddress function not found')
+
+          p.write_text(s)
+          PY
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
+          git add 06-C_Temporary_Visit_UI_V2.gs
+          git commit -m 'Align Temporary Visit address suggestions with Add Maintenance Client'
+          git push origin HEAD:pmos-development
