@@ -17,57 +17,35 @@ jobs:
           ref: pmos-development
           fetch-depth: 0
 
-      - name: Extract staged compatibility patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 -d .github/finish-multilocation-payload-v2.b64 | gzip -d > /tmp/finish_multilocation.py
-
       - name: Apply and validate multi-location support
         shell: bash
         run: |
-          set +e
-          {
-            python3 /tmp/finish_multilocation.py
-            rc=$?
-            if [ "$rc" -eq 0 ]; then python3 tools/check_apps_script_globals.py; rc=$?; fi
-            if [ "$rc" -eq 0 ]; then python3 tools/report_unused_apps_script_globals.py; rc=$?; fi
-            if [ "$rc" -eq 0 ]; then
-              : > /tmp/pmos-combined.js
-              while IFS= read -r -d '' file; do
-                printf '\n// ---- %s ----\n' "$file" >> /tmp/pmos-combined.js
-                cat "$file" >> /tmp/pmos-combined.js
-                printf '\n' >> /tmp/pmos-combined.js
-              done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
-              node --check /tmp/pmos-combined.js
-              rc=$?
-            fi
-          } > /tmp/multilocation-run.log 2>&1
-
-          git config user.name 'PMOS GitHub Actions'
-          git config user.email 'maintenance.finnpools@gmail.com'
-
-          if [ "$rc" -ne 0 ]; then
-            git reset --hard HEAD
-            cp /tmp/multilocation-run.log .github/finish-multilocation-error.txt
-            git add .github/finish-multilocation-error.txt
-            if ! git diff --cached --quiet; then
-              git commit -m 'Record multi-location patch failure'
-              git push origin HEAD:pmos-development
-            fi
-            cat /tmp/multilocation-run.log
-            exit "$rc"
+          set -euo pipefail
+          if [ ! -f .github/multiloc-ready ]; then
+            echo 'Split multi-location patches are still being staged.'
+            exit 0
           fi
+          for patch in .github/multiloc-patches/*.py; do
+            python3 "$patch"
+          done
+          python3 tools/check_apps_script_globals.py
+          python3 tools/report_unused_apps_script_globals.py
+          : > /tmp/pmos-combined.js
+          while IFS= read -r -d '' file; do
+            printf '\n// ---- %s ----\n' "$file" >> /tmp/pmos-combined.js
+            cat "$file" >> /tmp/pmos-combined.js
+            printf '\n' >> /tmp/pmos-combined.js
+          done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
+          node --check /tmp/pmos-combined.js
 
-          rm -f \
-            .github/finish-multilocation-error.txt \
-            .github/finish-multilocation.trigger \
-            .github/finish-multilocation-payload.b64 \
-            .github/finish-multilocation-payload-v2.b64 \
+          rm -rf .github/multiloc-patches
+          rm -f .github/multiloc-ready .github/finish-multilocation-error.txt \
+            .github/finish-multilocation.trigger .github/finish-multilocation-payload*.b64 \
             .github/finish-multilocation-pr.trigger* \
             .github/workflows/finish-multilocation.yml \
             .github/workflows/finish-multilocation-pr.yml
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
           git add -A
           git commit -m 'Complete multi-location customer support'
           git push origin HEAD:pmos-development
-          cat /tmp/multilocation-run.log
