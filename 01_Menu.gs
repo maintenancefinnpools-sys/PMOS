@@ -11,11 +11,17 @@ function onOpen() {
   } else {
     menu
       .addSubMenu(
+        SpreadsheetApp.getUi().createMenu('Customers')
+          .addItem('Customer Lookup', 'showCustomerLookup')
+          .addItem('Edit Customer Information', 'showEditCustomerInformationSearch')
+      )
+      .addSeparator()
+      .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Calendar')
           .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
-          .addItem('Schedule Temporary Visit', 'showTemporaryVisitScheduler')
+          .addItem('Schedule Temporary Visit', 'showTemporaryVisitSchedulerV3')
           .addSeparator()
-          .addItem('Calendar Plan Audit', 'showFreshCalendarAuditTaskWindow')
+          .addItem('Calendar Plan Audit', 'openPmosCalendarAuditInJobCenter')
           .addItem('PMOS Job Center', 'openPmosJobEngine')
           .addSeparator()
           .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
@@ -28,6 +34,7 @@ function onOpen() {
         SpreadsheetApp.getUi().createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
+          .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
           .addSeparator()
           .addItem('Update Permissions', 'updatePmosPermissions')
       )
