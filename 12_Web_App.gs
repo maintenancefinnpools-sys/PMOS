@@ -13,8 +13,10 @@ function doGet() {
 }
 
 /**
- * Opens a small launcher for the deployed PMOS Web App.
- * Kept menu-safe so the Sheets UI can surface the current deployment URL.
+ * Opens the deployed PMOS Web App from the Sheets menu.
+ * Apps Script menu items invoke server functions, so a transient HTML bridge opens
+ * the Web App in a new tab and immediately closes itself. If the browser blocks the
+ * new tab, the bridge remains visible with a normal fallback link.
  */
 function showPmosWebAppLink() {
   const url = ScriptApp.getService().getUrl();
@@ -27,12 +29,22 @@ function showPmosWebAppLink() {
 
   const safeUrl = escapeHtml_(url);
   const html = HtmlService.createHtmlOutput(
-    '<div style="font-family:Arial,sans-serif;padding:18px">' +
-      '<h2 style="margin:0 0 8px">PMOS Web App</h2>' +
-      '<p style="margin:0 0 16px;color:#5f6d75;line-height:1.45">Open the Web App for this PMOS deployment.</p>' +
-      '<a href="' + safeUrl + '" target="_blank" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#0f5470;color:#fff;text-decoration:none;font-weight:700">Open PMOS Web App</a>' +
-    '</div>'
-  ).setWidth(390).setHeight(180);
+    '<!DOCTYPE html><html><head><base target="_blank"></head>' +
+    '<body style="font-family:Arial,sans-serif;padding:18px;color:#293944">' +
+      '<div id="fallback" style="display:none">' +
+        '<h3 style="margin:0 0 8px">PMOS Web App</h3>' +
+        '<p style="margin:0 0 14px;color:#5f6d75">Your browser blocked the new tab. Use the link below.</p>' +
+        '<a href="' + safeUrl + '" target="_blank" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#0f5470;color:#fff;text-decoration:none;font-weight:700">Open PMOS Web App</a>' +
+      '</div>' +
+      '<script>' +
+        'window.addEventListener("load",function(){' +
+          'var opened=window.open(' + JSON.stringify(url) + ',"_blank");' +
+          'if(opened){setTimeout(function(){google.script.host.close();},100);}' +
+          'else{document.getElementById("fallback").style.display="block";}' +
+        '});' +
+      '</script>' +
+    '</body></html>'
+  ).setWidth(400).setHeight(175);
 
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Web App');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'Opening PMOS Web App…');
 }
