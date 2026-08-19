@@ -3,7 +3,7 @@
  *
  * Each independently serviced property keeps its own Customer ID, so PMOS's
  * existing route, Calendar, status, equipment, and sync identities remain
- * unchanged. Account ID groups those Customer IDs into one customer account.
+ * location-specific. Account ID groups those Customer IDs into one account.
  */
 function ensurePmosCustomerAccountIds_() {
   const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
@@ -103,6 +103,7 @@ function getPmosCustomerAccount_(customerId) {
   const locations = table.rows.filter(function(row) {
     return String(row[accountIndex] || row[idIndex] || '').trim() === accountId;
   }).map(function(row) {
+    const frequency = frequencyIndex >= 0 ? String(row[frequencyIndex] || '').trim() : '';
     return {
       customerId: String(row[idIndex] || '').trim(),
       accountId: accountId,
@@ -111,7 +112,8 @@ function getPmosCustomerAccount_(customerId) {
       calendarTitle: titleIndex >= 0 ? String(row[titleIndex] || '').trim() : '',
       address: addressIndex >= 0 ? String(row[addressIndex] || '').trim() : '',
       status: statusIndex >= 0 ? String(row[statusIndex] || 'Active').trim() || 'Active' : 'Active',
-      frequency: frequencyIndex >= 0 ? String(row[frequencyIndex] || '').trim() : ''
+      frequency: frequency,
+      waterMaintenance: !!frequency
     };
   });
 
@@ -141,6 +143,11 @@ function getPmosCustomerAccount_(customerId) {
 
 function getPmosCustomerAccount(customerId) {
   return getPmosCustomerAccount_(customerId);
+}
+
+function isPmosWaterMaintenanceRequest_(request) {
+  if (request && request.waterMaintenance === true) return true;
+  return /^(true|yes|on|maintenance)$/i.test(String(request && request.waterMaintenance || '').trim());
 }
 
 function createPmosAdditionalServiceLocation(input) {
@@ -176,6 +183,7 @@ function createPmosAdditionalServiceLocation(input) {
   const phoneIndex = findHeaderIndex_(primaryRecord.headers, ['Primary Phone', 'Phone Number', 'Phone']);
   const emailIndex = findHeaderIndex_(primaryRecord.headers, ['Email', 'Email Address']);
   const primaryEmail = emailIndex >= 0 ? String(primaryRecord.values[emailIndex] || '').trim() : '';
+  const waterMaintenance = isPmosWaterMaintenanceRequest_(request);
 
   const payload = Object.assign({}, request, {
     firstName: String(request.firstName || (firstIndex >= 0 ? primaryRecord.values[firstIndex] : '') || '').trim(),
@@ -185,26 +193,138 @@ function createPmosAdditionalServiceLocation(input) {
       ? ''
       : String(request.email || primaryEmail || '').trim(),
     address: address,
-    calendarTitle: locationName,
+    calendarTitle: String(request.calendarTitle || locationName).trim(),
     serviceLocationName: locationName,
     accountId: account.accountId,
-    primaryServiceLocation: false
+    primaryServiceLocation: false,
+    waterMaintenance: waterMaintenance
   });
 
-  if ((!Array.isArray(payload.recommendedPlacements) || !payload.recommendedPlacements.length) && request.manualRoute) {
-    payload.recommendedPlacements = buildPmosCustomerEditorManualPlacements_(
-      payload.frequency || 'Weekly',
-      request.manualRoute
+  let result;
+  if (waterMaintenance) {
+    if ((!Array.isArray(payload.recommendedPlacements) || !payload.recommendedPlacements.length) && request.manualRoute) {
+      payload.recommendedPlacements = buildPmosCustomerEditorManualPlacements_(
+        payload.frequency || 'Weekly',
+        request.manualRoute
+      );
+      payload.day = request.manualRoute.day;
+      payload.secondDay = request.manualRoute.secondDay || '';
+      payload.week = request.manualRoute.week || 1;
+      payload.stop = request.manualRoute.stop || 1;
+    }
+    if (!Array.isArray(payload.recommendedPlacements) || !payload.recommendedPlacements.length) {
+      throw new Error('Choose a route recommendation or manual route placement for Water Maintenance.');
+    }
+    result = createMaintenanceCustomerAndAutoSync(payload);
+    applyPmosAccountIdentityToCustomerRow_(
+      result.customerId,
+      account.accountId,
+      locationName,
+      false
     );
-    payload.day = request.manualRoute.day;
-    payload.secondDay = request.manualRoute.secondDay || '';
-    payload.week = request.manualRoute.week || 1;
-    payload.stop = request.manualRoute.stop || 1;
+    result.waterMaintenance = true;
+  } else {
+    result = createPmosNonMaintenanceAccountServiceLocation_(payload);
   }
 
-  const result = createMaintenanceCustomerAndAutoSync(payload);
   result.account = getPmosCustomerAccount_(result.customerId);
   return result;
+}
+
+function createPmosNonMaintenanceAccountServiceLocation_(request) {
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) {
+    throw new Error('Another PMOS operation is running. Try again when it finishes.');
+  }
+
+  let snapshots = [];
+  try {
+    const spreadsheet = SpreadsheetApp.getActive();
+    const customersSheet = findFirstSheetByName_(spreadsheet, [
+      PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
+    ]);
+    if (!customersSheet) throw new Error('Customers sheet was not found.');
+
+    const equipmentSheet = migrateMaintenanceCustomerEquipmentStorage_(spreadsheet, customersSheet);
+    snapshots = [
+      snapshotMaintenanceSheet_(customersSheet),
+      snapshotMaintenanceSheet_(equipmentSheet)
+    ];
+
+    let customerTable = readPmosHeaderTable_(customersSheet);
+    ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
+      'Customer ID', 'First Name', 'Last Name', 'Full Name(s)', 'Calendar Title',
+      'Full Address', 'Primary Phone', 'Email', 'Status', 'Frequency',
+      'Service Start Date', 'Entry Information', 'Customer Notes',
+      'Sanitization Type(s)', 'Automation', 'Pump', 'Filter', 'Heater',
+      'Robot(s)', 'Cover', 'Bodies of Water', 'Year Round',
+      'Account ID', 'Service Location Name', 'Primary Service Location'
+    ]);
+    customerTable = readPmosHeaderTable_(customersSheet);
+
+    const customerId = generateNextPmosCustomerId_();
+    const bodies = normalizePmosCustomerEditorBodies_(request.bodiesOfWater);
+    const equipment = buildPmosCustomerEditorEquipmentValues_(
+      bodies,
+      customerId,
+      String(request.calendarTitle || request.serviceLocationName || request.lastName || '').trim()
+    );
+    const fullName = [request.firstName, request.lastName].filter(Boolean).join(' ');
+    const values = {
+      'Customer ID': customerId,
+      'First Name': String(request.firstName || '').trim(),
+      'Last Name': String(request.lastName || '').trim(),
+      'Full Name(s)': fullName,
+      'Calendar Title': String(request.calendarTitle || request.serviceLocationName || request.lastName || '').trim(),
+      'Full Address': String(request.address || '').trim(),
+      'Primary Phone': String(request.phone || '').trim(),
+      'Email': String(request.email || '').trim(),
+      'Status': 'Active',
+      'Frequency': '',
+      'Service Start Date': '',
+      'Entry Information': String(request.entryInformation || '').trim(),
+      'Customer Notes': String(request.notes || '').trim(),
+      'Sanitization Type(s)': equipment.sanitization,
+      'Automation': equipment.automation,
+      'Pump': equipment.pump,
+      'Filter': equipment.filter,
+      'Heater': equipment.heater,
+      'Robot(s)': equipment.robots,
+      'Cover': equipment.cover,
+      'Bodies of Water': equipment.bodies,
+      'Year Round': '',
+      'Account ID': String(request.accountId || customerId).trim(),
+      'Service Location Name': String(request.serviceLocationName || '').trim(),
+      'Primary Service Location': 'No'
+    };
+
+    appendMappedMaintenanceRow_(customersSheet, customerTable, values);
+    const customerRowNumber = customersSheet.getLastRow();
+    customersSheet.getRange(customerRowNumber, 1, 1, customersSheet.getLastColumn()).setWrap(false);
+    customersSheet.setRowHeight(customerRowNumber, 21);
+    upsertMaintenanceCustomerEquipment_(equipmentSheet, {
+      customerId: customerId,
+      calendarTitle: values['Calendar Title'],
+      equipmentSummary: equipment.summary,
+      equipmentDetailsJson: equipment.detailsJson
+    });
+    sortMaintenanceCustomersAlphabetically_(customersSheet);
+    SpreadsheetApp.flush();
+
+    return {
+      created: true,
+      customerId: customerId,
+      customerName: fullName,
+      waterMaintenance: false,
+      calendarStatus: 'NOT_REQUIRED',
+      summary: 'Service location created without Water Maintenance.'
+    };
+  } catch (error) {
+    rollbackMaintenanceSheetSnapshots_(snapshots);
+    throw error;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function applyPmosAccountIdentityToCustomerRow_(customerId, accountId, locationName, primary) {
