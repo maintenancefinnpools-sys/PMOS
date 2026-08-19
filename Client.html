@@ -34,11 +34,8 @@
   }
   function renderFeatureViews(){
     const cards={
-      addcustomer:{title:'Add Customer',copy:'This will become the streamlined non-maintenance customer creation workflow. It will share Customer Identity, Account Contacts, Service Locations, Bodies of Water, Equipment, Entry Information, Customer Notes, and address validation components with the maintenance workflow.'},
       servicecall:{title:'Service Call',copy:'This Scheduling workflow will create and route customer service work through PMOS.'},
-      tempmaintenance:{title:'Temporary Maintenance',copy:'This Scheduling workflow will use the existing PMOS temporary-maintenance scheduling logic.'},
       openingclosing:{title:'Opening / Closing',copy:'This Scheduling workflow will use one entry point with Opening or Closing selected inside the form, allowing the downstream reporting workflow to follow the scheduled work type.'},
-      jobs:{title:'PMOS Operations',copy:'This workspace will reproduce the full PMOS Operations / Job Center rather than a reduced Web-only version, including Calendar Plan Audit and the jobs, review, synchronization, and recovery tools that belong there.'},
       settings:{title:'Settings',copy:'PMOS settings will be exposed here through the same validated settings services used by the operational system.'}
     };
     Object.entries(cards).forEach(([id,content])=>{
