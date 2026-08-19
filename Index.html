@@ -13,12 +13,6 @@
     <style><?!= pmosAccountContactStyles ?></style>
     <style>.main .muted{font-size:inherit}</style>
     <script>
-      /**
-       * The shared equipment renderer predates the Web App and expects one host with
-       * id="waterBodies" plus globally visible .water-body nodes. The Web App has
-       * several customer forms, so only the active form is promoted into that legacy
-       * scope. Hidden forms retain their DOM/state under their own store ids.
-       */
       window.pmosActivateEquipmentScope=function(storeId){
         var current=document.getElementById('waterBodies');
         var inferStore=function(node){
@@ -33,16 +27,10 @@
           var currentStore=inferStore(current);
           if(currentStore===storeId){
             current.setAttribute('data-pmos-store-id',storeId);
-            Array.prototype.forEach.call(current.querySelectorAll('.pmos-water-body-inactive'),function(node){
-              node.classList.remove('pmos-water-body-inactive');
-              node.classList.add('water-body');
-            });
+            Array.prototype.forEach.call(current.querySelectorAll('.pmos-water-body-inactive'),function(node){node.classList.remove('pmos-water-body-inactive');node.classList.add('water-body');});
             return current;
           }
-          Array.prototype.forEach.call(current.querySelectorAll('.water-body'),function(node){
-            node.classList.remove('water-body');
-            node.classList.add('pmos-water-body-inactive');
-          });
+          Array.prototype.forEach.call(current.querySelectorAll('.water-body'),function(node){node.classList.remove('water-body');node.classList.add('pmos-water-body-inactive');});
           current.setAttribute('data-pmos-store-id',currentStore||('pmosWaterBodiesStore_'+Date.now()));
           current.id=current.getAttribute('data-pmos-store-id');
         }
@@ -50,10 +38,7 @@
         if(!target)return null;
         target.setAttribute('data-pmos-store-id',storeId);
         target.id='waterBodies';
-        Array.prototype.forEach.call(target.querySelectorAll('.pmos-water-body-inactive'),function(node){
-          node.classList.remove('pmos-water-body-inactive');
-          node.classList.add('water-body');
-        });
+        Array.prototype.forEach.call(target.querySelectorAll('.pmos-water-body-inactive'),function(node){node.classList.remove('pmos-water-body-inactive');node.classList.add('water-body');});
         return target;
       };
       document.addEventListener('pmos:viewchange',function(event){
@@ -70,26 +55,15 @@
   <body>
     <div class="app-shell" id="appShell">
       <aside class="sidebar" id="sidebar">
-        <button class="sidebar-collapse" id="sidebarCollapse" type="button" title="Hide navigation" aria-label="Hide navigation">
-          <span class="close-icon">‹</span><span class="open-icon">☰</span>
-        </button>
-        <div class="brand">
-          <img src="https://www.finnpools.ca/images/logo_only.png" class="brand-logo" alt="Finn Pools">
-          <div>
-            <strong>PMOS</strong>
-            <span>Finn Pools</span>
-          </div>
-        </div>
-
+        <button class="sidebar-collapse" id="sidebarCollapse" type="button" title="Hide navigation" aria-label="Hide navigation"><span class="close-icon">‹</span><span class="open-icon">☰</span></button>
+        <div class="brand"><img src="https://www.finnpools.ca/images/logo_only.png" class="brand-logo" alt="Finn Pools"><div><strong>PMOS</strong><span>Finn Pools</span></div></div>
         <div class="sidebar-inner">
           <nav class="nav" aria-label="Primary navigation">
             <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
-
             <div class="nav-section">Customers</div>
             <button class="nav-item nav-subitem" data-view="addcustomer"><span class="nav-icon">＋</span><span>Add Customer</span></button>
             <button class="nav-item nav-subitem" data-view="addmaintenance"><span class="nav-icon">＋</span><span>Add Maintenance Client</span></button>
             <button class="nav-item nav-subitem" data-view="customers"><span class="nav-icon">⌕</span><span>Customer Look-Up</span></button>
-
             <div class="nav-section">Operations</div>
             <div class="nav-menu-label"><span class="nav-icon">▣</span><span>Scheduling</span></div>
             <button class="nav-item nav-subitem" data-view="servicecall"><span class="nav-icon">•</span><span>Service Call</span></button>
@@ -97,123 +71,52 @@
             <button class="nav-item nav-subitem" data-view="openingclosing"><span class="nav-icon">•</span><span>Opening / Closing</span></button>
             <button class="nav-item nav-subitem" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
             <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>PMOS Operations</span></button>
-
             <div class="nav-section">Administration</div>
             <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
             <button class="nav-item" data-view="activity"><span class="nav-icon">↶</span><span>Activity &amp; History</span></button>
           </nav>
-
-          <div class="sidebar-footer">
-            <span class="status-dot" id="connectionDot"></span>
-            <span id="connectionText">Connecting…</span>
-          </div>
+          <div class="sidebar-footer"><span class="status-dot" id="connectionDot"></span><span id="connectionText">Connecting…</span></div>
         </div>
       </aside>
 
       <main class="main">
-        <header class="topbar">
-          <button class="icon-button mobile-only" id="menuButton" aria-label="Open navigation">☰</button>
-          <div>
-            <h1 id="viewTitle">Dashboard</h1>
-            <p id="viewSubtitle">Operational status and route overview</p>
-          </div>
-          <div class="topbar-actions">
-            <button class="button secondary" id="refreshButton">Refresh</button>
-            <span class="pill" id="saveState">Ready</span>
-          </div>
-        </header>
-
+        <header class="topbar"><button class="icon-button mobile-only" id="menuButton" aria-label="Open navigation">☰</button><div><h1 id="viewTitle">Dashboard</h1><p id="viewSubtitle">Operational status and route overview</p></div><div class="topbar-actions"><button class="button secondary" id="refreshButton">Refresh</button><span class="pill" id="saveState">Ready</span></div></header>
         <div id="alertRegion" class="alert-region" aria-live="polite"></div>
 
         <section class="view active" id="view-dashboard">
-          <div class="metric-grid">
-            <article class="metric-card"><span>Routes</span><strong id="metricRoutes">—</strong></article>
-            <article class="metric-card"><span>Customers on routes</span><strong id="metricCustomers">—</strong></article>
-            <article class="metric-card"><span>Pending changes</span><strong id="metricPending">—</strong></article>
-            <article class="metric-card"><span>Saved versions</span><strong id="metricVersions">—</strong></article>
-          </div>
-          <div class="panel-grid">
-            <article class="panel">
-              <div class="panel-heading"><div><h2>Route overview</h2><p>Current stop counts by layer</p></div></div>
-              <div id="routeOverview" class="stack"></div>
-            </article>
-            <article class="panel">
-              <div class="panel-heading"><div><h2>Pending synchronization</h2><p>Spreadsheet changes awaiting Calendar work</p></div></div>
-              <div id="pendingOverview" class="stack"></div>
-            </article>
-          </div>
+          <div class="metric-grid"><article class="metric-card"><span>Routes</span><strong id="metricRoutes">—</strong></article><article class="metric-card"><span>Customers on routes</span><strong id="metricCustomers">—</strong></article><article class="metric-card"><span>Pending changes</span><strong id="metricPending">—</strong></article><article class="metric-card"><span>Saved versions</span><strong id="metricVersions">—</strong></article></div>
+          <div class="panel-grid"><article class="panel"><div class="panel-heading"><div><h2>Route overview</h2><p>Current stop counts by layer</p></div></div><div id="routeOverview" class="stack"></div></article><article class="panel"><div class="panel-heading"><div><h2>Pending synchronization</h2><p>Spreadsheet changes awaiting Calendar work</p></div></div><div id="pendingOverview" class="stack"></div></article></div>
         </section>
 
         <?!= include('Web_Add_Customer'); ?>
         <?!= include('Web_Add_Maintenance'); ?>
         <?!= include('Web_Customers'); ?>
-
         <section class="view" id="view-servicecall"></section>
         <?!= include('Web_Temporary_Maintenance'); ?>
         <section class="view" id="view-openingclosing"></section>
         <?!= include('Web_Pmos_Operations'); ?>
 
         <section class="view" id="view-routes">
-          <div class="toolbar panel">
-            <label>Route layer<select id="routeSelect"></select></label>
-            <label>Search<input id="routeSearch" type="search" placeholder="Customer or address"></label>
-            <div class="toolbar-spacer"></div>
-            <span class="muted" id="routeCount"></span>
-          </div>
-          <article class="panel route-panel">
-            <div class="panel-heading">
-              <div><h2 id="routeHeading">Route</h2><p>Drag stops or use the arrow controls. Saving creates a restorable route version.</p></div>
-              <button class="button primary" id="saveRouteButton" disabled>Save route order</button>
-            </div>
-            <div id="routeList" class="route-list"></div>
-          </article>
+          <div class="toolbar panel"><label>Route layer<select id="routeSelect"></select></label><label>Search<input id="routeSearch" type="search" placeholder="Customer or address"></label><div class="toolbar-spacer"></div><span class="muted" id="routeCount"></span></div>
+          <article class="panel route-panel"><div class="panel-heading"><div><h2 id="routeHeading">Route</h2><p>Drag stops or use the arrow controls. Saving creates a restorable route version.</p></div><button class="button primary" id="saveRouteButton" disabled>Save route order</button></div><div id="routeList" class="route-list"></div></article>
         </section>
 
-        <section class="view" id="view-settings"></section>
+        <?!= include('Web_Settings'); ?>
 
-        <section class="view" id="view-activity">
-          <article class="panel">
-            <div class="panel-heading"><div><h2>Route History</h2><p>Existing route snapshots remain available here while Activity &amp; History grows into the system-wide record.</p></div></div>
-            <div id="historyList" class="stack"></div>
-          </article>
-        </section>
+        <section class="view" id="view-activity"><article class="panel"><div class="panel-heading"><div><h2>Route History</h2><p>Existing route snapshots remain available here while Activity &amp; History grows into the system-wide record.</p></div></div><div id="historyList" class="stack"></div></article></section>
       </main>
     </div>
 
-    <div class="modal-backdrop" id="confirmModal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-        <h2 id="confirmTitle">Confirm action</h2>
-        <p id="confirmMessage"></p>
-        <div class="modal-actions">
-          <button class="button secondary" id="confirmCancel">Cancel</button>
-          <button class="button danger" id="confirmAccept">Continue</button>
-        </div>
-      </div>
-    </div>
+    <div class="modal-backdrop" id="confirmModal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle"><h2 id="confirmTitle">Confirm action</h2><p id="confirmMessage"></p><div class="modal-actions"><button class="button secondary" id="confirmCancel">Cancel</button><button class="button danger" id="confirmAccept">Continue</button></div></div></div>
 
     <?!= include('Client'); ?>
     <script>
-      // Cross-workspace handoff used by creation workflows. It intentionally uses
-      // the public Customer Look-Up DOM rather than reaching into that module's
-      // private functions, so the customer workspace remains independently owned.
       document.addEventListener('pmos:open-customer',function(event){
-        var customerId=String(event.detail&&event.detail.customerId||'').trim();
-        if(!customerId)return;
-        var nav=document.querySelector('.nav-item[data-view="customers"]');
-        if(nav)nav.click();
-        var search=document.getElementById('customerSearch');
-        if(!search)return;
-        search.value=customerId;
-        search.dispatchEvent(new Event('input',{bubbles:true}));
-        var attempts=0;
-        var timer=setInterval(function(){
-          attempts++;
-          var button=Array.prototype.filter.call(document.querySelectorAll('.customer-result'),function(item){
-            return String(item.getAttribute('data-customer-id')||'')===customerId;
-          })[0];
-          if(button){clearInterval(timer);button.click();}
-          else if(attempts>=20)clearInterval(timer);
-        },150);
+        var customerId=String(event.detail&&event.detail.customerId||'').trim();if(!customerId)return;
+        var nav=document.querySelector('.nav-item[data-view="customers"]');if(nav)nav.click();
+        var search=document.getElementById('customerSearch');if(!search)return;
+        search.value=customerId;search.dispatchEvent(new Event('input',{bubbles:true}));
+        var attempts=0;var timer=setInterval(function(){attempts++;var button=Array.prototype.filter.call(document.querySelectorAll('.customer-result'),function(item){return String(item.getAttribute('data-customer-id')||'')===customerId;})[0];if(button){clearInterval(timer);button.click();}else if(attempts>=20)clearInterval(timer);},150);
       });
     </script>
   </body>
