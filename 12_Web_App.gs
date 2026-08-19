@@ -5,6 +5,7 @@
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   template.pmosVersion = PMOS_VERSION;
+
   // Reuse the authoritative customer equipment editor in the Web App. These
   // helpers are extended by the equipment enhancement/fix modules at load time,
   // so the Web App receives the same current catalogs and behavior as Sheets.
@@ -17,10 +18,52 @@ function doGet() {
       ? pmosCustomerEquipmentEditorScript_()
       : '';
 
+  // Account Contacts, service-location contacts, and billing address are also
+  // shared component generators. Rendering their client helpers once in the Web
+  // App keeps Add Customer aligned with the Sheets Customer Editor architecture.
+  template.pmosServiceLocationContactStyles =
+    typeof pmosServiceLocationContactStyles_ === 'function'
+      ? pmosServiceLocationContactStyles_()
+      : '';
+  template.pmosServiceLocationContactScript =
+    typeof pmosServiceLocationContactClientScript_ === 'function'
+      ? pmosServiceLocationContactClientScript_()
+      : '';
+  template.pmosAccountBillingStyles =
+    typeof pmosAccountBillingAddressStyles_ === 'function'
+      ? pmosAccountBillingAddressStyles_()
+      : '';
+  template.pmosAccountBillingScript =
+    typeof pmosAccountBillingAddressClientScript_ === 'function'
+      ? pmosAccountBillingAddressClientScript_()
+      : '';
+  template.pmosAccountContactStyles =
+    typeof pmosAccountContactStyles_ === 'function'
+      ? pmosAccountContactStyles_()
+      : '';
+  template.pmosAccountContactScript =
+    typeof pmosAccountContactClientScript_ === 'function'
+      ? pmosAccountContactClientScript_()
+      : '';
+
   return template.evaluate()
     .setTitle(`PMOS ${PMOS_VERSION}`)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Performs the same lightweight preparation used when Add Customer is opened
+ * from Sheets, without introducing Web-only customer storage or migration logic.
+ */
+function preparePmosWebAddCustomer() {
+  if (typeof migrateMaintenanceCustomerEquipmentStorage_ === 'function') {
+    migrateMaintenanceCustomerEquipmentStorage_();
+  }
+  if (typeof preparePmosAddressSuggestions === 'function') {
+    preparePmosAddressSuggestions();
+  }
+  return {ready: true};
 }
 
 /**
