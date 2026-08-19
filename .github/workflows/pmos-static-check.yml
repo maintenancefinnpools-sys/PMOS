@@ -119,7 +119,23 @@ jobs:
           view_ids = set()
           for path in source_paths:
               text = path.read_text(encoding='utf-8')
-              for value in re.findall(r'\bid\s*=\s*[\'\"]([^\'\"]+)[\'\"]', text, flags=re.IGNORECASE):
+              # Static DOM validation must not count HTML snippets that only exist
+              # inside JavaScript strings or CSS. Those snippets are checked by the
+              # client-JavaScript step and may legitimately reuse field names when
+              # rendered into separate scoped components.
+              static_text = re.sub(
+                  r'<script\b[^>]*>.*?</script>',
+                  '',
+                  text,
+                  flags=re.IGNORECASE | re.DOTALL,
+              )
+              static_text = re.sub(
+                  r'<style\b[^>]*>.*?</style>',
+                  '',
+                  static_text,
+                  flags=re.IGNORECASE | re.DOTALL,
+              )
+              for value in re.findall(r'\bid\s*=\s*[\'\"]([^\'\"]+)[\'\"]', static_text, flags=re.IGNORECASE):
                   ids[value].append(path.name)
                   if value.startswith('view-'):
                       view_ids.add(value[5:])
