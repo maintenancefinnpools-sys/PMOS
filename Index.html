@@ -8,8 +8,41 @@
     <?!= include('Stylesheet'); ?>
     <?!= include('Web_App_Shell'); ?>
     <style><?!= pmosEquipmentEditorStyles ?></style>
+    <style><?!= pmosServiceLocationContactStyles ?></style>
+    <style><?!= pmosAccountBillingStyles ?></style>
+    <style><?!= pmosAccountContactStyles ?></style>
     <style>.main .muted{font-size:inherit}</style>
+    <script>
+      /**
+       * The shared equipment renderer predates the Web App and expects one host with
+       * id="waterBodies" plus globally visible .water-body nodes. The Web App has
+       * several customer forms, so only the active form is promoted into that legacy
+       * scope. Hidden forms retain their DOM/state under their own store ids.
+       */
+      window.pmosActivateEquipmentScope=function(storeId){
+        var current=document.getElementById('waterBodies');
+        if(current&&current.getAttribute('data-pmos-store-id')!==storeId){
+          Array.prototype.forEach.call(current.querySelectorAll('.water-body'),function(node){
+            node.classList.remove('water-body');
+            node.classList.add('pmos-water-body-inactive');
+          });
+          current.id=current.getAttribute('data-pmos-store-id')||('pmosWaterBodiesStore_'+Date.now());
+        }
+        var target=document.getElementById(storeId)||document.querySelector('[data-pmos-store-id="'+storeId+'"]');
+        if(!target)return null;
+        target.setAttribute('data-pmos-store-id',storeId);
+        target.id='waterBodies';
+        Array.prototype.forEach.call(target.querySelectorAll('.pmos-water-body-inactive'),function(node){
+          node.classList.remove('pmos-water-body-inactive');
+          node.classList.add('water-body');
+        });
+        return target;
+      };
+    </script>
     <script><?!= pmosEquipmentEditorScript ?></script>
+    <script><?!= pmosServiceLocationContactScript ?></script>
+    <script><?!= pmosAccountBillingScript ?></script>
+    <script><?!= pmosAccountContactScript ?></script>
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -88,9 +121,8 @@
           </div>
         </section>
 
-        <section class="view" id="view-addcustomer"></section>
+        <?!= include('Web_Add_Customer'); ?>
         <?!= include('Web_Add_Maintenance'); ?>
-
         <?!= include('Web_Customers'); ?>
 
         <section class="view" id="view-servicecall"></section>
