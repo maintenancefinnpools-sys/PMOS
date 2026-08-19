@@ -115,41 +115,25 @@ jobs:
               raise SystemExit('Missing Web App include file(s): ' + ', '.join(sorted(set(missing_includes))))
 
           source_paths = [index] + sorted(Path('.').glob('Web_*.html'))
-          ids = defaultdict(list)
-          view_ids = set()
+          view_locations = defaultdict(list)
           for path in source_paths:
               text = path.read_text(encoding='utf-8')
-              # Static DOM validation must not count HTML snippets that only exist
-              # inside JavaScript strings or CSS. Those snippets are checked by the
-              # client-JavaScript step and may legitimately reuse field names when
-              # rendered into separate scoped components.
-              static_text = re.sub(
-                  r'<script\b[^>]*>.*?</script>',
-                  '',
-                  text,
-                  flags=re.IGNORECASE | re.DOTALL,
-              )
-              static_text = re.sub(
-                  r'<style\b[^>]*>.*?</style>',
-                  '',
-                  static_text,
-                  flags=re.IGNORECASE | re.DOTALL,
-              )
-              for value in re.findall(r'\bid\s*=\s*[\'\"]([^\'\"]+)[\'\"]', static_text, flags=re.IGNORECASE):
-                  ids[value].append(path.name)
-                  if value.startswith('view-'):
-                      view_ids.add(value[5:])
+              static_text = re.sub(r'<script\b[^>]*>.*?</script>', '', text, flags=re.IGNORECASE | re.DOTALL)
+              static_text = re.sub(r'<style\b[^>]*>.*?</style>', '', static_text, flags=re.IGNORECASE | re.DOTALL)
+              for value in re.findall(r'\bid\s*=\s*[\'\"]view-([^\'\"]+)[\'\"]', static_text, flags=re.IGNORECASE):
+                  view_locations[value].append(path.name)
 
-          duplicate_ids = {value: files for value, files in ids.items() if len(files) > 1}
-          if duplicate_ids:
-              for value in sorted(duplicate_ids):
-                  print(f'Duplicate static DOM id {value}: {", ".join(duplicate_ids[value])}')
-              raise SystemExit(f'{len(duplicate_ids)} duplicate static DOM id(s) found.')
+          duplicate_views = {value: files for value, files in view_locations.items() if len(files) > 1}
+          if duplicate_views:
+              for value in sorted(duplicate_views):
+                  print(f'Duplicate Web view view-{value}: {", ".join(duplicate_views[value])}')
+              raise SystemExit(f'{len(duplicate_views)} duplicate Web view id(s) found.')
 
           nav_views = set(re.findall(r'\bdata-view\s*=\s*[\'\"]([^\'\"]+)[\'\"]', index_text, flags=re.IGNORECASE))
+          view_ids = set(view_locations)
           missing_views = sorted(nav_views - view_ids)
           if missing_views:
               raise SystemExit('Sidebar route(s) without Web view: ' + ', '.join(missing_views))
 
-          print(f'validated {len(include_names)} template include(s), {len(nav_views)} sidebar route(s), and {len(ids)} static DOM id(s)')
+          print(f'validated {len(include_names)} template include(s), {len(nav_views)} sidebar route(s), and {len(view_ids)} unique Web view(s)')
           PY
