@@ -56,17 +56,7 @@ function onOpen() {
   menu.addToUi();
 }
 
-/**
- * Menu-safe placeholders for workflows that are intentionally represented in the
- * navigation before their dedicated creation/scheduling screens are implemented.
- */
-function showPmosAddCustomer() {
-  showPmosPlannedMenuFeature_(
-    'Add Customer',
-    'The non-maintenance customer creation workflow is not implemented yet. Use Add Maintenance Customer for recurring maintenance customers.'
-  );
-}
-
+/** Menu-safe placeholders for scheduling workflows that are not implemented yet. */
 function showPmosServiceCallScheduler() {
   showPmosPlannedMenuFeature_(
     'Service Call',
