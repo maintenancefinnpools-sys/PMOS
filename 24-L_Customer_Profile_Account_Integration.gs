@@ -18,6 +18,24 @@
       baseRows.forEach(function(row) {
         byCustomerId[String(row.customerId || '').trim()] = row;
       });
+
+      const accountTable = ensurePmosCustomerAccountIds_();
+      const accountIdIndex = findHeaderIndex_(accountTable.headers, ['Account ID']);
+      const customerIdIndex = findHeaderIndex_(accountTable.headers, ['Customer ID']);
+      const locationNameIndex = findHeaderIndex_(accountTable.headers, ['Service Location Name']);
+      const titleIndex = findHeaderIndex_(accountTable.headers, ['Calendar Title']);
+      const addressIndex = findHeaderIndex_(accountTable.headers, ['Full Address', 'Service Address', 'Address']);
+      const accountTerms = {};
+      accountTable.rows.forEach(function(row) {
+        const customerId = customerIdIndex >= 0 ? String(row[customerIdIndex] || '').trim() : '';
+        if (!customerId) return;
+        const accountId = accountIdIndex >= 0 ? String(row[accountIdIndex] || customerId).trim() : customerId;
+        if (!accountTerms[accountId]) accountTerms[accountId] = [];
+        [locationNameIndex, titleIndex, addressIndex].forEach(function(index) {
+          if (index >= 0 && String(row[index] || '').trim()) accountTerms[accountId].push(String(row[index]).trim());
+        });
+      });
+
       const cleanQuery = normalizePmosCustomerSearch_(query);
       return listPmosCustomerAccountsForServiceLocations('').map(function(account) {
         const primary = byCustomerId[account.customerId] || {};
@@ -35,7 +53,7 @@
           sidebarMeta: locationCount > 1 ? locationCount + ' service locations' : '',
           accountSearchText: normalizePmosCustomerSearch_([
             primary.displayName, primary.listName, primary.phone, primary.email,
-            account.address, account.phone
+            account.address, account.phone, (accountTerms[account.accountId] || []).join(' ')
           ].join(' '))
         };
       }).filter(function(row) {
@@ -82,6 +100,8 @@
       html = html.replace(
         '</script></body></html>',
         `
+var baseAccountResolveSearchMatch=resolveSearchMatch;
+resolveSearchMatch=function(query){var clean=normalizeSearch(query);if(clean){var accountMatch=allRows.find(function(row){return String(row.accountSearchText||'').indexOf(clean)>=0});if(accountMatch)return accountMatch}return baseAccountResolveSearchMatch(query)};
 var baseAccountRenderResults=renderResults;
 renderResults=function(rows){baseAccountRenderResults(rows);(rows||[]).forEach(function(row){if(!row.sidebarMeta)return;var button=customerButton(row.customerId),meta=button&&button.querySelector('.result-meta');if(meta)meta.textContent=[meta.textContent,row.sidebarMeta].filter(Boolean).join(' · ')})};
 var baseAccountRenderProfile=renderProfile;
