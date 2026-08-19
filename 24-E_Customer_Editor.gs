@@ -342,3 +342,148 @@ function payload(){return{customerId:customerId,editToken:editToken,firstName:el
 el('addBodyButton').onclick=function(){addWaterBody();prepareWaterBodyOptions(el('waterBodies'))};el('addContact').onclick=function(){addContact()};el('manualRouteToggle').onclick=function(){var panel=el('manualRoutePanel'),show=panel.style.display==='none';panel.style.display=show?'block':'none';this.textContent=show?'Hide manual route placement':'Select route placement manually';if(show)configureManualRoute()};el('changeRoute').onclick=changeRoute;el('address').addEventListener('input',searchAddress);el('address').addEventListener('blur',function(){setTimeout(function(){el('addressList').style.display='none'},180)});el('frequency').addEventListener('change',changeRoute);el('phone').addEventListener('input',function(){formatPmosPhoneInput(this)});el('save').onclick=function(){var button=this;button.disabled=true;button.textContent='Saving…';button.classList.remove('saved');button.classList.add('saving');setStatus('Saving household contacts…');google.script.run.withSuccessHandler(function(){setStatus('Saving customer changes…');saveMainCustomer(button)}).withFailureHandler(function(e){button.disabled=false;button.classList.remove('saving');button.textContent='Save Changes';setStatus(e&&e.message?e.message:String(e),true)}).savePmosCustomerEditorExistingHouseholdContacts(customerId,existingContacts(),removedExistingContacts)};el('cancel').onclick=finishReturn;google.script.run.withSuccessHandler(fill).withFailureHandler(function(e){setStatus(e&&e.message?e.message:String(e),true)}).getPmosCustomerEditorData(customerId);
 </script></body></html>`;
 }
+
+/* PMOS_CONSOLIDATED_ACCOUNT_MODULES */
+
+/* Consolidated from 24-J_Customer_Account_Editor_Compatibility.gs. */
+/** Account/service-location extensions for Edit Customer. */
+(function () {
+  if (typeof getPmosCustomerEditorData === 'function') {
+    const baseGetPmosCustomerEditorData = getPmosCustomerEditorData;
+    getPmosCustomerEditorData = function(customerId) {
+      const profile = baseGetPmosCustomerEditorData(customerId);
+      const account = getPmosCustomerAccount_(customerId);
+      profile.accountId = account.accountId;
+      profile.serviceLocations = account.locations;
+      profile.selectedServiceLocation = account.locations.filter(function(location) {
+        return String(location.customerId) === String(customerId);
+      })[0] || null;
+      return profile;
+    };
+  }
+
+  if (typeof savePmosCustomerEditorData === 'function') {
+    const baseSavePmosCustomerEditorData = savePmosCustomerEditorData;
+    savePmosCustomerEditorData = function(input) {
+      const request = input || {};
+      const result = baseSavePmosCustomerEditorData(request);
+      if (request.serviceLocationName != null || request.accountId) {
+        const account = getPmosCustomerAccount_(request.customerId);
+        const selected = account.locations.filter(function(location) {
+          return String(location.customerId) === String(request.customerId);
+        })[0];
+        applyPmosAccountIdentityToCustomerRow_(
+          request.customerId,
+          String(request.accountId || account.accountId).trim(),
+          String(request.serviceLocationName != null ? request.serviceLocationName : (selected && selected.locationName || '')).trim(),
+          selected ? selected.primary : true
+        );
+      }
+      result.account = getPmosCustomerAccount_(request.customerId);
+      return result;
+    };
+  }
+})();
+
+
+/* Consolidated from 24-M_Customer_Account_Shared_Fields.gs. */
+/** Keep account-level identity/contact fields synchronized across service-location Customer IDs. */
+let PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
+
+function syncPmosAccountSharedCustomerFields_(customerId) {
+  const account = getPmosCustomerAccount_(customerId);
+  if (!account.locations || account.locations.length < 2) return account;
+  const source = getPmosCustomerEditorRow_(customerId);
+  const sharedAliasGroups = [
+    ['First Name'],
+    ['Last Name', 'Customer Name', 'Name', 'Customer'],
+    ['Full Name(s)', 'Full Name'],
+    ['Primary Phone', 'Phone Number', 'Phone'],
+    ['Email', 'Email Address'],
+    ['Google Contact Resource Names'],
+    ['Google Contact Resource Name'],
+    ['Google Contact ETag'],
+    ['Google Contact Last Synced']
+  ];
+  const sharedValues = sharedAliasGroups.map(function(aliases) {
+    const index = findHeaderIndex_(source.headers, aliases);
+    return {aliases: aliases, value: index >= 0 ? source.values[index] : ''};
+  });
+
+  account.locations.forEach(function(location) {
+    if (String(location.customerId) === String(customerId)) return;
+    const target = getPmosCustomerEditorRow_(location.customerId);
+    const values = target.values.slice();
+    sharedValues.forEach(function(field) {
+      pmosCustomerEditorSetAliases_(target.headers, values, field.aliases, field.value);
+    });
+    target.sheet.getRange(target.rowNumber, 1, 1, values.length).setValues([values]);
+  });
+  SpreadsheetApp.flush();
+  return getPmosCustomerAccount_(customerId);
+}
+
+function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) {
+  const source = getPmosCustomerEditorRow_(sourceCustomerId);
+  const target = getPmosCustomerEditorRow_(targetCustomerId);
+  const aliases = [
+    ['Google Contact Resource Names'],
+    ['Google Contact Resource Name'],
+    ['Google Contact ETag'],
+    ['Google Contact Last Synced']
+  ];
+  const values = target.values.slice();
+  aliases.forEach(function(group) {
+    const sourceIndex = findHeaderIndex_(source.headers, group);
+    if (sourceIndex < 0) return;
+    pmosCustomerEditorSetAliases_(target.headers, values, group, source.values[sourceIndex]);
+  });
+  target.sheet.getRange(target.rowNumber, 1, 1, values.length).setValues([values]);
+  SpreadsheetApp.flush();
+}
+
+(function () {
+  if (typeof assertMaintenanceClientNotDuplicate_ === 'function') {
+    const baseAssertMaintenanceClientNotDuplicateForAccount = assertMaintenanceClientNotDuplicate_;
+    assertMaintenanceClientNotDuplicate_ = function(table, name, address, email) {
+      return baseAssertMaintenanceClientNotDuplicateForAccount(
+        table,
+        name,
+        address,
+        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ ? '' : email
+      );
+    };
+  }
+
+  if (typeof savePmosCustomerEditorData === 'function') {
+    const baseSavePmosCustomerEditorDataForAccount = savePmosCustomerEditorData;
+    savePmosCustomerEditorData = function(input) {
+      const result = baseSavePmosCustomerEditorDataForAccount(input);
+      result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
+      result.profile = getPmosCustomerProfile(result.customerId);
+      return result;
+    };
+  }
+
+  if (typeof createPmosAdditionalServiceLocation === 'function') {
+    const baseCreatePmosAdditionalServiceLocation = createPmosAdditionalServiceLocation;
+    createPmosAdditionalServiceLocation = function(input) {
+      const request = input || {};
+      const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
+      const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
+      let result;
+      PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = true;
+      try {
+        result = baseCreatePmosAdditionalServiceLocation(request);
+      } finally {
+        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
+      }
+      if (primary && result && result.customerId) {
+        copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
+        syncPmosAccountSharedCustomerFields_(primary.customerId);
+        result.account = getPmosCustomerAccount_(result.customerId);
+      }
+      return result;
+    };
+  }
+})();
