@@ -5,6 +5,17 @@
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   template.pmosVersion = PMOS_VERSION;
+  // Reuse the authoritative customer equipment editor in the Web App. These
+  // helpers are extended by the equipment enhancement/fix modules at load time,
+  // so the Web App receives the same current catalogs and behavior as Sheets.
+  template.pmosEquipmentEditorStyles =
+    typeof pmosCustomerEquipmentEditorStyles_ === 'function'
+      ? pmosCustomerEquipmentEditorStyles_()
+      : '';
+  template.pmosEquipmentEditorScript =
+    typeof pmosCustomerEquipmentEditorScript_ === 'function'
+      ? pmosCustomerEquipmentEditorScript_()
+      : '';
 
   return template.evaluate()
     .setTitle(`PMOS ${PMOS_VERSION}`)
