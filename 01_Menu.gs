@@ -13,9 +13,9 @@ function onOpen() {
     menu
       .addSubMenu(
         ui.createMenu('Customers')
+          .addItem('Customer Lookup', 'showPmosCustomerAccountLookup')
           .addItem('Add Customer', 'showPmosAddCustomer')
           .addItem('Add Maintenance Customer', 'showAddMaintenanceClientV2')
-          .addItem('Customer Lookup', 'showPmosCustomerAccountLookup')
       )
       .addSeparator()
       .addSubMenu(
