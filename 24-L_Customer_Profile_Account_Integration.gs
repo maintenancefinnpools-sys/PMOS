@@ -91,6 +91,18 @@ function getPmosCustomerAccountProfile(customerId) {
   return profile;
 }
 
+function getPmosCustomerAccountEditorData(customerId) {
+  const data = getPmosCustomerEditorData(customerId);
+  const account = getPmosCustomerAccount_(customerId);
+  const selected = account.locations.filter(function(location) {
+    return String(location.customerId) === String(customerId);
+  })[0] || null;
+  data.accountName = account.accountName;
+  data.serviceLocationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
+  data.isPrimaryServiceLocation = selected ? selected.primary : true;
+  return data;
+}
+
 function buildPmosCustomerAccountLookupHtml_(mode, initialCustomerId) {
   let html = buildPmosCustomerLookupHtml_('LOOKUP', initialCustomerId);
 
@@ -157,10 +169,23 @@ function buildPmosCustomerAccountEditorHtml_(customerId, returnContext) {
   const idJson = JSON.stringify(String(customerId || ''));
 
   html = html.replace(
+    '<div class="field"><label>Calendar title</label><input id="calendarTitle"></div>',
+    '<div class="field"><label>Service location name</label><input id="serviceLocationName"></div><div class="field"><label>Calendar title</label><input id="calendarTitle"></div>'
+  );
+  html = html.replace(
     '<div class="section"><div class="section-head"><h3>Maintenance</h3>',
     '<div style="display:flex;justify-content:flex-end;margin:0 0 10px"><button id="addServiceLocationFromEditor" type="button" class="route-change">+ Add Service Location</button></div><div class="section"><div class="section-head"><h3>Maintenance</h3>'
   );
+  html = html.replace(
+    "['firstName','lastName','address','phone','email','calendarTitle','serviceStartDate','entryInformation','notes']",
+    "['firstName','lastName','serviceLocationName','address','phone','email','calendarTitle','serviceStartDate','entryInformation','notes']"
+  );
+  html = html.replace(
+    "phone:el('phone').value,email:el('email').value,calendarTitle:el('calendarTitle').value",
+    "phone:el('phone').value,email:el('email').value,serviceLocationName:el('serviceLocationName').value,calendarTitle:el('calendarTitle').value"
+  );
 
+  html = html.split('.getPmosCustomerEditorData(').join('.getPmosCustomerAccountEditorData(');
   html = html.split('.savePmosCustomerEditorData(').join('.savePmosCustomerAccountEditorData(');
   html = html.split('.savePmosCustomerEditorExistingHouseholdContacts(').join('.savePmosCustomerEditorExistingAccountContacts(');
   html = html.split('.returnFromPmosCustomerEditor(').join('.returnFromPmosCustomerAccountEditor(');
