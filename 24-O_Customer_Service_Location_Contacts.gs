@@ -27,9 +27,12 @@ function normalizePmosServiceLocationContacts_(input) {
       role: String(contact.role || contact.relationship || '').trim().slice(0, 160),
       phone: String(contact.phone || '').trim().slice(0, 80),
       email: String(contact.email || '').trim().slice(0, 180),
-      notes: String(contact.notes || '').trim().slice(0, 1000)
+      notes: String(contact.notes || '').trim().slice(0, 1000),
+      resourceName: String(contact.resourceName || '').trim().slice(0, 250)
     };
-    const hasValue = Object.keys(clean).some(function(key) { return !!clean[key]; });
+    const hasValue = ['firstName', 'lastName', 'role', 'phone', 'email', 'notes'].some(function(key) {
+      return !!clean[key];
+    });
     if (!hasValue) return null;
     if (!clean.firstName && !clean.lastName && !clean.role) {
       throw new Error('Each service location contact needs a name or role.');
@@ -87,11 +90,94 @@ function savePmosServiceLocationContacts_(customerId, contacts) {
   throw new Error('Customer ID ' + customerId + ' was not found while saving service location contacts.');
 }
 
+function getPmosServiceLocationContactIdentity_(customerId) {
+  const account = getPmosCustomerAccount_(customerId);
+  const location = account.locations.filter(function(item) {
+    return String(item.customerId) === String(customerId);
+  })[0];
+  if (!location) throw new Error('The selected service location could not be found.');
+  return {
+    customerId: String(customerId || '').trim(),
+    accountId: account.accountId,
+    locationName: String(location.locationName || location.calendarTitle || 'Service Location').trim(),
+    address: String(location.address || '').trim()
+  };
+}
+
+function buildPmosServiceLocationGooglePerson_(contact, identity, latest) {
+  const existingExternalIds = latest && Array.isArray(latest.externalIds) ? latest.externalIds.filter(function(item) {
+    return String(item && item.type || '') !== 'service_location';
+  }) : [];
+  existingExternalIds.push({value: identity.customerId, type: 'service_location'});
+  const name = contact.firstName || contact.lastName
+    ? {givenName: contact.firstName || '', familyName: contact.lastName || ''}
+    : {givenName: contact.role || 'Service Location Contact'};
+  const noteLines = [];
+  if (contact.role) noteLines.push('Role: ' + contact.role);
+  noteLines.push('Service location: ' + identity.locationName);
+  if (contact.notes) noteLines.push('', contact.notes);
+  return {
+    names: [name],
+    phoneNumbers: contact.phone ? [{value: contact.phone, type: 'mobile'}] : [],
+    emailAddresses: contact.email ? [{value: contact.email, type: 'work'}] : [],
+    addresses: identity.address ? [{formattedValue: identity.address, type: 'work'}] : [],
+    biographies: noteLines.length ? [{value: noteLines.join('\n'), contentType: 'TEXT_PLAIN'}] : [],
+    externalIds: existingExternalIds
+  };
+}
+
+function upsertPmosServiceLocationGoogleContact_(contact, identity) {
+  let latest = null;
+  if (contact.resourceName) {
+    try {
+      latest = People.People.get(contact.resourceName, {personFields: PMOS_CONTACT_FIELDS_});
+    } catch (ignored) {
+      latest = null;
+    }
+  }
+  const person = buildPmosServiceLocationGooglePerson_(contact, identity, latest);
+  let saved;
+  if (latest) {
+    person.resourceName = latest.resourceName;
+    person.etag = latest.etag;
+    person.metadata = latest.metadata;
+    saved = People.People.updateContact(person, latest.resourceName, {
+      updatePersonFields: 'names,emailAddresses,phoneNumbers,addresses,biographies,externalIds',
+      personFields: PMOS_CONTACT_FIELDS_
+    });
+  } else {
+    saved = People.People.createContact(person, {personFields: PMOS_CONTACT_FIELDS_});
+  }
+  const updated = Object.assign({}, contact);
+  updated.resourceName = String(saved && saved.resourceName || contact.resourceName || '').trim();
+  return updated;
+}
+
+function saveAndSyncPmosServiceLocationContacts_(customerId, contacts) {
+  let saved = savePmosServiceLocationContacts_(customerId, contacts);
+  const identity = getPmosServiceLocationContactIdentity_(customerId);
+  const errors = [];
+  saved = saved.map(function(contact) {
+    try {
+      return upsertPmosServiceLocationGoogleContact_(contact, identity);
+    } catch (error) {
+      errors.push(String(error && error.message ? error.message : error));
+      return contact;
+    }
+  });
+  savePmosServiceLocationContacts_(customerId, saved);
+  return {contacts: saved, errors: errors};
+}
+
 function createPmosAdditionalServiceLocationForAccountWithLocationContacts(input) {
   const request = input || {};
   const contacts = normalizePmosServiceLocationContacts_(request.serviceLocationContacts);
   const result = createPmosAdditionalServiceLocationForAccount(request);
-  result.serviceLocationContacts = savePmosServiceLocationContacts_(result.customerId, contacts);
+  const contactResult = saveAndSyncPmosServiceLocationContacts_(result.customerId, contacts);
+  result.serviceLocationContacts = contactResult.contacts;
+  if (contactResult.errors.length) {
+    result.contactStatus = 'Service location saved, but ' + contactResult.errors.length + ' Google Contact update(s) could not be completed.';
+  }
   result.profile = getPmosCustomerAccountProfile(result.customerId);
   return result;
 }
@@ -100,7 +186,11 @@ function savePmosCustomerAccountEditorDataWithLocationContacts(input) {
   const request = input || {};
   const contacts = normalizePmosServiceLocationContacts_(request.serviceLocationContacts);
   const result = savePmosCustomerAccountEditorData(request);
-  result.serviceLocationContacts = savePmosServiceLocationContacts_(result.customerId, contacts);
+  const contactResult = saveAndSyncPmosServiceLocationContacts_(result.customerId, contacts);
+  result.serviceLocationContacts = contactResult.contacts;
+  if (contactResult.errors.length) {
+    result.contactStatus = [result.contactStatus, contactResult.errors.length + ' service-location Google Contact update(s) could not be completed.'].filter(Boolean).join(' · ');
+  }
   result.profile = getPmosCustomerAccountProfile(result.customerId);
   return result;
 }
@@ -111,11 +201,13 @@ function pmosServiceLocationContactStyles_() {
 
 function pmosServiceLocationContactClientScript_() {
   return String.raw`
+var pmosLocationContactRoleSequence=0;
 function pmosLocationContactEsc(value){return String(value==null?'':value).replace(/[&<>\"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]})}
-function pmosLocationContactRow(contact){contact=contact||{};var row=document.createElement('div');row.className='location-contact-row';row.innerHTML='<button type="button" class="location-contact-remove" aria-label="Remove service location contact">×</button><div class="location-contact-grid"><div class="field"><label>First name</label><input data-location-contact="firstName"></div><div class="field"><label>Last name</label><input data-location-contact="lastName"></div><div class="field"><label>Role / relationship</label><input data-location-contact="role" placeholder="Property manager, tenant, superintendent…"></div><div class="field"><label>Phone</label><input data-location-contact="phone" autocomplete="tel" inputmode="tel"></div><div class="field"><label>Email</label><input data-location-contact="email" type="email" autocomplete="email"></div><div class="field wide"><label>Contact notes</label><textarea data-location-contact="notes" placeholder="When to contact them, access responsibilities, preferred communication…"></textarea></div></div>';['firstName','lastName','role','phone','email','notes'].forEach(function(key){var input=row.querySelector('[data-location-contact="'+key+'"]');if(input)input.value=contact[key]||''});row.querySelector('.location-contact-remove').onclick=function(){row.remove()};return row}
-function pmosRenderLocationContacts(containerId,contacts){var root=document.getElementById(containerId);if(!root)return;root.innerHTML='';(contacts||[]).forEach(function(contact){root.appendChild(pmosLocationContactRow(contact))})}
-function pmosAddLocationContact(containerId,contact){var root=document.getElementById(containerId);if(!root)return;var row=pmosLocationContactRow(contact||{});root.appendChild(row);var first=row.querySelector('[data-location-contact="firstName"]');if(first)first.focus()}
-function pmosCollectLocationContacts(containerId){var root=document.getElementById(containerId);if(!root)return[];return Array.prototype.map.call(root.querySelectorAll('.location-contact-row'),function(row){var read=function(key){var input=row.querySelector('[data-location-contact="'+key+'"]');return input?String(input.value||'').trim():''};return{firstName:read('firstName'),lastName:read('lastName'),role:read('role'),phone:read('phone'),email:read('email'),notes:read('notes')}}).filter(function(contact){return contact.firstName||contact.lastName||contact.role||contact.phone||contact.email||contact.notes})}
+function pmosLocationContactRow(contact){contact=contact||{};var row=document.createElement('div'),roleListId='pmosLocationContactRoles'+(++pmosLocationContactRoleSequence);row.className='location-contact-row';row.dataset.resourceName=contact.resourceName||'';row.innerHTML='<button type="button" class="location-contact-remove" aria-label="Remove service location contact">×</button><div class="location-contact-grid"><div class="field"><label>First name</label><input data-location-contact="firstName"></div><div class="field"><label>Last name</label><input data-location-contact="lastName"></div><div class="field"><label>Role / relationship</label><input data-location-contact="role" list="'+roleListId+'" placeholder="Select or type another role"><datalist id="'+roleListId+'"><option value="Tenant"></option><option value="Property Manager"></option><option value="Superintendent"></option><option value="Keyholder"></option><option value="Site Contact"></option></datalist></div><div class="field"><label>Phone</label><input data-location-contact="phone" autocomplete="tel" inputmode="tel"></div><div class="field"><label>Email</label><input data-location-contact="email" type="email" autocomplete="email"></div><div class="field wide"><label>Contact notes</label><textarea data-location-contact="notes" placeholder="When to contact them, access responsibilities, preferred communication…"></textarea></div></div>';['firstName','lastName','role','phone','email','notes'].forEach(function(key){var input=row.querySelector('[data-location-contact="'+key+'"]');if(input)input.value=contact[key]||''});row.querySelector('.location-contact-remove').onclick=function(){row.remove()};return row}
+function pmosEnhanceLocationContactRows(root){if(typeof enhanceEditableSelects==='function')enhanceEditableSelects(root)}
+function pmosRenderLocationContacts(containerId,contacts){var root=document.getElementById(containerId);if(!root)return;root.innerHTML='';(contacts||[]).forEach(function(contact){root.appendChild(pmosLocationContactRow(contact))});pmosEnhanceLocationContactRows(root)}
+function pmosAddLocationContact(containerId,contact){var root=document.getElementById(containerId);if(!root)return;var row=pmosLocationContactRow(contact||{});root.appendChild(row);pmosEnhanceLocationContactRows(row);var first=row.querySelector('[data-location-contact="firstName"]');if(first)first.focus()}
+function pmosCollectLocationContacts(containerId){var root=document.getElementById(containerId);if(!root)return[];return Array.prototype.map.call(root.querySelectorAll('.location-contact-row'),function(row){var read=function(key){var input=row.querySelector('[data-location-contact="'+key+'"]');return input?String(input.value||'').trim():''};return{firstName:read('firstName'),lastName:read('lastName'),role:read('role'),phone:read('phone'),email:read('email'),notes:read('notes'),resourceName:row.dataset.resourceName||''}}).filter(function(contact){return contact.firstName||contact.lastName||contact.role||contact.phone||contact.email||contact.notes})}
 function pmosLocationContactsSummaryHtml(contacts){contacts=contacts||[];if(!contacts.length)return'';return '<div class="section-head"><h3>Service location contacts</h3></div><div>'+contacts.map(function(contact){var name=[contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.role||'Location contact',role=contact.role&&contact.role!==name?'<div class="location-contact-summary-meta">'+pmosLocationContactEsc(contact.role)+'</div>':'',phone=contact.phone?'<a href="tel:'+pmosLocationContactEsc(String(contact.phone).replace(/[^0-9+]/g,''))+'">'+pmosLocationContactEsc(contact.phone)+'</a>':'',email=contact.email?'<a href="mailto:'+pmosLocationContactEsc(contact.email)+'">'+pmosLocationContactEsc(contact.email)+'</a>':'',meta=[phone,email].filter(Boolean).join(' · '),notes=contact.notes?'<div class="location-contact-summary-meta">'+pmosLocationContactEsc(contact.notes)+'</div>':'';return '<div class="location-contact-summary"><div class="location-contact-summary-name">'+pmosLocationContactEsc(name)+'</div>'+role+(meta?'<div class="location-contact-summary-meta">'+meta+'</div>':'')+notes+'</div>'}).join('')+'</div>'}
 `;
 }
@@ -125,7 +217,7 @@ function pmosEnhanceAddServiceLocationWithContacts_(html) {
   output = output.replace('</style>', pmosServiceLocationContactStyles_() + '\n</style>');
   output = output.replace(
     '<div class="section"><div class="section-head"><h3>Water Maintenance</h3>',
-    '<div class="section"><div class="section-head"><h3>Service location contacts</h3></div><div class="grid"><div class="wide helper">Optional contacts for this property only. These do not replace or change the account contacts.</div><div id="serviceLocationContacts" class="wide location-contacts"></div><div class="wide"><button id="addServiceLocationContact" type="button" class="link">+ Add Service Location Contact</button></div></div></div><div class="section"><div class="section-head"><h3>Water Maintenance</h3>'
+    '<div class="section"><div class="section-head"><h3>Service location contacts</h3></div><div class="grid"><div class="wide helper">Optional contacts for this property only. These do not replace or change the account contacts. Their Google Contacts use this service location address.</div><div id="serviceLocationContacts" class="wide location-contacts"></div><div class="wide"><button id="addServiceLocationContact" type="button" class="link">+ Add Service Location Contact</button></div></div></div><div class="section"><div class="section-head"><h3>Water Maintenance</h3>'
   );
   output = output.split('.createPmosAdditionalServiceLocationForAccount(')
     .join('.createPmosAdditionalServiceLocationForAccountWithLocationContacts(');
@@ -146,7 +238,7 @@ function pmosEnhanceCustomerAccountEditorWithLocationContacts_(html) {
   output = output.replace('</style>', pmosServiceLocationContactStyles_() + '\n</style>');
   output = output.replace(
     '<div class="section"><div class="section-head"><h3>Maintenance</h3>',
-    '<div class="section"><div class="section-head"><h3>Service location contacts</h3></div><div class="grid"><div class="wide" style="color:#68747a;font-size:11px">Optional contacts attached only to this service location.</div><div id="serviceLocationContactsEditor" class="wide location-contacts"></div></div><button id="addServiceLocationContactEditor" class="add-link" type="button">+ Add Service Location Contact</button></div><div class="section"><div class="section-head"><h3>Maintenance</h3>'
+    '<div class="section"><div class="section-head"><h3>Service location contacts</h3></div><div class="grid"><div class="wide" style="color:#68747a;font-size:11px">Optional contacts attached only to this service location. Their Google Contacts use this location address.</div><div id="serviceLocationContactsEditor" class="wide location-contacts"></div></div><button id="addServiceLocationContactEditor" class="add-link" type="button">+ Add Service Location Contact</button></div><div class="section"><div class="section-head"><h3>Maintenance</h3>'
   );
   output = output.split('.savePmosCustomerAccountEditorData(')
     .join('.savePmosCustomerAccountEditorDataWithLocationContacts(');
