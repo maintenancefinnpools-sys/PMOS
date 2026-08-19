@@ -43,7 +43,7 @@
         return {
           customerId: account.customerId,
           displayName: primary.displayName || account.displayName,
-          listName: primary.listName || account.listName,
+          listName: account.listName || primary.listName,
           calendarTitle: primary.calendarTitle || '',
           address: primary.address || account.address,
           phone: primary.phone || account.phone,
@@ -52,7 +52,7 @@
           serviceLocationCount: locationCount,
           sidebarMeta: locationCount > 1 ? locationCount + ' service locations' : '',
           accountSearchText: normalizePmosCustomerSearch_([
-            primary.displayName, primary.listName, primary.phone, primary.email,
+            primary.displayName, account.listName, primary.phone, primary.email,
             account.address, account.phone, (accountTerms[account.accountId] || []).join(' ')
           ].join(' '))
         };
@@ -76,6 +76,7 @@
         return String(location.customerId) === String(profile.customerId);
       })[0] || null;
       profile.accountId = account.accountId;
+      profile.accountName = account.accountName;
       profile.accountPrimaryCustomerId = primary ? primary.customerId : profile.customerId;
       profile.serviceLocations = account.locations;
       profile.selectedServiceLocation = selected;
@@ -108,6 +109,8 @@ var baseAccountRenderProfile=renderProfile;
 renderProfile=function(profile){
   baseAccountRenderProfile(profile);
   var locations=profile.serviceLocations||[],selected=profile.selectedServiceLocation||{},block='';
+  el('profileName').textContent=profile.accountName||profile.displayName;
+  el('avatar').textContent=initials(profile.accountName||profile.displayName);
   if(locations.length){
     block='<div class="service-location-head"><div><h3>Service locations</h3><div class="service-location-hint">Select a property to view its schedule, notes and equipment.</div></div></div><div class="service-location-grid">'+locations.map(function(location){var chosen=String(location.customerId)===String(profile.customerId),name=location.locationName||location.calendarTitle||'Service Location',primary=location.primary?'<span class="primary-location-badge">Primary</span>':'';return '<button type="button" class="service-location-card'+(chosen?' selected':'')+'" data-location-id="'+esc(location.customerId)+'"><div><div class="service-location-name">'+esc(name)+primary+'</div><div class="service-location-address">'+esc(location.address||'')+'</div></div><div class="service-location-meta">Frequency<b>'+esc(String(location.frequency||'').replace(/^Biweekly$/i,'Bi-Weekly')||'—')+'</b></div><div class="service-location-meta">Status<b>'+esc(location.status||'Active')+'</b></div></button>'}).join('')+'</div>';
     el('content').insertAdjacentHTML('afterbegin','<div id="accountServiceLocations">'+block+'</div>');
