@@ -1,0 +1,71 @@
+<style>
+.ws-layout{display:grid;gap:14px;max-width:1080px}.ws-tabs{display:flex;gap:8px;flex-wrap:wrap}.ws-tab{padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);font-weight:800;cursor:pointer}.ws-tab.active{border-color:var(--brand);background:#e7f3f8;color:var(--brand-dark)}.ws-panel{padding:16px}.ws-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.ws-full{grid-column:1/-1}.ws-grid label{display:grid;gap:6px;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.ws-grid input,.ws-grid select{width:100%;min-height:40px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:8px 10px;color:var(--text);font:inherit}.ws-grid input:focus,.ws-grid select:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px rgba(1,125,177,.16)}.ws-note{padding:11px 12px;border-left:4px solid var(--focus);border-radius:8px;background:#eef6f8;color:var(--brand-dark);font-size:11px;line-height:1.5}.ws-warning{border-left-color:#b88735;background:#faf5e7;color:#765b21}.ws-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.ws-status{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-left:4px solid var(--brand);border-radius:8px;background:var(--surface-soft);font-size:12px;line-height:1.45;white-space:pre-wrap}.ws-status.working{border-left-color:#b88735;background:#faf5e7;color:#765b21}.ws-status.error{border-left-color:#a6535d;background:#f9eeee;color:#873232}.ws-status.success{border-left-color:#63b989;background:#edf7f1;color:#286344}.ws-key-status{padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:11px}.ws-hidden{display:none!important}@media(max-width:720px){.ws-grid{grid-template-columns:1fr}.ws-full{grid-column:1}}
+</style>
+
+<section class="view" id="view-settings">
+  <div class="ws-layout">
+    <div class="ws-tabs">
+      <button type="button" class="ws-tab active" data-settings-panel="app">Calendar &amp; Scheduling</button>
+      <button type="button" class="ws-tab" data-settings-panel="routing">Routing</button>
+    </div>
+
+    <article class="panel ws-panel" id="wsPanelApp">
+      <div class="panel-heading"><div><h2>Calendar &amp; Scheduling</h2><p>Operational settings used by the recurring maintenance planner and Calendar Sync.</p></div></div>
+      <div class="ws-grid">
+        <label class="ws-full">Calendar Name
+          <input id="wsCalendarName" list="wsCalendarNames" placeholder="Exact Google Calendar name">
+          <datalist id="wsCalendarNames"></datalist>
+        </label>
+        <div class="ws-note ws-warning ws-full">Changing Calendar Name changes the Calendar targeted by PMOS planning and synchronization. Development should remain pointed at the development Calendar until the change is deliberately promoted.</div>
+        <label>Calendar Year<input id="wsCalendarYear" type="number" min="2000" max="2100"></label>
+        <label>Event Duration Minutes<input id="wsEventDuration" type="number" min="1" max="1440"></label>
+        <label>Season Start<input id="wsSeasonStart" type="date"></label>
+        <label>Season End<input id="wsSeasonEnd" type="date"></label>
+        <label>Daily Route Start<input id="wsRouteStart" placeholder="6:00 AM"></label>
+      </div>
+      <div class="ws-actions"><button id="wsSaveApp" type="button" class="button primary">Save Calendar Settings</button></div>
+      <div id="wsAppStatus" class="ws-status">Loading…</div>
+    </article>
+
+    <article class="panel ws-panel ws-hidden" id="wsPanelRouting">
+      <div class="panel-heading"><div><h2>Routing</h2><p>Route Intelligence Engine provider, endpoints, optimization preference, and cache.</p></div></div>
+      <div class="ws-grid">
+        <label>Routing Provider<select id="wsProvider"><option value="GRAPHHOPPER">GraphHopper</option><option value="GOOGLE">Google Maps</option></select></label>
+        <label>Vehicle Profile<input value="Car (suitable for Ford F-150)" disabled></label>
+        <label class="ws-full">GraphHopper API Key<input id="wsApiKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved key"></label>
+        <div id="wsKeyStatus" class="ws-key-status ws-full">Loading key status…</div>
+        <label>Route Start<select id="wsStartMode"><option value="SHOP">Shop</option><option value="LAST_STOP">Last stop</option><option value="CUSTOM">Custom address</option></select></label>
+        <label>Start Address<input id="wsStartAddress" placeholder="Required for Custom"></label>
+        <label>Route Finish<select id="wsFinishMode"><option value="SHOP">Shop</option><option value="LAST_STOP">Last stop</option><option value="CUSTOM">Custom address</option></select></label>
+        <label>Finish Address<input id="wsFinishAddress" placeholder="Required for Custom"></label>
+        <label>Optimization<select id="wsOptimization"><option value="BALANCED">Balanced</option><option value="TIME">Shortest driving time</option><option value="DISTANCE">Shortest distance</option></select></label>
+        <label>Average Visit (minutes)<input id="wsServiceMinutes" type="number" min="0" max="240"></label>
+        <label>Route Cache (days)<input id="wsCacheDays" type="number" min="1" max="365"></label>
+        <div class="ws-note ws-full">Fallback uses the alternate road-routing provider when available. PMOS does not present straight-line estimates as GPS routing.</div>
+      </div>
+      <div class="ws-actions"><button id="wsSaveRouting" type="button" class="button primary">Save Routing Settings</button><button id="wsTestRouting" type="button" class="button secondary">Save &amp; Test</button><button id="wsClearKey" type="button" class="button danger">Clear API Key</button></div>
+      <div id="wsRoutingStatus" class="ws-status">Loading…</div>
+    </article>
+  </div>
+</section>
+
+<script>
+(function(){
+  'use strict';
+  const state={initialized:false,loaded:false,data:null};
+  const $=id=>document.getElementById(id);
+  function call(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));runner[name](...args);});}
+  function status(id,text,mode){const el=$(id);el.textContent=text;el.classList.remove('working','error','success');if(mode)el.classList.add(mode);}
+  function showPanel(name){document.querySelectorAll('.ws-tab').forEach(tab=>tab.classList.toggle('active',tab.dataset.settingsPanel===name));$('wsPanelApp').classList.toggle('ws-hidden',name!=='app');$('wsPanelRouting').classList.toggle('ws-hidden',name!=='routing');}
+  function applyApp(app){$('wsCalendarName').value=app.calendarName||'';$('wsCalendarYear').value=app.calendarYear||'';$('wsSeasonStart').value=app.seasonStart||'';$('wsSeasonEnd').value=app.seasonEnd||'';$('wsRouteStart').value=app.dailyRouteStart||'';$('wsEventDuration').value=app.eventDurationMinutes||60;$('wsCalendarNames').innerHTML=(app.calendarNames||[]).map(name=>'<option value="'+String(name).replace(/"/g,'&quot;')+'"></option>').join('');status('wsAppStatus','Ready.');}
+  function applyRouting(routing){$('wsProvider').value=routing.provider||'GRAPHHOPPER';$('wsStartMode').value=routing.startMode||'SHOP';$('wsStartAddress').value=routing.startAddress||'';$('wsFinishMode').value=routing.finishMode||'SHOP';$('wsFinishAddress').value=routing.finishAddress||'';$('wsOptimization').value=routing.optimization||'BALANCED';$('wsServiceMinutes').value=routing.serviceMinutes==null?20:routing.serviceMinutes;$('wsCacheDays').value=routing.cacheDays==null?30:routing.cacheDays;$('wsKeyStatus').textContent=routing.graphHopperConfigured?'GraphHopper key configured ••••'+String(routing.graphHopperKeySuffix||''):'GraphHopper key not configured';status('wsRoutingStatus','Ready.');}
+  function appValues(){return{calendarName:$('wsCalendarName').value.trim(),calendarYear:Number($('wsCalendarYear').value),seasonStart:$('wsSeasonStart').value,seasonEnd:$('wsSeasonEnd').value,dailyRouteStart:$('wsRouteStart').value.trim(),eventDurationMinutes:Number($('wsEventDuration').value)};}
+  function routingValues(){return{provider:$('wsProvider').value,graphHopperApiKey:$('wsApiKey').value.trim(),startMode:$('wsStartMode').value,startAddress:$('wsStartAddress').value.trim(),finishMode:$('wsFinishMode').value,finishAddress:$('wsFinishAddress').value.trim(),optimization:$('wsOptimization').value,serviceMinutes:Number($('wsServiceMinutes').value),cacheDays:Number($('wsCacheDays').value)};}
+  async function saveApp(){const button=$('wsSaveApp');button.disabled=true;status('wsAppStatus','Saving and validating Calendar settings…','working');try{const result=await call('savePmosWebAppSettings',appValues());applyApp(Object.assign({},result,{calendarNames:state.data&&state.data.app&&state.data.app.calendarNames||[]}));status('wsAppStatus','Calendar & Scheduling settings saved.','success');document.dispatchEvent(new CustomEvent('pmos:refresh'));}catch(error){status('wsAppStatus',error.message,'error');}finally{button.disabled=false;}}
+  async function saveRouting(test){const save=$('wsSaveRouting'),testButton=$('wsTestRouting');save.disabled=true;testButton.disabled=true;status('wsRoutingStatus',test?'Saving settings and testing the selected road provider…':'Saving routing settings…','working');try{let result;if(test){const tested=await call('testPmosRieProvider',routingValues());result=await call('getPmosRieSettingsForUi');$('wsApiKey').value='';applyRouting(result);status('wsRoutingStatus',tested.message+'\n'+Number(tested.distanceKm||0).toFixed(1)+' km · '+Number(tested.durationMinutes||0).toFixed(0)+' min','success');}else{result=await call('savePmosRieSettings',routingValues());$('wsApiKey').value='';applyRouting(result);status('wsRoutingStatus','Routing settings saved.','success');}}catch(error){status('wsRoutingStatus',error.message,'error');}finally{save.disabled=false;testButton.disabled=false;}}
+  async function clearKey(){if(!confirm('Remove the saved GraphHopper API key?'))return;$('wsClearKey').disabled=true;status('wsRoutingStatus','Clearing saved GraphHopper API key…','working');try{const result=await call('clearPmosGraphHopperApiKey');$('wsApiKey').value='';applyRouting(result);status('wsRoutingStatus','GraphHopper API key cleared.','success');}catch(error){status('wsRoutingStatus',error.message,'error');}finally{$('wsClearKey').disabled=false;}}
+  async function load(){status('wsAppStatus','Loading…','working');status('wsRoutingStatus','Loading…','working');try{state.data=await call('getPmosWebSettings');state.loaded=true;applyApp(state.data.app||{});applyRouting(state.data.routing||{});}catch(error){status('wsAppStatus',error.message,'error');status('wsRoutingStatus',error.message,'error');}}
+  function init(){if(state.initialized)return;state.initialized=true;document.querySelectorAll('.ws-tab').forEach(tab=>tab.onclick=()=>showPanel(tab.dataset.settingsPanel));$('wsSaveApp').onclick=saveApp;$('wsSaveRouting').onclick=()=>saveRouting(false);$('wsTestRouting').onclick=()=>saveRouting(true);$('wsClearKey').onclick=clearKey;load();}
+  document.addEventListener('pmos:viewchange',event=>{if(event.detail&&event.detail.name==='settings'){init();if(state.loaded)load();}});
+})();
+</script>
