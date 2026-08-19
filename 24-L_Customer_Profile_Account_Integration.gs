@@ -21,6 +21,7 @@
       const cleanQuery = normalizePmosCustomerSearch_(query);
       return listPmosCustomerAccountsForServiceLocations('').map(function(account) {
         const primary = byCustomerId[account.customerId] || {};
+        const locationCount = Number(account.serviceLocationCount || 1);
         return {
           customerId: account.customerId,
           displayName: primary.displayName || account.displayName,
@@ -30,7 +31,8 @@
           phone: primary.phone || account.phone,
           email: primary.email || '',
           status: primary.status || 'Active',
-          serviceLocationCount: Number(account.serviceLocationCount || 1),
+          serviceLocationCount: locationCount,
+          sidebarMeta: locationCount > 1 ? locationCount + ' service locations' : '',
           accountSearchText: normalizePmosCustomerSearch_([
             primary.displayName, primary.listName, primary.phone, primary.email,
             account.address, account.phone
@@ -80,6 +82,8 @@
       html = html.replace(
         '</script></body></html>',
         `
+var baseAccountRenderResults=renderResults;
+renderResults=function(rows){baseAccountRenderResults(rows);(rows||[]).forEach(function(row){if(!row.sidebarMeta)return;var button=customerButton(row.customerId),meta=button&&button.querySelector('.result-meta');if(meta)meta.textContent=[meta.textContent,row.sidebarMeta].filter(Boolean).join(' · ')})};
 var baseAccountRenderProfile=renderProfile;
 renderProfile=function(profile){
   baseAccountRenderProfile(profile);
