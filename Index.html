@@ -21,12 +21,30 @@
        */
       window.pmosActivateEquipmentScope=function(storeId){
         var current=document.getElementById('waterBodies');
-        if(current&&current.getAttribute('data-pmos-store-id')!==storeId){
+        var inferStore=function(node){
+          if(!node)return'';
+          var explicit=node.getAttribute('data-pmos-store-id');
+          if(explicit)return explicit;
+          if(node.closest&&node.closest('#view-addmaintenance'))return'amWaterBodiesStore';
+          if(node.closest&&node.closest('#view-addcustomer'))return'acWaterBodiesStore';
+          return'';
+        };
+        if(current){
+          var currentStore=inferStore(current);
+          if(currentStore===storeId){
+            current.setAttribute('data-pmos-store-id',storeId);
+            Array.prototype.forEach.call(current.querySelectorAll('.pmos-water-body-inactive'),function(node){
+              node.classList.remove('pmos-water-body-inactive');
+              node.classList.add('water-body');
+            });
+            return current;
+          }
           Array.prototype.forEach.call(current.querySelectorAll('.water-body'),function(node){
             node.classList.remove('water-body');
             node.classList.add('pmos-water-body-inactive');
           });
-          current.id=current.getAttribute('data-pmos-store-id')||('pmosWaterBodiesStore_'+Date.now());
+          current.setAttribute('data-pmos-store-id',currentStore||('pmosWaterBodiesStore_'+Date.now()));
+          current.id=current.getAttribute('data-pmos-store-id');
         }
         var target=document.getElementById(storeId)||document.querySelector('[data-pmos-store-id="'+storeId+'"]');
         if(!target)return null;
@@ -38,6 +56,11 @@
         });
         return target;
       };
+      document.addEventListener('pmos:viewchange',function(event){
+        var name=event.detail&&event.detail.name;
+        if(name==='addcustomer')window.pmosActivateEquipmentScope('acWaterBodiesStore');
+        if(name==='addmaintenance')window.pmosActivateEquipmentScope('amWaterBodiesStore');
+      });
     </script>
     <script><?!= pmosEquipmentEditorScript ?></script>
     <script><?!= pmosServiceLocationContactScript ?></script>
@@ -122,6 +145,7 @@
         </section>
 
         <?!= include('Web_Add_Customer'); ?>
+        <script>window.pmosAddCustomerViewMarkup=document.getElementById('view-addcustomer').innerHTML;</script>
         <?!= include('Web_Add_Maintenance'); ?>
         <?!= include('Web_Customers'); ?>
 
@@ -169,5 +193,18 @@
     </div>
 
     <?!= include('Client'); ?>
+    <script>
+      // Client.html still renders placeholders for features that have not migrated.
+      // Preserve the real Add Customer workspace until that placeholder is removed
+      // during the broader client-shell cleanup.
+      document.addEventListener('DOMContentLoaded',function(){
+        setTimeout(function(){
+          var view=document.getElementById('view-addcustomer');
+          if(view&&window.pmosAddCustomerViewMarkup&&!document.getElementById('acCreateButton')){
+            view.innerHTML=window.pmosAddCustomerViewMarkup;
+          }
+        },0);
+      });
+    </script>
   </body>
 </html>
