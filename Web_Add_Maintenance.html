@@ -1,0 +1,109 @@
+<style>
+.am-layout{display:grid;gap:16px}.am-panel{max-width:1040px}.am-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.am-full{grid-column:1/-1}.am-row{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:14px}.am-section-title{grid-column:1/-1;margin-top:4px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;font-weight:900;color:var(--text)}.am-grid label{display:grid;gap:6px;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.am-grid input,.am-grid select,.am-grid textarea{width:100%;min-height:40px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:8px 10px;color:var(--text);font:inherit}.am-grid textarea{min-height:78px;resize:vertical}.am-grid input:focus,.am-grid select:focus,.am-grid textarea:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px rgba(1,125,177,.16)}.am-address-wrap{position:relative}.am-address-list{display:none;position:absolute;z-index:40;top:calc(100% + 2px);left:0;right:0;max-height:250px;overflow:auto;border:1px solid #aebdc5;border-radius:8px;background:#fff;box-shadow:0 12px 28px rgba(41,57,68,.18)}.am-address-option{display:block;width:100%;padding:10px 12px;border:0;border-bottom:1px solid var(--border);background:#fff;color:var(--text);text-align:left;cursor:pointer}.am-address-option:hover,.am-address-option.active{background:#eef7fb}.am-confirmed{display:none;grid-column:1/-1;padding:11px 13px;border:1px solid #b9dbc6;border-left:4px solid #63b989;border-radius:9px;background:#edf7f1;color:#286344;font-size:12px;line-height:1.45}.am-route-status{grid-column:1/-1;padding:11px 13px;border:1px solid #bddae0;border-left:4px solid var(--brand);border-radius:9px;background:#eef6f8;color:var(--brand-dark);font-size:12px;line-height:1.45}.am-route-status.calculating{border-color:#ddc88f;border-left-color:#c89b4c;background:#faf5e7;color:#765b21}.am-route-status.error{border-color:#e3bcbc;border-left-color:#d76b6b;background:#f9eeee;color:#873232}.am-recs{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.am-rec{display:grid;gap:7px;padding:13px;border:1px solid var(--border);border-left:4px solid var(--focus);border-radius:9px;background:#fff;color:var(--text);text-align:left;cursor:pointer}.am-rec:hover{background:#f3f8fa}.am-rec.selected{border-color:var(--brand);border-left-color:var(--brand);background:#e7f3f8}.am-rec-head{display:flex;align-items:center;gap:8px}.am-rec-head strong{font-weight:900}.am-rec-badge{margin-left:auto;padding:3px 7px;border-radius:999px;background:#dcecf3;color:var(--brand-dark);font-size:10px;font-weight:900}.am-rec-meta,.am-rec-route{font-size:11px;color:var(--muted);line-height:1.45}.am-manual{grid-column:1/-1;padding:13px;border:1px solid var(--border);border-radius:9px;background:var(--surface-soft)}.am-manual-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.am-note{grid-column:1/-1;padding:11px 13px;border-radius:9px;background:var(--surface-detail);color:var(--muted);font-size:12px;line-height:1.5}.am-actions{display:flex;gap:9px;justify-content:flex-end}.am-step{padding:5px 9px;border:1px solid #bfd9e5;border-radius:999px;background:#e4f0f5;color:var(--brand-dark);font-size:11px;font-weight:900}.am-hidden{display:none!important}@media(max-width:850px){.am-grid,.am-row{grid-template-columns:1fr}.am-full,.am-section-title,.am-confirmed,.am-route-status,.am-recs,.am-manual,.am-note{grid-column:1}.am-recs{grid-template-columns:1fr}.am-manual-grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.am-manual-grid{grid-template-columns:1fr}.am-actions{justify-content:stretch}.am-actions .button{flex:1}}
+</style>
+
+<section class="view" id="view-addmaintenance">
+  <div class="am-layout">
+    <article class="panel am-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Add Maintenance Client</h2>
+          <p>Existing PMOS workflow: confirm the address, calculate route placement, then complete the client record.</p>
+        </div>
+        <span class="am-step">Web migration · Step 1</span>
+      </div>
+
+      <div class="am-grid">
+        <div class="am-section-title">Customer information</div>
+        <div class="am-row am-full">
+          <label>Service address
+            <div class="am-address-wrap">
+              <input id="amAddress" autocomplete="off" placeholder="Begin typing address">
+              <div id="amAddressList" class="am-address-list"></div>
+            </div>
+          </label>
+          <label>Frequency
+            <select id="amFrequency">
+              <option>Weekly</option>
+              <option>Biweekly</option>
+              <option>Monthly</option>
+              <option>Twice Weekly</option>
+            </select>
+          </label>
+        </div>
+        <div id="amConfirmedAddress" class="am-confirmed"></div>
+        <label>Last name<input id="amLastName" autocomplete="family-name"></label>
+        <label>First name<input id="amFirstName" autocomplete="given-name"></label>
+        <label>Phone<input id="amPhone" autocomplete="tel" inputmode="numeric" maxlength="16" placeholder="(___) ___ - ____"></label>
+        <label>Email<input id="amEmail" type="email" autocomplete="email"></label>
+
+        <div class="am-section-title">Maintenance schedule and route placement</div>
+        <label>Effective date<input id="amEffectiveDate" type="date"></label>
+        <div></div>
+        <div id="amRouteStatus" class="am-route-status am-full">Select a complete address above to calculate route placement.</div>
+        <div id="amRecommendations" class="am-recs"></div>
+        <div class="am-full"><button id="amRefreshRoutes" type="button" class="button secondary">Refresh Recommendations</button></div>
+
+        <div class="am-manual">
+          <div class="muted" style="margin-bottom:10px"><b>Manual placement</b> — recommendations fill these fields, but every value remains editable.</div>
+          <div class="am-manual-grid">
+            <label>Primary service day
+              <select id="amDay"><option value="">Select</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select>
+            </label>
+            <label id="amSecondDayLabel" class="am-hidden">Second service day
+              <select id="amSecondDay"><option value="">Select</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select>
+            </label>
+            <label id="amWeekLabel">Rotation week
+              <select id="amWeek"><option value="">Select</option><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option></select>
+            </label>
+            <label>Stop position<input id="amStop" type="number" min="1" placeholder="Optional"></label>
+            <label>Calendar title<input id="amCalendarTitle"></label>
+          </div>
+        </div>
+
+        <div class="am-section-title">Additional client details</div>
+        <label class="am-full">Entry information<textarea id="amEntryInformation"></textarea></label>
+        <label class="am-full">Customer / service notes<textarea id="amNotes"></textarea></label>
+
+        <div class="am-section-title">Bodies of water and equipment</div>
+        <div class="am-note">The existing shared PMOS Bodies of Water / Equipment editor will be connected in the next migration step. Customer creation remains disabled until that component is present so this Web App cannot create an incomplete maintenance record.</div>
+        <label>Service season
+          <select id="amYearRound"><option value="No">Seasonal</option><option value="Yes">Year Round</option></select>
+        </label>
+      </div>
+    </article>
+
+    <div class="am-actions am-panel">
+      <button id="amCreateButton" class="button primary" disabled>Create Client</button>
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  'use strict';
+  const state={initialized:false,selectedAddress:null,recommendations:[],selectedPlacements:[],addressTimer:null,addressRequest:0,routeRequest:0,lastAutoTitle:'',titleEdited:false};
+  const $=id=>document.getElementById(id);
+  const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function call(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));runner[name](...args);});}
+  function setRouteStatus(text,mode){const el=$('amRouteStatus');el.textContent=text;el.classList.remove('calculating','error');if(mode)el.classList.add(mode);}
+  function todayLocal(){const d=new Date(),offset=d.getTimezoneOffset();return new Date(d.getTime()-offset*60000).toISOString().slice(0,10);}
+  function formatName(event){const input=event.target;input.value=String(input.value||'').replace(/(^|[\s'-])([a-z])/g,(m,p,l)=>p+l.toUpperCase());}
+  function formatPhone(){const input=$('amPhone'),digits=String(input.value||'').replace(/\D/g,'').slice(0,10);let value='';if(digits.length)value='('+digits.slice(0,3);if(digits.length>=3)value+=') '+digits.slice(3,6);if(digits.length>=6)value+=' - '+digits.slice(6,10);input.value=value;}
+  function updateCalendarTitle(){if(state.titleEdited)return;const value=$('amLastName').value.trim();state.lastAutoTitle=value;$('amCalendarTitle').value=value;}
+  function clearAddressSelection(){state.selectedAddress=null;state.recommendations=[];state.selectedPlacements=[];$('amConfirmedAddress').style.display='none';$('amConfirmedAddress').innerHTML='';$('amRecommendations').innerHTML='';setRouteStatus('Choose a complete address suggestion before calculating route placement.');}
+  function hideAddressList(){const list=$('amAddressList');list.style.display='none';list.innerHTML='';}
+  function renderAddressList(items){const list=$('amAddressList');list.innerHTML='';if(!items.length){hideAddressList();setRouteStatus('No complete address matches yet. Continue typing.');return;}items.forEach(item=>{const button=document.createElement('button');button.type='button';button.className='am-address-option';button.innerHTML=esc(item.address||'');button.onmousedown=event=>{event.preventDefault();confirmAddress(item);};list.appendChild(button);});list.style.display='block';setRouteStatus('Address suggestions ready. Select the correct address.');}
+  async function confirmAddress(item){hideAddressList();setRouteStatus('Confirming the selected address…','calculating');try{const resolved=await call('confirmPmosSelectedAddress',item);state.selectedAddress=resolved;$('amAddress').value=resolved.address||'';const box=$('amConfirmedAddress');box.innerHTML='<b>Confirmed address</b><br>'+esc(resolved.street)+'<br>'+esc(resolved.city)+', '+esc(resolved.province)+' '+esc(resolved.postalCode)+'<br>'+esc(resolved.country);box.style.display='block';setRouteStatus('Address confirmed. Searching for the best route insertions…','calculating');$('amLastName').focus();loadRecommendations();}catch(error){clearAddressSelection();setRouteStatus(error.message,'error');}}
+  function queueAddressSearch(){clearTimeout(state.addressTimer);const q=$('amAddress').value.trim();if(state.selectedAddress&&q!==state.selectedAddress.address)clearAddressSelection();if(q.length<3){hideAddressList();setRouteStatus('Type at least 3 address characters to see suggestions.');return;}const request=++state.addressRequest;setRouteStatus('Loading address suggestions…','calculating');state.addressTimer=setTimeout(async()=>{try{const items=await call('suggestPmosAddresses',q,6);if(request!==state.addressRequest)return;renderAddressList(items||[]);}catch(error){if(request!==state.addressRequest)return;hideAddressList();setRouteStatus('Address suggestions could not load. '+error.message,'error');}},160);}
+  function routeShards(frequency){const f=String(frequency||'').toLowerCase();if(f.includes('monthly'))return[{start:0,count:5},{start:5,count:5},{start:10,count:5},{start:15,count:5}];if(f.includes('bi'))return[{start:0,count:5},{start:5,count:5}];if(f.includes('twice'))return[{start:0,count:2},{start:2,count:2},{start:4,count:2},{start:6,count:2},{start:8,count:2}];return[{start:0,count:1},{start:1,count:1},{start:2,count:1},{start:3,count:1},{start:4,count:1}];}
+  function formValues(){return{firstName:$('amFirstName').value,lastName:$('amLastName').value,address:$('amAddress').value,addressVerified:!!state.selectedAddress,addressDetails:state.selectedAddress||{},phone:$('amPhone').value,email:$('amEmail').value,frequency:$('amFrequency').value,effectiveDate:$('amEffectiveDate').value,day:$('amDay').value,secondDay:$('amSecondDay').value,week:$('amWeek').value,stop:$('amStop').value,calendarTitle:$('amCalendarTitle').value,entryInformation:$('amEntryInformation').value,notes:$('amNotes').value,yearRound:$('amYearRound').value,recommendedPlacements:state.selectedPlacements.slice()};}
+  function compareRoutes(a,b){if(!!a.roadDataComplete!==!!b.roadDataComplete)return a.roadDataComplete?-1:1;const ad=a.addedDurationMinutes==null?1e9:Number(a.addedDurationMinutes),bd=b.addedDurationMinutes==null?1e9:Number(b.addedDurationMinutes);return ad-bd||Number(a.addedDistanceKm||0)-Number(b.addedDistanceKm||0)||Number(b.score||0)-Number(a.score||0);}
+  function renderRecommendations(){const box=$('amRecommendations');box.innerHTML='';state.recommendations.forEach((r,index)=>{const button=document.createElement('button');button.type='button';button.className='am-rec';const placements=(r.placements||[]).map(p=>'Week '+p.week+' · '+p.day+' · stop '+p.position).join('<br>');const duration=r.addedDurationMinutes==null?'Road time unavailable':Math.round(Number(r.addedDurationMinutes||0))+' min added';const distance=Number.isFinite(Number(r.addedDistanceKm))?Number(r.addedDistanceKm).toFixed(1)+' km added':'';button.innerHTML='<div class="am-rec-head"><strong>'+esc(r.label||r.day||('Option '+(index+1)))+'</strong><span class="am-rec-badge">'+esc(r.rating||'Option')+'</span></div><div class="am-rec-meta">'+esc(r.rotationLabel||'')+' · '+esc(duration)+(distance?' · '+esc(distance):'')+'</div><div class="am-rec-route">'+placements+'</div>';button.onclick=()=>{box.querySelectorAll('.am-rec').forEach(el=>el.classList.remove('selected'));button.classList.add('selected');state.selectedPlacements=(r.placements||[]).map(p=>({week:p.week,day:p.day,layer:p.layer,position:p.position}));$('amDay').value=r.day||'';$('amSecondDay').value=r.secondDay||'';$('amWeek').value=r.week?String(r.week):'';const primary=(r.placements||[])[0]||{};$('amStop').value=primary.position||r.position||'';setRouteStatus('Recommendation applied to '+state.selectedPlacements.length+' exact Route Template layer(s). Manual placement remains editable.');};box.appendChild(button);});}
+  async function loadRecommendations(){if(!state.selectedAddress){state.recommendations=[];$('amRecommendations').innerHTML='';setRouteStatus('Choose a complete address suggestion before calculating route placement.');return;}state.selectedPlacements=[];const request=++state.routeRequest,shards=routeShards($('amFrequency').value),base=formValues();let finished=0,errors=0,combined=[];setRouteStatus('Comparing 0 of '+shards.length+' route groups…','calculating');await Promise.all(shards.map(async shard=>{try{const result=await call('recommendMaintenanceClientRotations',Object.assign({},base,{candidateStart:shard.start,candidateCount:shard.count}));if(request!==state.routeRequest)return;combined=combined.concat((result&&result.recommendations)||[]);}catch(error){errors++;}finally{if(request!==state.routeRequest)return;finished++;setRouteStatus('Comparing '+finished+' of '+shards.length+' route groups…','calculating');}}));if(request!==state.routeRequest)return;state.recommendations=combined.sort(compareRoutes).slice(0,3);renderRecommendations();if(state.recommendations.length)setRouteStatus(errors?'Best available placements calculated; '+errors+' route group(s) could not be completed.':'Best placements calculated by the PMOS Route Intelligence Engine.');else setRouteStatus('No usable route placements were found. Manual placement remains available.',errors?'error':null);}
+  function scheduleChanged(){state.selectedPlacements=[];$('amRecommendations').innerHTML='';const f=$('amFrequency').value,week=$('amWeek'),weekLabel=$('amWeekLabel'),second=$('amSecondDayLabel');$('amDay').value='';$('amSecondDay').value='';second.classList.toggle('am-hidden',f!=='Twice Weekly');weekLabel.classList.toggle('am-hidden',f==='Weekly'||f==='Twice Weekly');if(f==='Biweekly'){weekLabel.childNodes[0].nodeValue='Rotation weeks ';week.innerHTML='<option value="">Select</option><option value="1">Weeks 1 & 3</option><option value="2">Weeks 2 & 4</option>';}else if(f==='Monthly'){weekLabel.childNodes[0].nodeValue='Rotation week ';week.innerHTML='<option value="">Select</option><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option>';}else{week.value='';}if(state.selectedAddress)loadRecommendations();}
+  function init(){if(state.initialized)return;state.initialized=true;$('amEffectiveDate').value=todayLocal();$('amAddress').addEventListener('input',queueAddressSearch);$('amAddress').addEventListener('focus',queueAddressSearch);$('amAddress').addEventListener('blur',()=>setTimeout(hideAddressList,180));$('amFrequency').addEventListener('change',scheduleChanged);$('amRefreshRoutes').addEventListener('click',loadRecommendations);$('amLastName').addEventListener('input',event=>{formatName(event);updateCalendarTitle();});$('amFirstName').addEventListener('input',formatName);$('amPhone').addEventListener('input',formatPhone);$('amCalendarTitle').addEventListener('input',()=>{state.titleEdited=$('amCalendarTitle').value!==state.lastAutoTitle;});['amDay','amSecondDay','amWeek','amStop'].forEach(id=>$(id).addEventListener('change',()=>{state.selectedPlacements=[];$('amRecommendations').querySelectorAll('.am-rec').forEach(el=>el.classList.remove('selected'));}));try{google.script.run.preparePmosAddressSuggestions();}catch(ignored){}scheduleChanged();}
+  document.addEventListener('pmos:viewchange',event=>{if(event.detail&&event.detail.name==='addmaintenance')init();});
+  document.addEventListener('pmos:refresh',()=>{if(state.initialized&&document.getElementById('view-addmaintenance').classList.contains('active')&&state.selectedAddress)loadRecommendations();});
+})();
+</script>
