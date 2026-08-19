@@ -32,15 +32,6 @@
     $('sidebar').classList.remove('open');
     document.dispatchEvent(new CustomEvent('pmos:viewchange',{detail:{name:name}}));
   }
-  function renderFeatureViews(){
-    const cards={
-      servicecall:{title:'Service Call',copy:'This Scheduling workflow will create and route customer service work through PMOS.'},
-      openingclosing:{title:'Opening / Closing',copy:'This Scheduling workflow will use one entry point with Opening or Closing selected inside the form, allowing the downstream reporting workflow to follow the scheduled work type.'}
-    };
-    Object.entries(cards).forEach(([id,content])=>{
-      $(`view-${id}`).innerHTML=`<article class="panel workspace-placeholder"><div class="panel-heading"><div><h2>${esc(content.title)}</h2><p>Web App development</p></div></div><p>${esc(content.copy)}</p></article>`;
-    });
-  }
   async function load(){
     setBusy('Loading…');
     try{
@@ -84,6 +75,6 @@
     $('confirmCancel').onclick=()=>{$('confirmModal').hidden=true;state.confirmAction=null};
     $('confirmAccept').onclick=()=>{const action=state.confirmAction;$('confirmModal').hidden=true;state.confirmAction=null;if(action)action()};
   }
-  document.addEventListener('DOMContentLoaded',()=>{renderFeatureViews();initEvents();load();});
+  document.addEventListener('DOMContentLoaded',()=>{initEvents();load();});
 })();
 </script>
