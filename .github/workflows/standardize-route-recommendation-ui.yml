@@ -23,103 +23,56 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           def replace_once(path, old, new):
               p = Path(path)
               text = p.read_text()
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'{path}: expected one exact target, found {count}: {old[:120]!r}')
+                  raise SystemExit(f'{path}: expected one exact target, found {count}: {old[:140]!r}')
               p.write_text(text.replace(old, new, 1))
 
-          def regex_once(path, pattern, replacement):
+          def replace_region(path, start_marker, end_marker, replacement):
               p = Path(path)
               text = p.read_text()
-              new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f'{path}: regex target count {count}: {pattern[:140]!r}')
-              p.write_text(new_text)
+              start = text.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f'{path}: missing start marker {start_marker!r}')
+              end = text.find(end_marker, start + len(start_marker))
+              if end < 0:
+                  raise SystemExit(f'{path}: missing end marker {end_marker!r}')
+              p.write_text(text[:start] + replacement + text[end:])
 
-          # Add Maintenance Client: same shared CSS/script/card renderer.
-          replace_once(
+          # Add Maintenance Client.
+          replace_once('20-C_Add_Maintenance_Client_UI.gs', '</style></head><body>', '${pmosRouteRecommendationCardStyles_()}\n</style></head><body>')
+          replace_once('20-C_Add_Maintenance_Client_UI.gs', '${pmosCustomerEquipmentEditorScript_()}\nfunction clearSuggestedStop', '${pmosCustomerEquipmentEditorScript_()}\n${pmosRouteRecommendationCardScript_()}\nfunction clearSuggestedStop')
+          replace_once('20-C_Add_Maintenance_Client_UI.gs', '<div id="recommendations" class="recommendations"></div>', '<div id="recommendations" class="recommendations pmos-route-recommendations"></div>')
+          replace_region(
               '20-C_Add_Maintenance_Client_UI.gs',
-              '</style></head><body>',
-              '${pmosRouteRecommendationCardStyles_()}\n</style></head><body>'
-          )
-          replace_once(
-              '20-C_Add_Maintenance_Client_UI.gs',
-              '${pmosCustomerEquipmentEditorScript_()}\nfunction clearSuggestedStop',
-              '${pmosCustomerEquipmentEditorScript_()}\n${pmosRouteRecommendationCardScript_()}\nfunction clearSuggestedStop'
-          )
-          replace_once(
-              '20-C_Add_Maintenance_Client_UI.gs',
-              '<div id="recommendations" class="recommendations"></div>',
-              '<div id="recommendations" class="recommendations pmos-route-recommendations"></div>'
-          )
-          replace_once(
-              '20-C_Add_Maintenance_Client_UI.gs',
-              "b.className='rec';",
-              "b.className='rec pmos-route-rec';"
-          )
-          regex_once(
-              '20-C_Add_Maintenance_Client_UI.gs',
-              r"\}\);var stop=Math\.max\(1,Math\.round\(Number\(r\.position\|\|primary\.position\|\|1\)\)\).*?;b\.innerHTML='<div class=\\\"rec-title\\\">.*?</ul>';box\.appendChild\(b\)\}\)\}",
-              "});b.innerHTML=pmosRouteRecommendationHtml(r,i,{includeTemplate:true});box.appendChild(b)})}"
+              'function renderRecommendations(){',
+              'function clearAddressSelection(){',
+              """function renderRecommendations(){var box=byId('recommendations');box.innerHTML='';byId('recommendationStatus').classList.remove('calculating');currentRecommendations.forEach(function(r,i){var b=document.createElement('button'),primary=r.placements&&r.placements[0]||{};b.type='button';b.className='rec pmos-route-rec';b.addEventListener('click',function(){Array.prototype.forEach.call(box.querySelectorAll('.pmos-route-rec'),function(x){x.classList.remove('selected')});b.classList.add('selected');selectedPlacements=(r.placements||[]).map(function(p){return{week:p.week,day:p.day,layer:p.layer,position:p.position}});byId('day').value=r.day;if(r.secondDay)byId('secondDay').value=r.secondDay;if(r.week)byId('week').value=String(r.week);suggestedStopValue=String(primary.position||r.position||'');stopManuallyEdited=false;byId('stop').value=suggestedStopValue;setAddressRouteStatus('Route placement selected. Continue completing the form.',false);byId('recommendationStatus').textContent='Recommendation applied to '+selectedPlacements.length+' exact Route Template layer(s). Edit Stop Position only to override the recommended positions.'});b.innerHTML=pmosRouteRecommendationHtml(r,i,{includeTemplate:true});box.appendChild(b)})}\n"""
           )
 
-          # Customer Editor route changes.
-          replace_once(
+          # Customer Editor route change workflow.
+          replace_once('24-E_Customer_Editor.gs', '${pmosCustomerEquipmentEditorStyles_()}\n</style>', '${pmosCustomerEquipmentEditorStyles_()}\n${pmosRouteRecommendationCardStyles_()}\n</style>')
+          replace_once('24-E_Customer_Editor.gs', '${pmosCustomerEquipmentEditorScript_()}\nfunction setEquipmentField', '${pmosCustomerEquipmentEditorScript_()}\n${pmosRouteRecommendationCardScript_()}\nfunction setEquipmentField')
+          replace_once('24-E_Customer_Editor.gs', '<div id="recommendations" class="recommendations"></div>', '<div id="recommendations" class="recommendations pmos-route-recommendations"></div>')
+          replace_region(
               '24-E_Customer_Editor.gs',
-              '${pmosCustomerEquipmentEditorStyles_()}\n</style>',
-              '${pmosCustomerEquipmentEditorStyles_()}\n${pmosRouteRecommendationCardStyles_()}\n</style>'
-          )
-          replace_once(
-              '24-E_Customer_Editor.gs',
-              '${pmosCustomerEquipmentEditorScript_()}\nfunction setEquipmentField',
-              '${pmosCustomerEquipmentEditorScript_()}\n${pmosRouteRecommendationCardScript_()}\nfunction setEquipmentField'
-          )
-          replace_once(
-              '24-E_Customer_Editor.gs',
-              '<div id="recommendations" class="recommendations"></div>',
-              '<div id="recommendations" class="recommendations pmos-route-recommendations"></div>'
-          )
-          replace_once(
-              '24-E_Customer_Editor.gs',
-              "b.className='rec';",
-              "b.className='rec pmos-route-rec';"
-          )
-          regex_once(
-              '24-E_Customer_Editor.gs',
-              r"b\.innerHTML='<div class=\\\"rec-title\\\">.*?</ul>';b\.onclick=function\(\)",
-              "b.innerHTML=pmosRouteRecommendationHtml(r,i,{includeTemplate:true});b.onclick=function()"
+              'function renderRoutes(result){',
+              'function changeRoute(){',
+              """function renderRoutes(result){if(result){allRouteResult=result;routeSuggestionLimit=3}var rows=allRouteResult&&allRouteResult.recommendations||[],box=el('recommendations');box.innerHTML='';el('routeMessage').textContent=result&&result.qualityMessage||'Select a route placement.';rows.slice(0,routeSuggestionLimit).forEach(function(r,i){var b=document.createElement('button');b.type='button';b.className='rec pmos-route-rec';b.innerHTML=pmosRouteRecommendationHtml(r,i,{includeTemplate:true});b.onclick=function(){pmosSelectRouteCard(box,b);selectedPlacements=(r.placements||[]).map(function(p){return{week:p.week,day:p.day,layer:p.layer,position:p.position}});el('routeMessage').textContent='Recommendation applied to '+selectedPlacements.length+' exact Route Template layer(s).'};box.appendChild(b)});var more=el('moreRecommendations');more.style.display=rows.length>routeSuggestionLimit?'inline-block':'none';more.onclick=function(){routeSuggestionLimit+=3;renderRoutes(null)}}\n"""
           )
 
           # Temporary Visit upcoming-date insertion cards.
-          replace_once(
+          replace_once('06-D_Temporary_Visit_UI_V3.gs', '</style></head><body>', '${pmosRouteRecommendationCardStyles_()}\n</style></head><body>')
+          replace_once('06-D_Temporary_Visit_UI_V3.gs', '<script>(function(){', '<script>\n${pmosRouteRecommendationCardScript_()}\n(function(){')
+          replace_region(
               '06-D_Temporary_Visit_UI_V3.gs',
-              '</style></head><body>',
-              '${pmosRouteRecommendationCardStyles_()}\n</style></head><body>'
-          )
-          replace_once(
-              '06-D_Temporary_Visit_UI_V3.gs',
-              '<script>(function(){',
-              '<script>\n${pmosRouteRecommendationCardScript_()}\n(function(){'
-          )
-          replace_once(
-              '06-D_Temporary_Visit_UI_V3.gs',
-              "grid.className='date-grid';",
-              "grid.className='date-grid pmos-route-recommendations';"
-          )
-          replace_once(
-              '06-D_Temporary_Visit_UI_V3.gs',
-              "b.className='date-option';",
-              "b.className='date-option pmos-route-rec';"
-          )
-          regex_once(
-              '06-D_Temporary_Visit_UI_V3.gs',
-              r"b\.innerHTML='<div class=\\\"rec-title\\\">.*?</ul>';b\.onclick=function\(\)",
-              "b.innerHTML=pmosRouteRecommendationHtml(r,i,{title:r.displayDate,includeTemplate:false});b.onclick=function()"
+              'function renderDates(items){',
+              'function fmtMinutes(v){',
+              """function renderDates(items){dateSuggestions.innerHTML='<b>Best upcoming dates</b>';if(!items.length){dateSuggestions.innerHTML+='<div class=\"muted\" style=\"margin-top:5px\">No weekday route recommendations were available.</div>';return}var grid=document.createElement('div');grid.className='date-grid pmos-route-recommendations';items.forEach(function(r,i){var b=document.createElement('button');b.type='button';b.className='date-option pmos-route-rec';b.innerHTML=pmosRouteRecommendationHtml(r,i,{title:r.displayDate,includeTemplate:false});b.onclick=function(){pmosSelectRouteCard(grid,b);selectSuggestedDate(r)};grid.appendChild(b)});dateSuggestions.appendChild(grid)}\n"""
           )
           PY
 
