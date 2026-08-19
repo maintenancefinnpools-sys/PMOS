@@ -17,7 +17,7 @@
   };
   const $=id=>document.getElementById(id);
   function server(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));runner[name](...args);});}
-  function esc(value){return String(value??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
+  function esc(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function setBusy(text){$('saveState').textContent=text||'Working…';}
   function notify(message,type='info'){const el=document.createElement('div');el.className=`alert ${type}`;el.textContent=message;$('alertRegion').prepend(el);setTimeout(()=>el.remove(),6000);}
   function setConnection(ok,text){$('connectionDot').className=`status-dot ${ok?'online':'error'}`;$('connectionText').textContent=text;}
