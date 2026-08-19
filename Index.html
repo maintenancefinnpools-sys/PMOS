@@ -61,15 +61,6 @@
         if(name==='addcustomer')window.pmosActivateEquipmentScope('acWaterBodiesStore');
         if(name==='addmaintenance')window.pmosActivateEquipmentScope('amWaterBodiesStore');
       });
-
-      // Client.html still owns the original placeholder renderer. Migrated views
-      // register their real markup here so it can be restored immediately after
-      // those legacy placeholders are rendered during DOMContentLoaded.
-      window.pmosMigratedViewMarkup={};
-      window.pmosRegisterMigratedView=function(viewName){
-        var view=document.getElementById('view-'+viewName);
-        if(view)window.pmosMigratedViewMarkup[viewName]=view.innerHTML;
-      };
     </script>
     <script><?!= pmosEquipmentEditorScript ?></script>
     <script><?!= pmosServiceLocationContactScript ?></script>
@@ -154,15 +145,13 @@
         </section>
 
         <?!= include('Web_Add_Customer'); ?>
-        <script>window.pmosRegisterMigratedView('addcustomer');</script>
         <?!= include('Web_Add_Maintenance'); ?>
         <?!= include('Web_Customers'); ?>
 
         <section class="view" id="view-servicecall"></section>
         <?!= include('Web_Temporary_Maintenance'); ?>
-        <script>window.pmosRegisterMigratedView('tempmaintenance');</script>
         <section class="view" id="view-openingclosing"></section>
-        <section class="view" id="view-jobs"></section>
+        <?!= include('Web_Pmos_Operations'); ?>
 
         <section class="view" id="view-routes">
           <div class="toolbar panel">
@@ -204,15 +193,6 @@
 
     <?!= include('Client'); ?>
     <script>
-      document.addEventListener('DOMContentLoaded',function(){
-        setTimeout(function(){
-          Object.keys(window.pmosMigratedViewMarkup||{}).forEach(function(name){
-            var view=document.getElementById('view-'+name);
-            if(view)view.innerHTML=window.pmosMigratedViewMarkup[name];
-          });
-        },0);
-      });
-
       // Cross-workspace handoff used by creation workflows. It intentionally uses
       // the public Customer Look-Up DOM rather than reaching into that module's
       // private functions, so the customer workspace remains independently owned.
