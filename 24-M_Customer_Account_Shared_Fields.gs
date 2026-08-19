@@ -1,4 +1,6 @@
 /** Keep account-level identity/contact fields synchronized across service-location Customer IDs. */
+let PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
+
 function syncPmosAccountSharedCustomerFields_(customerId) {
   const account = getPmosCustomerAccount_(customerId);
   if (!account.locations || account.locations.length < 2) return account;
@@ -52,6 +54,18 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
 }
 
 (function () {
+  if (typeof assertMaintenanceClientNotDuplicate_ === 'function') {
+    const baseAssertMaintenanceClientNotDuplicateForAccount = assertMaintenanceClientNotDuplicate_;
+    assertMaintenanceClientNotDuplicate_ = function(table, name, address, email) {
+      return baseAssertMaintenanceClientNotDuplicateForAccount(
+        table,
+        name,
+        address,
+        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ ? '' : email
+      );
+    };
+  }
+
   if (typeof savePmosCustomerEditorData === 'function') {
     const baseSavePmosCustomerEditorDataForAccount = savePmosCustomerEditorData;
     savePmosCustomerEditorData = function(input) {
@@ -68,7 +82,13 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
       const request = input || {};
       const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
       const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
-      const result = baseCreatePmosAdditionalServiceLocation(request);
+      let result;
+      PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = true;
+      try {
+        result = baseCreatePmosAdditionalServiceLocation(request);
+      } finally {
+        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
+      }
       if (primary && result && result.customerId) {
         copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
         syncPmosAccountSharedCustomerFields_(primary.customerId);
