@@ -1,0 +1,79 @@
+name: Apply account contact address UI integration
+
+on:
+  push:
+    branches: [pmos-development]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-account-contact-address-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pmos-development
+          fetch-depth: 0
+
+      - name: Integrate billing and account-aware Google Contact routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('24-L_Customer_Profile_Account_Integration.gs')
+          text = path.read_text()
+
+          def once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'24-L expected one target, found {count}: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          once(
+              "  profile.isPrimaryServiceLocation = selected ? selected.primary : true;\n  profile.serviceLocationContacts = getPmosServiceLocationContacts_(profile.customerId);\n  return profile;",
+              "  profile.isPrimaryServiceLocation = selected ? selected.primary : true;\n  profile.serviceLocationContacts = getPmosServiceLocationContacts_(profile.customerId);\n  profile.accountBillingAddress = getPmosAccountBillingAddress_(profile.customerId);\n  return profile;"
+          )
+          once(
+              "  data.isPrimaryServiceLocation = selected ? selected.primary : true;\n  data.serviceLocationContacts = getPmosServiceLocationContacts_(customerId);\n  return data;",
+              "  data.isPrimaryServiceLocation = selected ? selected.primary : true;\n  data.serviceLocationContacts = getPmosServiceLocationContacts_(customerId);\n  data.accountBillingAddress = getPmosAccountBillingAddress_(customerId);\n  return data;"
+          )
+          once(
+              "  html = html.split('.applyPmosGoogleContactSync(').join('.applyPmosGoogleContactAccountSync(');",
+              "  html = html.split('.applyPmosGoogleContactSync(').join('.applyPmosGoogleContactAccountSync(');\n  html = html.split('.unlinkPmosCustomerGoogleContactPerson(').join('.unlinkPmosCustomerGoogleContactPersonForAccount(');\n  html = html.split('.unlinkPmosCustomerGoogleContact(').join('.unlinkPmosCustomerGoogleContactForAccount(');\n  html = html.split('.linkPmosCustomerGoogleContact(').join('.linkPmosCustomerGoogleContactForAccount(');\n  html = html.split('.createPmosGoogleContact(').join('.createPmosGoogleContactForAccount(');"
+          )
+          once(
+              "  html = pmosEnhanceCustomerAccountLookupWithLocationContacts_(html);\n  return pmosAccountTerminologyText_(html);",
+              "  html = pmosEnhanceCustomerAccountLookupWithLocationContacts_(html);\n  html = pmosEnhanceCustomerAccountLookupWithBillingAddress_(html);\n  return pmosAccountTerminologyText_(html);"
+          )
+          once(
+              "  html = pmosEnhanceCustomerAccountEditorWithLocationContacts_(html);\n  return pmosAccountTerminologyText_(html);",
+              "  html = pmosEnhanceCustomerAccountEditorWithLocationContacts_(html);\n  html = pmosEnhanceCustomerAccountEditorWithBillingAddress_(html);\n  return pmosAccountTerminologyText_(html);"
+          )
+          once(
+              "  htmlText = pmosEnhanceAddServiceLocationWithContacts_(htmlText);\n  htmlText = pmosAccountTerminologyText_(htmlText);",
+              "  htmlText = pmosEnhanceAddServiceLocationWithContacts_(htmlText);\n  htmlText = pmosEnhanceAddServiceLocationWithBillingAddress_(htmlText);\n  htmlText = pmosAccountTerminologyText_(htmlText);"
+          )
+
+          path.write_text(text)
+          PY
+
+          python3 tools/check_apps_script_globals.py
+          python3 tools/report_unused_apps_script_globals.py
+          : > /tmp/pmos-combined.js
+          while IFS= read -r -d '' file; do
+            printf '\n// ---- %s ----\n' "$file" >> /tmp/pmos-combined.js
+            cat "$file" >> /tmp/pmos-combined.js
+            printf '\n' >> /tmp/pmos-combined.js
+          done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
+          node --check /tmp/pmos-combined.js
+
+          rm -f .github/workflows/apply-account-contact-address-ui.yml
+          git config user.name 'PMOS GitHub Actions'
+          git config user.email 'maintenance.finnpools@gmail.com'
+          git add -A
+          git commit -m 'Integrate account billing and Google Contact address rules'
+          git push origin HEAD:pmos-development
