@@ -61,6 +61,15 @@
         if(name==='addcustomer')window.pmosActivateEquipmentScope('acWaterBodiesStore');
         if(name==='addmaintenance')window.pmosActivateEquipmentScope('amWaterBodiesStore');
       });
+
+      // Client.html still owns the original placeholder renderer. Migrated views
+      // register their real markup here so it can be restored immediately after
+      // those legacy placeholders are rendered during DOMContentLoaded.
+      window.pmosMigratedViewMarkup={};
+      window.pmosRegisterMigratedView=function(viewName){
+        var view=document.getElementById('view-'+viewName);
+        if(view)window.pmosMigratedViewMarkup[viewName]=view.innerHTML;
+      };
     </script>
     <script><?!= pmosEquipmentEditorScript ?></script>
     <script><?!= pmosServiceLocationContactScript ?></script>
@@ -145,7 +154,7 @@
         </section>
 
         <?!= include('Web_Add_Customer'); ?>
-        <script>window.pmosAddCustomerViewMarkup=document.getElementById('view-addcustomer').innerHTML;</script>
+        <script>window.pmosRegisterMigratedView('addcustomer');</script>
         <?!= include('Web_Add_Maintenance'); ?>
         <?!= include('Web_Customers'); ?>
 
@@ -194,16 +203,36 @@
 
     <?!= include('Client'); ?>
     <script>
-      // Client.html still renders placeholders for features that have not migrated.
-      // Preserve the real Add Customer workspace until that placeholder is removed
-      // during the broader client-shell cleanup.
       document.addEventListener('DOMContentLoaded',function(){
         setTimeout(function(){
-          var view=document.getElementById('view-addcustomer');
-          if(view&&window.pmosAddCustomerViewMarkup&&!document.getElementById('acCreateButton')){
-            view.innerHTML=window.pmosAddCustomerViewMarkup;
-          }
+          Object.keys(window.pmosMigratedViewMarkup||{}).forEach(function(name){
+            var view=document.getElementById('view-'+name);
+            if(view)view.innerHTML=window.pmosMigratedViewMarkup[name];
+          });
         },0);
+      });
+
+      // Cross-workspace handoff used by creation workflows. It intentionally uses
+      // the public Customer Look-Up DOM rather than reaching into that module's
+      // private functions, so the customer workspace remains independently owned.
+      document.addEventListener('pmos:open-customer',function(event){
+        var customerId=String(event.detail&&event.detail.customerId||'').trim();
+        if(!customerId)return;
+        var nav=document.querySelector('.nav-item[data-view="customers"]');
+        if(nav)nav.click();
+        var search=document.getElementById('customerSearch');
+        if(!search)return;
+        search.value=customerId;
+        search.dispatchEvent(new Event('input',{bubbles:true}));
+        var attempts=0;
+        var timer=setInterval(function(){
+          attempts++;
+          var button=Array.prototype.filter.call(document.querySelectorAll('.customer-result'),function(item){
+            return String(item.getAttribute('data-customer-id')||'')===customerId;
+          })[0];
+          if(button){clearInterval(timer);button.click();}
+          else if(attempts>=20)clearInterval(timer);
+        },150);
       });
     </script>
   </body>
