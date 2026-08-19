@@ -7,15 +7,17 @@
     addcustomer:['Add Customer','Create a non-maintenance customer account'],
     addmaintenance:['Add Maintenance Client','Create a maintenance client using the existing PMOS workflow'],
     customers:['Customer Look-Up','Search PMOS customers and open customer profiles'],
-    scheduling:['Scheduling','Schedule service work through PMOS'],
-    jobs:['Job Center','PMOS jobs, audits, review workflows, synchronization, and recovery'],
+    servicecall:['Service Call','Schedule customer service work through PMOS'],
+    tempmaintenance:['Temporary Maintenance','Schedule temporary maintenance visits through PMOS'],
+    openingclosing:['Opening / Closing','Schedule seasonal opening and closing work through PMOS'],
+    jobs:['PMOS Operations','PMOS jobs, audits, review workflows, synchronization, and recovery'],
     routes:['Route Manager','Route tools and route order management'],
     settings:['Settings','PMOS application and operational settings'],
     activity:['Activity & History','System activity, changes, and historical records']
   };
   const $=id=>document.getElementById(id);
   function server(name,...args){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));runner[name](...args);});}
-  function esc(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+  function esc(value){return String(value??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
   function setBusy(text){$('saveState').textContent=text||'Working…';}
   function notify(message,type='info'){const el=document.createElement('div');el.className=`alert ${type}`;el.textContent=message;$('alertRegion').prepend(el);setTimeout(()=>el.remove(),6000);}
   function setConnection(ok,text){$('connectionDot').className=`status-dot ${ok?'online':'error'}`;$('connectionText').textContent=text;}
@@ -34,13 +36,15 @@
     const cards={
       addcustomer:{title:'Add Customer',copy:'This will become the streamlined non-maintenance customer creation workflow. It will share Customer Identity, Account Contacts, Service Locations, Bodies of Water, Equipment, Entry Information, Customer Notes, and address validation components with the maintenance workflow.'},
       addmaintenance:{title:'Add Maintenance Client',copy:'The current PMOS Add Maintenance Client form flow will be brought into this workspace without changing its route-recommendation sequence during the initial Web App migration.'},
-      jobs:{title:'Job Center',copy:'This workspace will reproduce the full PMOS Job Center rather than a reduced Web-only version, including Calendar Plan Audit and the jobs, review, synchronization, and recovery tools that belong there.'},
+      servicecall:{title:'Service Call',copy:'This Scheduling workflow will create and route customer service work through PMOS.'},
+      tempmaintenance:{title:'Temporary Maintenance',copy:'This Scheduling workflow will use the existing PMOS temporary-maintenance scheduling logic.'},
+      openingclosing:{title:'Opening / Closing',copy:'This Scheduling workflow will use one entry point with Opening or Closing selected inside the form, allowing the downstream reporting workflow to follow the scheduled work type.'},
+      jobs:{title:'PMOS Operations',copy:'This workspace will reproduce the full PMOS Operations / Job Center rather than a reduced Web-only version, including Calendar Plan Audit and the jobs, review, synchronization, and recovery tools that belong there.'},
       settings:{title:'Settings',copy:'PMOS settings will be exposed here through the same validated settings services used by the operational system.'}
     };
     Object.entries(cards).forEach(([id,content])=>{
       $(`view-${id}`).innerHTML=`<article class="panel workspace-placeholder"><div class="panel-heading"><div><h2>${esc(content.title)}</h2><p>Web App development</p></div></div><p>${esc(content.copy)}</p></article>`;
     });
-    $('view-scheduling').innerHTML=`<article class="panel workspace-placeholder"><div class="panel-heading"><div><h2>Scheduling</h2><p>Create and route scheduled service work</p></div></div><div class="workspace-actions"><div class="workspace-action"><strong>Service Call</strong><span>Schedule customer service work.</span></div><div class="workspace-action"><strong>Temporary Maintenance</strong><span>Schedule temporary maintenance visits.</span></div><div class="workspace-action"><strong>Opening / Closing</strong><span>Use one scheduling entry point with Opening or Closing selected inside the workflow.</span></div></div><div class="workspace-note">These are navigation targets for the developing Web App. Their existing PMOS scheduling logic will be connected here as each workflow is migrated.</div></article>`;
   }
   async function load(){
     setBusy('Loading…');
