@@ -1,13 +1,19 @@
 /** User-facing terminology helpers for Customer Accounts. */
 function pmosAccountTerminologyText_(value) {
   if (value == null) return value;
-  return String(value)
+  let text = String(value)
     .replace(/household pool profile/gi, 'customer account')
     .replace(/household contacts/gi, 'additional contacts')
     .replace(/household contact/gi, 'additional contact')
     .replace(/household name/gi, 'account name')
     .replace(/relink this household/gi, 'relink this account')
     .replace(/this household/gi, 'this account');
+  if (typeof pmosEnhanceCustomerAccountEditorWithWaterMaintenance_ === 'function' &&
+      text.indexOf('id="customerStatus"') >= 0 &&
+      text.indexOf('id="frequency"') >= 0) {
+    text = pmosEnhanceCustomerAccountEditorWithWaterMaintenance_(text);
+  }
+  return text;
 }
 
 function pmosAccountTerminologyState_(value) {
