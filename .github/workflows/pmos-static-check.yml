@@ -31,3 +31,34 @@ jobs:
             printf '\n' >> /tmp/pmos-combined.js
           done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
           node --check /tmp/pmos-combined.js
+
+      - name: Check Web App client JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          paths = sorted(Path('.').glob('Web_*.html'))
+          client = Path('Client.html')
+          if client.exists():
+              paths.append(client)
+
+          checked = 0
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              scripts = re.findall(r'<script\b[^>]*>(.*?)</script>', text, flags=re.IGNORECASE | re.DOTALL)
+              scripts = [script for script in scripts if '<?' not in script]
+              if not scripts:
+                  continue
+              target = Path('/tmp') / ('pmos-web-' + re.sub(r'[^A-Za-z0-9_.-]+', '-', path.name) + '.js')
+              target.write_text('\n\n'.join(scripts), encoding='utf-8')
+              subprocess.run(['node', '--check', str(target)], check=True)
+              print('checked', path)
+              checked += 1
+
+          if not checked:
+              raise SystemExit('No Web App client scripts were found to validate.')
+          PY
