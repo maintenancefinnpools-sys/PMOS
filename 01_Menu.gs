@@ -25,7 +25,7 @@ function onOpen() {
           .addItem('Opening / Closing', 'showPmosOpeningClosingScheduler')
       )
       .addSeparator()
-      .addItem('Job Center', 'openPmosJobEngine')
+      .addItem('PMOS Operations', 'openPmosJobEngine')
       .addSubMenu(
         ui.createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
@@ -48,8 +48,6 @@ function onOpen() {
           .addItem('Update PMOS', 'updatePmos')
           .addItem('Update Center', 'showUpdateCenter')
       )
-      .addSeparator()
-      .addItem('Route Manager', 'showRouteManagerLink')
       .addSeparator()
       .addItem('Open PMOS Web App', 'showPmosWebAppLink');
   }
