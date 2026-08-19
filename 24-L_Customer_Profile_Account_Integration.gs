@@ -4,6 +4,12 @@
  * are launched from the selected account/profile rather than separate menu searches.
  */
 (function () {
+  if (typeof showEditCustomerInformationSearch === 'function') {
+    showEditCustomerInformationSearch = function() {
+      showCustomerLookup();
+    };
+  }
+
   if (typeof searchPmosCustomerProfiles === 'function') {
     const baseSearchPmosCustomerProfiles = searchPmosCustomerProfiles;
     searchPmosCustomerProfiles = function(query) {
@@ -12,14 +18,9 @@
       baseRows.forEach(function(row) {
         byCustomerId[String(row.customerId || '').trim()] = row;
       });
-      const accounts = listPmosCustomerAccountsForServiceLocations('');
       const cleanQuery = normalizePmosCustomerSearch_(query);
-      return accounts.map(function(account) {
+      return listPmosCustomerAccountsForServiceLocations('').map(function(account) {
         const primary = byCustomerId[account.customerId] || {};
-        const fullAccount = getPmosCustomerAccount_(account.customerId);
-        const aliases = fullAccount.locations.map(function(location) {
-          return [location.locationName, location.calendarTitle, location.address].filter(Boolean).join(' ');
-        }).join(' ');
         return {
           customerId: account.customerId,
           displayName: primary.displayName || account.displayName,
@@ -29,10 +30,10 @@
           phone: primary.phone || account.phone,
           email: primary.email || '',
           status: primary.status || 'Active',
-          serviceLocationCount: fullAccount.locations.length,
+          serviceLocationCount: Number(account.serviceLocationCount || 1),
           accountSearchText: normalizePmosCustomerSearch_([
             primary.displayName, primary.listName, primary.phone, primary.email,
-            aliases
+            account.address, account.phone
           ].join(' '))
         };
       }).filter(function(row) {
@@ -67,7 +68,7 @@
   if (typeof buildPmosCustomerLookupHtml_ === 'function') {
     const baseBuildPmosCustomerLookupHtml = buildPmosCustomerLookupHtml_;
     buildPmosCustomerLookupHtml_ = function(mode, initialCustomerId) {
-      let html = baseBuildPmosCustomerLookupHtml(mode, initialCustomerId);
+      let html = baseBuildPmosCustomerLookupHtml('LOOKUP', initialCustomerId);
       html = html.replace(
         '<button id="edit" class="edit">Edit Customer</button>',
         '<div class="profile-actions"><button id="addServiceLocation" class="profile-secondary" type="button">+ Add Service Location</button><button id="edit" class="edit" type="button">Edit Location</button></div>'
@@ -112,7 +113,9 @@ var addLocationButton=el('addServiceLocation');if(addLocationButton)addLocationB
       );
       html = html.replace(
         '</script></body></html>',
-        `<script>var addServiceLocationFromEditor=document.getElementById('addServiceLocationFromEditor');if(addServiceLocationFromEditor)addServiceLocationFromEditor.onclick=function(){this.disabled=true;google.script.run.withSuccessHandler(function(){setTimeout(function(){google.script.host.close()},250)}).withFailureHandler(function(error){addServiceLocationFromEditor.disabled=false;alert(error&&error.message?error.message:String(error))}).showPmosAddServiceLocation(${idJson})};</script></body></html>`
+        `
+var addServiceLocationFromEditor=document.getElementById('addServiceLocationFromEditor');if(addServiceLocationFromEditor)addServiceLocationFromEditor.onclick=function(){this.disabled=true;google.script.run.withSuccessHandler(function(){setTimeout(function(){google.script.host.close()},250)}).withFailureHandler(function(error){addServiceLocationFromEditor.disabled=false;alert(error&&error.message?error.message:String(error))}).showPmosAddServiceLocation(${idJson})};
+</script></body></html>`
       );
       return html;
     };
