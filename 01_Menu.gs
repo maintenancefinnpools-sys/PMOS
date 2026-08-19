@@ -50,7 +50,9 @@ function onOpen() {
           .addItem('Update Center', 'showUpdateCenter')
       )
       .addSeparator()
-      .addItem('Route Manager', 'showRouteManagerLink');
+      .addItem('Route Manager', 'showRouteManagerLink')
+      .addSeparator()
+      .addItem('Open PMOS Web App', 'showPmosWebAppLink');
   }
 
   menu.addToUi();
