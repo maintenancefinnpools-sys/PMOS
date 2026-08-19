@@ -30,6 +30,7 @@ function onOpen() {
         ui.createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
+          .addSeparator()
           .addItem('Chemical Catalog', 'showChemistryCatalog')
           .addSeparator()
           .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
