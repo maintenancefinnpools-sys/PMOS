@@ -265,7 +265,8 @@ function createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBil
   const hasBilling = Object.prototype.hasOwnProperty.call(request, 'accountBillingAddress');
   const billing = hasBilling ? normalizePmosAccountBillingAddress_(request.accountBillingAddress) : null;
   const result = createPmosAdditionalServiceLocationForAccountWithLocationContacts(request);
-  if (hasBilling) savePmosAccountBillingAddress_(result.customerId, billing);
+  const billingToSave = hasBilling ? billing : getPmosAccountBillingAddress_(result.customerId);
+  savePmosAccountBillingAddress_(result.customerId, billingToSave);
   const sync = syncPmosAccountHolderGoogleAddress_(result.customerId);
   if (sync.error) result.contactStatus = [result.contactStatus, 'Account holder Google Contact address could not be updated: ' + sync.error].filter(Boolean).join(' · ');
   result.accountBillingAddress = getPmosAccountBillingAddress_(result.customerId);
