@@ -1,6 +1,4 @@
 /** Keep account-level identity/contact fields synchronized across service-location Customer IDs. */
-let PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
-
 function syncPmosAccountSharedCustomerFields_(customerId) {
   const account = getPmosCustomerAccount_(customerId);
   if (!account.locations || account.locations.length < 2) return account;
@@ -53,48 +51,22 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
   SpreadsheetApp.flush();
 }
 
-(function () {
-  if (typeof assertMaintenanceClientNotDuplicate_ === 'function') {
-    const baseAssertMaintenanceClientNotDuplicateForAccount = assertMaintenanceClientNotDuplicate_;
-    assertMaintenanceClientNotDuplicate_ = function(table, name, address, email) {
-      return baseAssertMaintenanceClientNotDuplicateForAccount(
-        table,
-        name,
-        address,
-        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ ? '' : email
-      );
-    };
-  }
+function savePmosCustomerAccountEditorData(input) {
+  const result = savePmosCustomerEditorData(input);
+  result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
+  result.profile = getPmosCustomerAccountProfile(result.customerId);
+  return pmosAccountTerminologyState_(result);
+}
 
-  if (typeof savePmosCustomerEditorData === 'function') {
-    const baseSavePmosCustomerEditorDataForAccount = savePmosCustomerEditorData;
-    savePmosCustomerEditorData = function(input) {
-      const result = baseSavePmosCustomerEditorDataForAccount(input);
-      result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
-      result.profile = getPmosCustomerProfile(result.customerId);
-      return result;
-    };
+function createPmosAdditionalServiceLocationForAccount(input) {
+  const request = Object.assign({}, input || {}, {suppressInheritedEmailOnCreate: true});
+  const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
+  const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
+  const result = createPmosAdditionalServiceLocation(request);
+  if (primary && result && result.customerId) {
+    copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
+    syncPmosAccountSharedCustomerFields_(primary.customerId);
+    result.account = getPmosCustomerAccount_(result.customerId);
   }
-
-  if (typeof createPmosAdditionalServiceLocation === 'function') {
-    const baseCreatePmosAdditionalServiceLocation = createPmosAdditionalServiceLocation;
-    createPmosAdditionalServiceLocation = function(input) {
-      const request = input || {};
-      const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
-      const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
-      let result;
-      PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = true;
-      try {
-        result = baseCreatePmosAdditionalServiceLocation(request);
-      } finally {
-        PMOS_ALLOW_SHARED_ACCOUNT_EMAIL_CREATE_ = false;
-      }
-      if (primary && result && result.customerId) {
-        copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
-        syncPmosAccountSharedCustomerFields_(primary.customerId);
-        result.account = getPmosCustomerAccount_(result.customerId);
-      }
-      return result;
-    };
-  }
-})();
+  return pmosAccountTerminologyState_(result);
+}
