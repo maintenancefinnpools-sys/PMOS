@@ -13,8 +13,6 @@ function onOpen() {
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Customers')
           .addItem('Customer Lookup', 'showCustomerLookup')
-          .addItem('Edit Customer Information', 'showEditCustomerInformationSearch')
-          .addItem('Service Locations', 'showPmosServiceLocationSearch')
       )
       .addSeparator()
       .addSubMenu(
