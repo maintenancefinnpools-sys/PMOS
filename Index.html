@@ -32,9 +32,12 @@
             <button class="nav-item nav-subitem" data-view="customers"><span class="nav-icon">⌕</span><span>Customer Look-Up</span></button>
 
             <div class="nav-section">Operations</div>
-            <button class="nav-item" data-view="scheduling"><span class="nav-icon">▣</span><span>Scheduling</span></button>
-            <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>Job Center</span></button>
-            <button class="nav-item" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
+            <div class="nav-menu-label"><span class="nav-icon">▣</span><span>Scheduling</span></div>
+            <button class="nav-item nav-subitem" data-view="servicecall"><span class="nav-icon">•</span><span>Service Call</span></button>
+            <button class="nav-item nav-subitem" data-view="tempmaintenance"><span class="nav-icon">•</span><span>Temporary Maintenance</span></button>
+            <button class="nav-item nav-subitem" data-view="openingclosing"><span class="nav-icon">•</span><span>Opening / Closing</span></button>
+            <button class="nav-item nav-subitem" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
+            <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>PMOS Operations</span></button>
 
             <div class="nav-section">Administration</div>
             <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
@@ -87,7 +90,9 @@
 
         <?!= include('Web_Customers'); ?>
 
-        <section class="view" id="view-scheduling"></section>
+        <section class="view" id="view-servicecall"></section>
+        <section class="view" id="view-tempmaintenance"></section>
+        <section class="view" id="view-openingclosing"></section>
         <section class="view" id="view-jobs"></section>
 
         <section class="view" id="view-routes">
