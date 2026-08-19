@@ -51,9 +51,32 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
   SpreadsheetApp.flush();
 }
 
+function validatePmosAccountServiceLocationName_(customerId, requestedName) {
+  const account = getPmosCustomerAccount_(customerId);
+  const name = String(requestedName || '').trim();
+  if (!name) throw new Error('Enter a service location name.');
+  const duplicate = account.locations.some(function(location) {
+    return String(location.customerId) !== String(customerId) &&
+      normalize_(location.locationName || location.calendarTitle) === normalize_(name);
+  });
+  if (duplicate) throw new Error('This account already has a service location named ' + name + '.');
+  return {account: account, name: name};
+}
+
 function savePmosCustomerAccountEditorData(input) {
   try {
-    const result = savePmosCustomerEditorData(input);
+    const request = input || {};
+    const validation = validatePmosAccountServiceLocationName_(request.customerId, request.serviceLocationName);
+    const selected = validation.account.locations.filter(function(location) {
+      return String(location.customerId) === String(request.customerId);
+    })[0];
+    const result = savePmosCustomerEditorData(request);
+    applyPmosAccountIdentityToCustomerRow_(
+      result.customerId,
+      validation.account.accountId,
+      validation.name,
+      selected ? selected.primary : true
+    );
     result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
     result.profile = getPmosCustomerAccountProfile(result.customerId);
     return pmosAccountTerminologyState_(result);
