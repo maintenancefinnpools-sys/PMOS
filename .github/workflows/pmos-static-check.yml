@@ -62,3 +62,35 @@ jobs:
           if not checked:
               raise SystemExit('No Web App client scripts were found to validate.')
           PY
+
+      - name: Check Web App Apps Script endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gs_text = '\n'.join(path.read_text(encoding='utf-8') for path in sorted(Path('.').glob('*.gs')))
+          declared = set(re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(', gs_text))
+
+          paths = sorted(Path('.').glob('Web_*.html'))
+          client = Path('Client.html')
+          if client.exists():
+              paths.append(client)
+
+          calls = {}
+          pattern = re.compile(r'\b(?:call|server)\s*\(\s*[\'\"]([A-Za-z_$][\w$]*)[\'\"]')
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              for name in pattern.findall(text):
+                  calls.setdefault(name, set()).add(path.name)
+
+          missing = {name: files for name, files in calls.items() if name not in declared}
+          if missing:
+              for name in sorted(missing):
+                  print(f'Missing Apps Script endpoint {name}: {", ".join(sorted(missing[name]))}')
+              raise SystemExit(f'{len(missing)} Web App Apps Script endpoint(s) are missing.')
+
+          print(f'validated {len(calls)} Web App Apps Script endpoint(s)')
+          PY
