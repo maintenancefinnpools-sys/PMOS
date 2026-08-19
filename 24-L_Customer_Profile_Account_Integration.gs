@@ -162,6 +162,8 @@ function buildPmosCustomerAccountEditorHtml_(customerId, returnContext) {
   );
 
   html = html.split('.savePmosCustomerEditorData(').join('.savePmosCustomerAccountEditorData(');
+  html = html.split('.savePmosCustomerEditorExistingHouseholdContacts(').join('.savePmosCustomerEditorExistingAccountContacts(');
+  html = html.split('.returnFromPmosCustomerEditor(').join('.returnFromPmosCustomerAccountEditor(');
   html = html.split('.getPmosGoogleContactState(').join('.getPmosGoogleContactAccountState(');
   html = html.split('.previewPmosGoogleContactSync(').join('.previewPmosGoogleContactAccountSync(');
   html = html.split('.applyPmosGoogleContactSync(').join('.applyPmosGoogleContactAccountSync(');
@@ -174,6 +176,10 @@ var addServiceLocationFromEditor=document.getElementById('addServiceLocationFrom
   );
 
   return pmosAccountTerminologyText_(html);
+}
+
+function returnFromPmosCustomerAccountEditor(customerId, returnContext) {
+  showPmosCustomerAccountLookup(customerId);
 }
 
 function showPmosAddServiceLocation(customerId) {
