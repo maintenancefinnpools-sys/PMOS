@@ -89,6 +89,7 @@ function getPmosCustomerAccountProfile(customerId) {
   profile.locationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
   profile.isPrimaryServiceLocation = selected ? selected.primary : true;
   profile.serviceLocationContacts = getPmosServiceLocationContacts_(profile.customerId);
+  profile.accountBillingAddress = getPmosAccountBillingAddress_(profile.customerId);
   return profile;
 }
 
@@ -102,6 +103,7 @@ function getPmosCustomerAccountEditorData(customerId) {
   data.serviceLocationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
   data.isPrimaryServiceLocation = selected ? selected.primary : true;
   data.serviceLocationContacts = getPmosServiceLocationContacts_(customerId);
+  data.accountBillingAddress = getPmosAccountBillingAddress_(customerId);
   return data;
 }
 
@@ -124,6 +126,10 @@ function buildPmosCustomerAccountLookupHtml_(mode, initialCustomerId) {
   html = html.split('.getPmosGoogleContactState(').join('.getPmosGoogleContactAccountState(');
   html = html.split('.previewPmosGoogleContactSync(').join('.previewPmosGoogleContactAccountSync(');
   html = html.split('.applyPmosGoogleContactSync(').join('.applyPmosGoogleContactAccountSync(');
+  html = html.split('.unlinkPmosCustomerGoogleContactPerson(').join('.unlinkPmosCustomerGoogleContactPersonForAccount(');
+  html = html.split('.unlinkPmosCustomerGoogleContact(').join('.unlinkPmosCustomerGoogleContactForAccount(');
+  html = html.split('.linkPmosCustomerGoogleContact(').join('.linkPmosCustomerGoogleContactForAccount(');
+  html = html.split('.createPmosGoogleContact(').join('.createPmosGoogleContactForAccount(');
 
   html = html.replace(
     '</script></body></html>',
@@ -154,6 +160,7 @@ var addLocationButton=el('addServiceLocation');if(addLocationButton)addLocationB
   );
 
   html = pmosEnhanceCustomerAccountLookupWithLocationContacts_(html);
+  html = pmosEnhanceCustomerAccountLookupWithBillingAddress_(html);
   return pmosAccountTerminologyText_(html);
 }
 
@@ -195,6 +202,10 @@ function buildPmosCustomerAccountEditorHtml_(customerId, returnContext) {
   html = html.split('.getPmosGoogleContactState(').join('.getPmosGoogleContactAccountState(');
   html = html.split('.previewPmosGoogleContactSync(').join('.previewPmosGoogleContactAccountSync(');
   html = html.split('.applyPmosGoogleContactSync(').join('.applyPmosGoogleContactAccountSync(');
+  html = html.split('.unlinkPmosCustomerGoogleContactPerson(').join('.unlinkPmosCustomerGoogleContactPersonForAccount(');
+  html = html.split('.unlinkPmosCustomerGoogleContact(').join('.unlinkPmosCustomerGoogleContactForAccount(');
+  html = html.split('.linkPmosCustomerGoogleContact(').join('.linkPmosCustomerGoogleContactForAccount(');
+  html = html.split('.createPmosGoogleContact(').join('.createPmosGoogleContactForAccount(');
 
   html = html.replace(
     '</script></body></html>',
@@ -204,6 +215,7 @@ var addServiceLocationFromEditor=document.getElementById('addServiceLocationFrom
   );
 
   html = pmosEnhanceCustomerAccountEditorWithLocationContacts_(html);
+  html = pmosEnhanceCustomerAccountEditorWithBillingAddress_(html);
   return pmosAccountTerminologyText_(html);
 }
 
@@ -227,6 +239,7 @@ function showPmosAddServiceLocation(customerId) {
     'After this location is created, PMOS will open the new service location for editing so its bodies of water and equipment can be completed independently.'
   );
   htmlText = pmosEnhanceAddServiceLocationWithContacts_(htmlText);
+  htmlText = pmosEnhanceAddServiceLocationWithBillingAddress_(htmlText);
   htmlText = pmosAccountTerminologyText_(htmlText);
 
   const html = HtmlService.createHtmlOutput(htmlText).setWidth(980).setHeight(820);
