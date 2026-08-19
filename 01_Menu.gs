@@ -12,7 +12,7 @@ function onOpen() {
     menu
       .addSubMenu(
         SpreadsheetApp.getUi().createMenu('Customers')
-          .addItem('Customer Lookup', 'showCustomerLookup')
+          .addItem('Customer Lookup', 'showPmosCustomerAccountLookup')
       )
       .addSeparator()
       .addSubMenu(
