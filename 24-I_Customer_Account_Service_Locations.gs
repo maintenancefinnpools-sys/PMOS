@@ -175,12 +175,15 @@ function createPmosAdditionalServiceLocation(input) {
   const lastIndex = findHeaderIndex_(primaryRecord.headers, ['Last Name', 'Customer Name', 'Name']);
   const phoneIndex = findHeaderIndex_(primaryRecord.headers, ['Primary Phone', 'Phone Number', 'Phone']);
   const emailIndex = findHeaderIndex_(primaryRecord.headers, ['Email', 'Email Address']);
+  const primaryEmail = emailIndex >= 0 ? String(primaryRecord.values[emailIndex] || '').trim() : '';
 
   const payload = Object.assign({}, request, {
     firstName: String(request.firstName || (firstIndex >= 0 ? primaryRecord.values[firstIndex] : '') || '').trim(),
     lastName: String(request.lastName || (lastIndex >= 0 ? primaryRecord.values[lastIndex] : '') || '').trim(),
     phone: String(request.phone || (phoneIndex >= 0 ? primaryRecord.values[phoneIndex] : '') || '').trim(),
-    email: String(request.email || (emailIndex >= 0 ? primaryRecord.values[emailIndex] : '') || '').trim(),
+    email: request.suppressInheritedEmailOnCreate
+      ? ''
+      : String(request.email || primaryEmail || '').trim(),
     address: address,
     calendarTitle: locationName,
     serviceLocationName: locationName,
