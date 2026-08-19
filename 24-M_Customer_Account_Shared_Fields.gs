@@ -9,6 +9,7 @@ function syncPmosAccountSharedCustomerFields_(customerId) {
     ['Full Name(s)', 'Full Name'],
     ['Primary Phone', 'Phone Number', 'Phone'],
     ['Email', 'Email Address'],
+    ['Account Contacts JSON'],
     ['Google Contact Resource Names'],
     ['Google Contact Resource Name'],
     ['Google Contact ETag'],
