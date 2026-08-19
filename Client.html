@@ -35,8 +35,7 @@
   function renderFeatureViews(){
     const cards={
       servicecall:{title:'Service Call',copy:'This Scheduling workflow will create and route customer service work through PMOS.'},
-      openingclosing:{title:'Opening / Closing',copy:'This Scheduling workflow will use one entry point with Opening or Closing selected inside the form, allowing the downstream reporting workflow to follow the scheduled work type.'},
-      settings:{title:'Settings',copy:'PMOS settings will be exposed here through the same validated settings services used by the operational system.'}
+      openingclosing:{title:'Opening / Closing',copy:'This Scheduling workflow will use one entry point with Opening or Closing selected inside the form, allowing the downstream reporting workflow to follow the scheduled work type.'}
     };
     Object.entries(cards).forEach(([id,content])=>{
       $(`view-${id}`).innerHTML=`<article class="panel workspace-placeholder"><div class="panel-heading"><div><h2>${esc(content.title)}</h2><p>Web App development</p></div></div><p>${esc(content.copy)}</p></article>`;
