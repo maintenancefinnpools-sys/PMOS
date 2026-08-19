@@ -23,13 +23,13 @@ function pmosAccountTerminologyState_(value) {
 }
 
 function getPmosGoogleContactAccountState(customerId) {
-  return pmosAccountTerminologyState_(getPmosGoogleContactState(customerId));
+  return pmosAccountTerminologyState_(getPmosGoogleContactStateForAccount_(customerId));
 }
 
 function previewPmosGoogleContactAccountSync(customerId, direction) {
-  return pmosAccountTerminologyState_(previewPmosGoogleContactSync(customerId, direction));
+  return pmosAccountTerminologyState_(previewPmosGoogleContactAccountSyncWithAddress_(customerId, direction));
 }
 
 function applyPmosGoogleContactAccountSync(customerId, direction, resourceName) {
-  return pmosAccountTerminologyState_(applyPmosGoogleContactSync(customerId, direction, resourceName));
+  return pmosAccountTerminologyState_(applyPmosGoogleContactAccountSyncWithAddress_(customerId, direction, resourceName));
 }
