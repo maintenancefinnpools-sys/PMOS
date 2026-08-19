@@ -6,6 +6,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;700;900&display=swap" rel="stylesheet">
     <?!= include('Stylesheet'); ?>
+    <?!= include('Web_App_Shell'); ?>
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -17,20 +18,27 @@
           <img src="https://www.finnpools.ca/images/logo_only.png" class="brand-logo" alt="Finn Pools">
           <div>
             <strong>PMOS</strong>
-            <span>Route Manager</span>
+            <span>Finn Pools</span>
           </div>
         </div>
 
         <div class="sidebar-inner">
           <nav class="nav" aria-label="Primary navigation">
             <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
-            <button class="nav-item" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
-            <button class="nav-item" data-view="history"><span class="nav-icon">↶</span><span>Route History</span></button>
-            <button class="nav-item" data-view="calendar"><span class="nav-icon">▣</span><span>Calendar</span></button>
-            <button class="nav-item" data-view="chemistry"><span class="nav-icon">◌</span><span>Chemistry</span></button>
+
+            <div class="nav-section">Customers</div>
+            <button class="nav-item nav-subitem" data-view="addcustomer"><span class="nav-icon">＋</span><span>Add Customer</span></button>
+            <button class="nav-item nav-subitem" data-view="addmaintenance"><span class="nav-icon">＋</span><span>Add Maintenance Client</span></button>
+            <button class="nav-item nav-subitem" data-view="customers"><span class="nav-icon">⌕</span><span>Customer Look-Up</span></button>
+
+            <div class="nav-section">Operations</div>
+            <button class="nav-item" data-view="scheduling"><span class="nav-icon">▣</span><span>Scheduling</span></button>
             <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>Job Center</span></button>
+            <button class="nav-item" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
+
+            <div class="nav-section">Administration</div>
             <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
-            <button class="nav-item" data-view="featurelab"><span class="nav-icon">◇</span><span>Feature Lab</span></button>
+            <button class="nav-item" data-view="activity"><span class="nav-icon">↶</span><span>Activity &amp; History</span></button>
           </nav>
 
           <div class="sidebar-footer">
@@ -74,6 +82,14 @@
           </div>
         </section>
 
+        <section class="view" id="view-addcustomer"></section>
+        <section class="view" id="view-addmaintenance"></section>
+
+        <?!= include('Web_Customers'); ?>
+
+        <section class="view" id="view-scheduling"></section>
+        <section class="view" id="view-jobs"></section>
+
         <section class="view" id="view-routes">
           <div class="toolbar panel">
             <label>Route layer<select id="routeSelect"></select></label>
@@ -90,18 +106,14 @@
           </article>
         </section>
 
-        <section class="view" id="view-history">
+        <section class="view" id="view-settings"></section>
+
+        <section class="view" id="view-activity">
           <article class="panel">
-            <div class="panel-heading"><div><h2>Route History</h2><p>Restore a previous route snapshot. Restoration is itself backed up first.</p></div></div>
+            <div class="panel-heading"><div><h2>Route History</h2><p>Existing route snapshots remain available here while Activity &amp; History grows into the system-wide record.</p></div></div>
             <div id="historyList" class="stack"></div>
           </article>
         </section>
-
-        <section class="view" id="view-calendar"></section>
-        <section class="view" id="view-chemistry"></section>
-        <section class="view" id="view-jobs"></section>
-        <section class="view" id="view-settings"></section>
-        <section class="view" id="view-featurelab"></section>
       </main>
     </div>
 
