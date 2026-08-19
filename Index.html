@@ -21,6 +21,7 @@
           if(explicit)return explicit;
           if(node.closest&&node.closest('#view-addmaintenance'))return'amWaterBodiesStore';
           if(node.closest&&node.closest('#view-addcustomer'))return'acWaterBodiesStore';
+          if(node.closest&&node.closest('#ceBackdrop'))return'ceWaterBodiesStore';
           return'';
         };
         if(current){
@@ -91,6 +92,7 @@
         <?!= include('Web_Add_Customer'); ?>
         <?!= include('Web_Add_Maintenance'); ?>
         <?!= include('Web_Customers'); ?>
+        <?!= include('Web_Customer_Edit'); ?>
         <?!= include('Web_Scheduled_Work'); ?>
         <?!= include('Web_Temporary_Maintenance'); ?>
         <?!= include('Web_Pmos_Operations'); ?>
