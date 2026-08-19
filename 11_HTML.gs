@@ -24,6 +24,8 @@ function getPmosWebAppBootstrap() {
     schemaVersion: props.getProperty('PMOS_SCHEMA_VERSION') || '',
     spreadsheetName: SpreadsheetApp.getActive().getName(),
     timezone: PMOS.TIMEZONE,
-    deploymentUrl: ScriptApp.getService().getUrl() || ''
+    deploymentUrl: typeof getPmosWebAppUrl_ === 'function'
+      ? getPmosWebAppUrl_()
+      : (ScriptApp.getService().getUrl() || '')
   };
 }
