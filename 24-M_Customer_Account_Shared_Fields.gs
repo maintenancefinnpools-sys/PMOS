@@ -52,21 +52,40 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
 }
 
 function savePmosCustomerAccountEditorData(input) {
-  const result = savePmosCustomerEditorData(input);
-  result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
-  result.profile = getPmosCustomerAccountProfile(result.customerId);
-  return pmosAccountTerminologyState_(result);
+  try {
+    const result = savePmosCustomerEditorData(input);
+    result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
+    result.profile = getPmosCustomerAccountProfile(result.customerId);
+    return pmosAccountTerminologyState_(result);
+  } catch (error) {
+    if (error && error.message) error.message = pmosAccountTerminologyText_(error.message);
+    throw error;
+  }
+}
+
+function savePmosCustomerEditorExistingAccountContacts(customerId, contacts, removedResourceNames) {
+  try {
+    return savePmosCustomerEditorExistingHouseholdContacts(customerId, contacts, removedResourceNames);
+  } catch (error) {
+    if (error && error.message) error.message = pmosAccountTerminologyText_(error.message);
+    throw error;
+  }
 }
 
 function createPmosAdditionalServiceLocationForAccount(input) {
-  const request = Object.assign({}, input || {}, {suppressInheritedEmailOnCreate: true});
-  const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
-  const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
-  const result = createPmosAdditionalServiceLocation(request);
-  if (primary && result && result.customerId) {
-    copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
-    syncPmosAccountSharedCustomerFields_(primary.customerId);
-    result.account = getPmosCustomerAccount_(result.customerId);
+  try {
+    const request = Object.assign({}, input || {}, {suppressInheritedEmailOnCreate: true});
+    const accountBefore = getPmosCustomerAccount_(request.parentCustomerId);
+    const primary = accountBefore.locations.filter(function(location) { return location.primary; })[0] || accountBefore.locations[0];
+    const result = createPmosAdditionalServiceLocation(request);
+    if (primary && result && result.customerId) {
+      copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
+      syncPmosAccountSharedCustomerFields_(primary.customerId);
+      result.account = getPmosCustomerAccount_(result.customerId);
+    }
+    return pmosAccountTerminologyState_(result);
+  } catch (error) {
+    if (error && error.message) error.message = pmosAccountTerminologyText_(error.message);
+    throw error;
   }
-  return pmosAccountTerminologyState_(result);
 }
