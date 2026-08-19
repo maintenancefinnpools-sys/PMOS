@@ -2,6 +2,29 @@
  * PMOS v1.9.0 — Web application entry point.
  */
 
+/** Stable production/development Web App deployment used by the Sheets menu. */
+const PMOS_WEB_APP_DEPLOYMENT_URL =
+  'https://script.google.com/macros/s/AKfycbz-dBP_IPG9kQr9-d-PcmZGySJxy3J1epj3yt3YAe6JQcKV8Iyviagys2n-XlkY93jtuw/exec';
+
+/**
+ * Returns the Web App URL used by PMOS entry points.
+ *
+ * A Document Property may override the checked-in deployment URL later without
+ * changing code. This is intentionally preferred over ScriptApp.getService().getUrl(),
+ * because a spreadsheet-bound execution can report an older deployment URL even
+ * when the Web App deployment itself has been updated to a newer version.
+ */
+function getPmosWebAppUrl_() {
+  const props = PropertiesService.getDocumentProperties();
+  const configured = String(props.getProperty('PMOS_WEB_APP_URL') || '').trim();
+  if (configured) return configured;
+
+  const stable = String(PMOS_WEB_APP_DEPLOYMENT_URL || '').trim();
+  if (stable) return stable;
+
+  return String(ScriptApp.getService().getUrl() || '').trim();
+}
+
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   template.pmosVersion = PMOS_VERSION;
@@ -73,7 +96,7 @@ function preparePmosWebAddCustomer() {
  * new tab, the bridge remains visible with a normal fallback link.
  */
 function showPmosWebAppLink() {
-  const url = ScriptApp.getService().getUrl();
+  const url = getPmosWebAppUrl_();
   if (!url) {
     SpreadsheetApp.getUi().alert(
       'PMOS Web App is not deployed yet. In Apps Script, use Deploy → New deployment → Web app, then reopen the PMOS menu.'
