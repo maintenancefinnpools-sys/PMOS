@@ -15,7 +15,7 @@ function onOpen() {
         ui.createMenu('Customers')
           .addItem('Add Customer', 'showPmosAddCustomer')
           .addItem('Add Maintenance Customer', 'showAddMaintenanceClientV2')
-          .addItem('Customer Lookup / Profiles', 'showPmosCustomerAccountLookup')
+          .addItem('Customer Lookup', 'showPmosCustomerAccountLookup')
       )
       .addSeparator()
       .addSubMenu(
@@ -32,10 +32,7 @@ function onOpen() {
           .addItem('Routing Settings', 'showPmosRoutingSettings')
           .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
           .addSeparator()
-          .addItem('Chemistry Catalog', 'showChemistryCatalog')
-          .addItem('Feature Lab', 'showFeatureLab')
-          .addSeparator()
-          .addItem('Update Permissions', 'updatePmosPermissions')
+          .addItem('Chemical Catalog', 'showChemistryCatalog')
       )
       .addSeparator()
       .addSubMenu(
@@ -46,6 +43,8 @@ function onOpen() {
       )
       .addSubMenu(
         ui.createMenu('Updates')
+          .addItem('Update Permissions', 'updatePmosPermissions')
+          .addSeparator()
           .addItem('Update PMOS', 'updatePmos')
           .addItem('Update Center', 'showUpdateCenter')
       )
