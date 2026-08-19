@@ -159,7 +159,8 @@
         <?!= include('Web_Customers'); ?>
 
         <section class="view" id="view-servicecall"></section>
-        <section class="view" id="view-tempmaintenance"></section>
+        <?!= include('Web_Temporary_Maintenance'); ?>
+        <script>window.pmosRegisterMigratedView('tempmaintenance');</script>
         <section class="view" id="view-openingclosing"></section>
         <section class="view" id="view-jobs"></section>
 
