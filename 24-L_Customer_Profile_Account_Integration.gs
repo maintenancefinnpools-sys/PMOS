@@ -88,6 +88,7 @@ function getPmosCustomerAccountProfile(customerId) {
   profile.selectedServiceLocation = selected;
   profile.locationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
   profile.isPrimaryServiceLocation = selected ? selected.primary : true;
+  profile.serviceLocationContacts = getPmosServiceLocationContacts_(profile.customerId);
   return profile;
 }
 
@@ -100,6 +101,7 @@ function getPmosCustomerAccountEditorData(customerId) {
   data.accountName = account.accountName;
   data.serviceLocationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
   data.isPrimaryServiceLocation = selected ? selected.primary : true;
+  data.serviceLocationContacts = getPmosServiceLocationContacts_(customerId);
   return data;
 }
 
@@ -151,6 +153,7 @@ var addLocationButton=el('addServiceLocation');if(addLocationButton)addLocationB
 </script></body></html>`
   );
 
+  html = pmosEnhanceCustomerAccountLookupWithLocationContacts_(html);
   return pmosAccountTerminologyText_(html);
 }
 
@@ -200,6 +203,7 @@ var addServiceLocationFromEditor=document.getElementById('addServiceLocationFrom
 </script></body></html>`
   );
 
+  html = pmosEnhanceCustomerAccountEditorWithLocationContacts_(html);
   return pmosAccountTerminologyText_(html);
 }
 
@@ -222,6 +226,7 @@ function showPmosAddServiceLocation(customerId) {
     'After this location is created, PMOS will open it in Edit Customer Information so its bodies of water and equipment can be completed independently.',
     'After this location is created, PMOS will open the new service location for editing so its bodies of water and equipment can be completed independently.'
   );
+  htmlText = pmosEnhanceAddServiceLocationWithContacts_(htmlText);
   htmlText = pmosAccountTerminologyText_(htmlText);
 
   const html = HtmlService.createHtmlOutput(htmlText).setWidth(980).setHeight(820);
