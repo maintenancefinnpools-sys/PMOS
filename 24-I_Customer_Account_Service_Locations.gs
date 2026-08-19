@@ -3,7 +3,7 @@
  *
  * Each independently serviced property keeps its own Customer ID, so PMOS's
  * existing route, Calendar, status, equipment, and sync identities remain
- * unchanged. Account ID groups those Customer IDs into one household/account.
+ * unchanged. Account ID groups those Customer IDs into one customer account.
  */
 function ensurePmosCustomerAccountIds_() {
   const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
@@ -39,16 +39,37 @@ function ensurePmosCustomerAccountIds_() {
       sheet.getRange(rowNumber, accountIdIndex + 1).setValue(customerId);
       changed = true;
     }
-    if (primaryIndex >= 0 && !String(row[primaryIndex] || '').trim()) {
-      sheet.getRange(rowNumber, primaryIndex + 1).setValue('Yes');
+
+    let primaryValue = primaryIndex >= 0 ? String(row[primaryIndex] || '').trim() : 'Yes';
+    if (primaryIndex >= 0 && !primaryValue) {
+      primaryValue = 'Yes';
+      sheet.getRange(rowNumber, primaryIndex + 1).setValue(primaryValue);
       changed = true;
     }
-    if (locationNameIndex >= 0 && !String(row[locationNameIndex] || '').trim()) {
-      const defaultName = [calendarTitleIndex, lastNameIndex, fullNameIndex]
-        .map(function(column) { return column >= 0 ? String(row[column] || '').trim() : ''; })
-        .filter(Boolean)[0] || 'Primary';
-      sheet.getRange(rowNumber, locationNameIndex + 1).setValue(defaultName);
-      changed = true;
+
+    if (locationNameIndex >= 0) {
+      const currentName = String(row[locationNameIndex] || '').trim();
+      const lastName = lastNameIndex >= 0 ? String(row[lastNameIndex] || '').trim() : '';
+      const fullName = fullNameIndex >= 0 ? String(row[fullNameIndex] || '').trim() : '';
+      const calendarTitle = calendarTitleIndex >= 0 ? String(row[calendarTitleIndex] || '').trim() : '';
+      const isPrimary = String(primaryValue || 'Yes').toLowerCase() !== 'no';
+      let defaultName = currentName;
+
+      if (!currentName) {
+        defaultName = isPrimary && lastName
+          ? lastName + ' Residence'
+          : calendarTitle || lastName || fullName || 'Service Location';
+      } else if (isPrimary && lastName) {
+        const normalizedCurrent = normalize_(currentName);
+        const legacyNames = [lastName, fullName, 'Primary'].filter(Boolean).map(normalize_);
+        if (normalize_(calendarTitle) === normalize_(lastName)) legacyNames.push(normalize_(calendarTitle));
+        if (legacyNames.indexOf(normalizedCurrent) >= 0) defaultName = lastName + ' Residence';
+      }
+
+      if (defaultName !== currentName) {
+        sheet.getRange(rowNumber, locationNameIndex + 1).setValue(defaultName);
+        changed = true;
+      }
     }
   });
 
@@ -101,11 +122,14 @@ function getPmosCustomerAccount_(customerId) {
     );
   });
 
+  const firstName = firstNameIndex >= 0 ? String(selected[firstNameIndex] || '').trim() : '';
+  const lastName = lastNameIndex >= 0 ? String(selected[lastNameIndex] || '').trim() : '';
   return {
     accountId: accountId,
+    accountName: lastName || firstName || accountId,
     selectedCustomerId: String(selected[idIndex] || '').trim(),
-    firstName: firstNameIndex >= 0 ? String(selected[firstNameIndex] || '').trim() : '',
-    lastName: lastNameIndex >= 0 ? String(selected[lastNameIndex] || '').trim() : '',
+    firstName: firstName,
+    lastName: lastName,
     phone: phoneIndex >= 0 ? String(selected[phoneIndex] || '').trim() : '',
     email: emailIndex >= 0 ? String(selected[emailIndex] || '').trim() : '',
     locations: locations
