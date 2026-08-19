@@ -124,9 +124,12 @@ function getPmosCustomerAccount_(customerId) {
 
   const firstName = firstNameIndex >= 0 ? String(selected[firstNameIndex] || '').trim() : '';
   const lastName = lastNameIndex >= 0 ? String(selected[lastNameIndex] || '').trim() : '';
+  const accountName = lastName && firstName
+    ? lastName + ', ' + firstName
+    : lastName || firstName || accountId;
   return {
     accountId: accountId,
-    accountName: lastName || firstName || accountId,
+    accountName: accountName,
     selectedCustomerId: String(selected[idIndex] || '').trim(),
     firstName: firstName,
     lastName: lastName,
