@@ -94,3 +94,46 @@ jobs:
 
           print(f'validated {len(calls)} Web App Apps Script endpoint(s)')
           PY
+
+      - name: Check Web App view and template structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import defaultdict
+          from pathlib import Path
+          import re
+
+          index = Path('Index.html')
+          if not index.exists():
+              raise SystemExit('Index.html is missing.')
+          index_text = index.read_text(encoding='utf-8')
+
+          include_names = re.findall(r"include\(\s*['\"]([^'\"]+)['\"]\s*\)", index_text)
+          missing_includes = [name for name in include_names if not Path(name + '.html').exists()]
+          if missing_includes:
+              raise SystemExit('Missing Web App include file(s): ' + ', '.join(sorted(set(missing_includes))))
+
+          source_paths = [index] + sorted(Path('.').glob('Web_*.html'))
+          ids = defaultdict(list)
+          view_ids = set()
+          for path in source_paths:
+              text = path.read_text(encoding='utf-8')
+              for value in re.findall(r'\bid\s*=\s*[\'\"]([^\'\"]+)[\'\"]', text, flags=re.IGNORECASE):
+                  ids[value].append(path.name)
+                  if value.startswith('view-'):
+                      view_ids.add(value[5:])
+
+          duplicate_ids = {value: files for value, files in ids.items() if len(files) > 1}
+          if duplicate_ids:
+              for value in sorted(duplicate_ids):
+                  print(f'Duplicate static DOM id {value}: {", ".join(duplicate_ids[value])}')
+              raise SystemExit(f'{len(duplicate_ids)} duplicate static DOM id(s) found.')
+
+          nav_views = set(re.findall(r'\bdata-view\s*=\s*[\'\"]([^\'\"]+)[\'\"]', index_text, flags=re.IGNORECASE))
+          missing_views = sorted(nav_views - view_ids)
+          if missing_views:
+              raise SystemExit('Sidebar route(s) without Web view: ' + ', '.join(missing_views))
+
+          print(f'validated {len(include_names)} template include(s), {len(nav_views)} sidebar route(s), and {len(ids)} static DOM id(s)')
+          PY
