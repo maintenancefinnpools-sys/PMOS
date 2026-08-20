@@ -13,14 +13,14 @@ function onOpen() {
     menu
       .addSubMenu(
         ui.createMenu('Customers')
-          .addItem('Customer Lookup', 'showPmosCustomerAccountLookup')
-          .addItem('Add Customer', 'showPmosAddCustomer')
-          .addItem('Add Maintenance Customer', 'showAddMaintenanceClientV2')
+          .addItem('Customer Lookup', 'showPmosCustomerAccountLookupRuntime')
+          .addItem('Add Customer', 'showPmosAddCustomerRuntime')
+          .addItem('Add Maintenance Customer', 'showAddMaintenanceCustomerRuntime')
       )
       .addSeparator()
       .addSubMenu(
         ui.createMenu('Scheduling')
-          .addItem('Temporary Maintenance', 'showTemporaryVisitSchedulerV3')
+          .addItem('Temporary Maintenance', 'showPmosTemporaryMaintenanceRuntime')
           .addItem('Service Call', 'showPmosServiceCallScheduler')
           .addItem('Opening / Closing', 'showPmosOpeningClosingScheduler')
       )
