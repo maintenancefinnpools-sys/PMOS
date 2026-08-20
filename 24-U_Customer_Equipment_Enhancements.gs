@@ -1,0 +1,173 @@
+/**
+ * Shared equipment/catalog enhancements used by every PMOS customer form.
+ *
+ * Extends the common editor rather than creating Sheets/Web variants. Adds
+ * broader legacy pump/chlorinator coverage, explicit chemistry-automation
+ * accessories, and solar-heating sub-equipment.
+ */
+(function () {
+  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
+    const baseStyles = pmosCustomerEquipmentEditorStyles_;
+    pmosCustomerEquipmentEditorStyles_ = function () {
+      return baseStyles() +
+        '.pmos-solar-panel{grid-column:1/-1;margin-top:4px;padding:9px;border:1px solid #d5e0e5;border-radius:8px;background:#f7fafb}' +
+        '.pmos-solar-title{margin-bottom:7px;color:#293944;font-size:10px;font-weight:900}' +
+        '.pmos-solar-options{display:flex;gap:8px;flex-wrap:wrap}' +
+        '.pmos-solar-option{display:grid;gap:7px;min-width:190px;flex:1 1 220px;padding:8px;border:1px solid #dce5e8;border-radius:7px;background:#fff}' +
+        '.pmos-solar-fields{display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}' +
+        '.pmos-solar-fields.open{display:grid}' +
+        '.pmos-solar-fields label{display:flex;flex-direction:column;gap:4px;color:#6f7d84;font-size:9px;font-weight:900;text-transform:uppercase}' +
+        '.pmos-solar-fields input{width:100%;min-height:34px;padding:6px 8px;border:1px solid #bfcbd1;border-radius:7px;background:#fff;color:#293944;font:inherit}' +
+        '@media(max-width:760px){.pmos-solar-fields{grid-template-columns:1fr}}';
+    };
+  }
+
+  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
+  const baseScript = pmosCustomerEquipmentEditorScript_;
+  pmosCustomerEquipmentEditorScript_ = function () {
+    return baseScript() + String.raw`
+(function(){
+  function pmosNormEquipmentNumber(value){return String(value||'').trim().toUpperCase().replace(/[\s_]/g,'-')}
+  function pmosCatalogNumberValue(item){return typeof item==='string'?item:(item&&item.value)||''}
+  function pmosAppendEquipmentModel(unit,make,name,numbers){
+    PMOS_EQUIPMENT_CATALOG[unit]=PMOS_EQUIPMENT_CATALOG[unit]||{};PMOS_EQUIPMENT_CATALOG[unit][make]=PMOS_EQUIPMENT_CATALOG[unit][make]||[];
+    var list=PMOS_EQUIPMENT_CATALOG[unit][make],existing=list.filter(function(item){return String(item.name||'').toLowerCase()===String(name||'').toLowerCase()})[0];
+    if(!existing){existing={name:name,numbers:[]};list.push(existing)}
+    var seen={};(existing.numbers||[]).forEach(function(value){seen[pmosNormEquipmentNumber(pmosCatalogNumberValue(value))]=true});
+    (numbers||[]).forEach(function(value){var key=pmosNormEquipmentNumber(pmosCatalogNumberValue(value));if(key&&!seen[key]){existing.numbers.push(value);seen[key]=true}})
+  }
+  function pmosAppendSanitizerModel(type,make,name,numbers){
+    PMOS_SANITIZER_CATALOG[type]=PMOS_SANITIZER_CATALOG[type]||{};PMOS_SANITIZER_CATALOG[type][make]=PMOS_SANITIZER_CATALOG[type][make]||[];
+    var list=PMOS_SANITIZER_CATALOG[type][make],existing=list.filter(function(item){return String(item.name||'').toLowerCase()===String(name||'').toLowerCase()})[0];
+    if(!existing){existing={name:name,numbers:[]};list.push(existing)}
+    var seen={};(existing.numbers||[]).forEach(function(value){seen[pmosNormEquipmentNumber(pmosCatalogNumberValue(value))]=true});
+    (numbers||[]).forEach(function(value){var key=pmosNormEquipmentNumber(pmosCatalogNumberValue(value));if(key&&!seen[key]){existing.numbers.push(value);seen[key]=true}})
+  }
+
+  /* Hayward MaxFlo XL single-speed family. */
+  pmosAppendEquipmentModel('pump','Hayward','MaxFlo XL Single-Speed 0.75 HP',['SP2305X7','SP2305X7EE','SP2305X7EESP']);
+  pmosAppendEquipmentModel('pump','Hayward','MaxFlo XL Single-Speed 1.0 HP',['SP2307X10']);
+  pmosAppendEquipmentModel('pump','Hayward','MaxFlo XL Single-Speed 1.5 HP',['SP2310X15']);
+  pmosAppendEquipmentModel('pump','Hayward','MaxFlo XL Single-Speed 2.0 HP',['SP2315X20']);
+
+  /* Jandy legacy/current single-speed families retained for field identification. */
+  pmosAppendEquipmentModel('pump','Jandy','FloPro Single-Speed',['FHPM.75','FHPM1.0','FHPM1.5','FHPM2.0','FHPM2.5']);
+  pmosAppendEquipmentModel('pump','Jandy','Stealth SHPF Single-Speed',['SHPF.50','SHPF.75','SHPF1.0','SHPF1.5','SHPF2.0','SHPF3.0','SHPF5.0','SHPF5.0TEFC','SHPF1.0-3PH','SHPF1.5-3PH','SHPF2.0-3PH','SHPF3.0-3PH','SHPF5.0-3PH']);
+  pmosAppendEquipmentModel('pump','Jandy','Stealth SHPM Single-Speed',['SHPM.75','SHPM1.0','SHPM1.5','SHPM2.0','SHPM2.5']);
+
+  /* Sta-Rite Max-E-Pro single-speed/legacy identifiers. */
+  pmosAppendEquipmentModel('pump','Sta-Rite','Max-E-Pro Single-Speed',['348185','P6E6C-204L-INT','P6E6D-205L-INT','348150-INT','348151-INT','348152-INT','348153-INT']);
+
+  /* Hayward residential and commercial tablet/puck feeders, including legacy commercial sizes. */
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','CL100 Inline',['CL100','CL100EF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','CL110 Offline',['CL110']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','CL200 Inline',['CL200','CL200EF','CL2002S']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','CL220 Offline',['CL220','CL220EF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','Commercial Chemical Feeder 16 lb',['C250EXP','C0250EXPE','C250CF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','Commercial Chemical Feeder 30 lb',['C500EXP','C0500EXPE','C500CF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','Commercial Chemical Feeder 50 lb (Legacy)',['C1100CF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','Commercial Chemical Feeder 70 lb (Legacy)',['C1800CF']);
+  pmosAppendSanitizerModel('CHLORINE_FEEDER','Hayward','Commercial Chemical Feeder 90 lb (Legacy)',['C2400CF']);
+
+  var PMOS_SOLAR_AUTOMATION_CATALOG={
+    Pentair:[
+      {name:'SolarTouch Control Only',numbers:['521590']},
+      {name:'SolarTouch Drain-Down Valve Package',numbers:['521592']},
+      {name:'SolarTouch 3-Way Valve Package',numbers:['521632']},
+      {name:'SunTouch Solar Control System (Legacy)',numbers:['520819']},
+      {name:'SunTouch Solar with 3-Way Valve (Legacy)',numbers:['520856']},
+      {name:'SunTouch Booster Pump Version (Legacy)',numbers:['520857']},
+      {name:'SunTouch Single Body Control (Legacy)',numbers:['520859']},
+      {name:'SunTouch Pool/Spa Control (Legacy)',numbers:['520820']}
+    ],
+    'Hayward / Goldline':[{name:'AquaSolar GL-235 (Legacy)',numbers:['GL-235']}]
+  };
+
+  function pmosFindEquipmentByNumber(unit,value){
+    var target=pmosNormEquipmentNumber(value),found=null;if(!target)return null;
+    Object.keys(PMOS_EQUIPMENT_CATALOG[unit]||{}).some(function(make){return (PMOS_EQUIPMENT_CATALOG[unit][make]||[]).some(function(model){var exact=(model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(pmosCatalogNumberValue(number))===target})[0];if(exact){found={make:make,model:model.name,modelNumber:pmosCatalogNumberValue(exact)};return true}return false})});return found
+  }
+  function pmosFindSanitizerByTypeNumber(type,value){
+    var target=pmosNormEquipmentNumber(value),found=null;if(!target)return null;
+    Object.keys(PMOS_SANITIZER_CATALOG[type]||{}).some(function(make){return (PMOS_SANITIZER_CATALOG[type][make]||[]).some(function(model){var exact=(model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(pmosCatalogNumberValue(number))===target})[0];if(exact){found={make:make,model:model.name,modelNumber:pmosCatalogNumberValue(exact)};return true}return false})});return found
+  }
+  function pmosFindSolarAutomationByNumber(value){
+    var target=pmosNormEquipmentNumber(value),found=null;if(!target)return null;Object.keys(PMOS_SOLAR_AUTOMATION_CATALOG).some(function(make){return PMOS_SOLAR_AUTOMATION_CATALOG[make].some(function(model){var exact=(model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(number)===target})[0];if(exact){found={make:make,model:model.name,modelNumber:exact};return true}return false})});return found
+  }
+
+  /* Correct reverse lookup inside the sanitizer type selected on the card. */
+  document.addEventListener('input',function(event){var input=event.target;if(!input||input.getAttribute('data-equipment-field')!=='modelNumber')return;var card=input.closest('.equipment-card'),type=card&&card.getAttribute('data-equipment-type');if(!type||!PMOS_SANITIZER_CATALOG[type])return;var match=pmosFindSanitizerByTypeNumber(type,input.value);if(!match)return;var make=card.querySelector('[data-equipment-field="make"]'),model=card.querySelector('[data-equipment-field="model"]');if(make){make.value=match.make;make.dispatchEvent(new Event('input',{bubbles:true}))}if(model){model.value=match.model;model.dispatchEvent(new Event('input',{bubbles:true}))}input.value=match.modelNumber});
+
+  /* Solar is a heating method, but collector make/model may be freely typed. */
+  var baseTypedCatalogModels=typedCatalogModels;
+  typedCatalogModels=function(unit,make,type){if(unit==='heater'&&String(type||'').trim().toLowerCase()==='solar')return[];return baseTypedCatalogModels(unit,make,type)};
+
+  function pmosEnsureSolarHeaterOptions(root){
+    Array.prototype.forEach.call((root||document).querySelectorAll('datalist[id*="HeaterTypes"],datalist[id*="heaterTypes"]'),function(list){if(!Array.prototype.some.call(list.options,function(option){return String(option.value||'').toLowerCase()==='solar'})){var option=document.createElement('option');option.value='Solar';list.appendChild(option)}});
+  }
+  function pmosSolarInput(label,key,listHtml){return '<label>'+label+'<input data-solar-field="'+key+'" '+(listHtml||'')+'></label>'}
+  function pmosSolarToggleHtml(kind,label,fields){return '<div class="pmos-solar-option" data-solar-kind="'+kind+'"><label class="check-row"><input type="checkbox" data-solar-enabled="'+kind+'"> '+label+'</label><div class="pmos-solar-fields">'+fields+'</div></div>'}
+  function pmosSolarAutomationMakes(suffix){return '<datalist id="solarAutomationMakes_'+suffix+'">'+Object.keys(PMOS_SOLAR_AUTOMATION_CATALOG).map(function(make){return '<option value="'+esc(make)+'">'}).join('')+'</datalist>'}
+  function pmosPumpMakes(suffix){return '<datalist id="solarPumpMakes_'+suffix+'">'+Object.keys(PMOS_EQUIPMENT_CATALOG.pump||{}).map(function(make){return '<option value="'+esc(make)+'">'}).join('')+'</datalist>'}
+  function pmosActuatorMakes(suffix){return '<datalist id="solarActuatorMakes_'+suffix+'">'+Object.keys(PMOS_VALVE_ACTUATOR_CATALOG||{}).map(function(make){return '<option value="'+esc(make)+'">'}).join('')+'</datalist>'}
+
+  function pmosInstallSolarPanel(host){
+    if(!host||host.querySelector('.pmos-solar-panel'))return;var grid=host.classList.contains('water-body')?host.querySelector('.body-grid'):host.querySelector('.equipment-grid');if(!grid)return;var suffix='solar_'+Date.now()+'_'+Math.round(Math.random()*100000),panel=document.createElement('div');panel.className='pmos-solar-panel';panel.style.display='none';
+    panel.innerHTML='<div class="pmos-solar-title">Optional Solar Equipment</div><div class="pmos-solar-options">'+
+      pmosSolarToggleHtml('booster','Booster Pump',pmosSolarInput('Make','boosterMake','list="solarPumpMakes_'+suffix+'"')+pmosSolarInput('Model','boosterModel','list="solarPumpModels_'+suffix+'"')+pmosSolarInput('Model #','boosterModelNumber','list="solarPumpNumbers_'+suffix+'"')+'<datalist id="solarPumpModels_'+suffix+'"></datalist><datalist id="solarPumpNumbers_'+suffix+'"></datalist>'+pmosPumpMakes(suffix))+
+      pmosSolarToggleHtml('actuator','Valve Actuator',pmosSolarInput('Make','actuatorMake','list="solarActuatorMakes_'+suffix+'"')+pmosSolarInput('Model','actuatorModel','list="solarActuatorModels_'+suffix+'"')+pmosSolarInput('Model #','actuatorModelNumber','list="solarActuatorNumbers_'+suffix+'"')+'<datalist id="solarActuatorModels_'+suffix+'"></datalist><datalist id="solarActuatorNumbers_'+suffix+'"></datalist>'+pmosActuatorMakes(suffix))+
+      pmosSolarToggleHtml('automation','Solar Automation',pmosSolarInput('Make','automationMake','list="solarAutomationMakes_'+suffix+'"')+pmosSolarInput('Model','automationModel','list="solarAutomationModels_'+suffix+'"')+pmosSolarInput('Model #','automationModelNumber','list="solarAutomationNumbers_'+suffix+'"')+'<datalist id="solarAutomationModels_'+suffix+'"></datalist><datalist id="solarAutomationNumbers_'+suffix+'"></datalist>'+pmosSolarAutomationMakes(suffix))+
+      '</div>';grid.appendChild(panel);
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-solar-enabled]'),function(box){box.addEventListener('change',function(){var fields=box.closest('.pmos-solar-option').querySelector('.pmos-solar-fields');fields.classList.toggle('open',box.checked)})});
+    panel.addEventListener('input',pmosSolarPanelInput);
+    host.dataset.pmosSolarInstalled='1';
+  }
+  function pmosSolarPanelInput(event){
+    var input=event.target,key=input&&input.getAttribute('data-solar-field');if(!key)return;var option=input.closest('.pmos-solar-option'),make,model,number,list,models,match;
+    if(key==='boosterMake'){make=input;model=option.querySelector('[data-solar-field="boosterModel"]');number=option.querySelector('[data-solar-field="boosterModelNumber"]');models=findCatalogMake('pump',make.value);list=document.getElementById(model.getAttribute('list'));if(list)list.innerHTML=models.map(function(item){return '<option value="'+esc(item.name)+'">'}).join('');model.value='';number.value=''}
+    if(key==='boosterModel'){make=option.querySelector('[data-solar-field="boosterMake"]');model=input;number=option.querySelector('[data-solar-field="boosterModelNumber"]');models=findCatalogMake('pump',make.value);match=models.filter(function(item){return String(item.name||'').toLowerCase()===String(model.value||'').toLowerCase()})[0];list=document.getElementById(number.getAttribute('list'));if(list)list.innerHTML=(match&&match.numbers||[]).map(function(value){return '<option value="'+esc(pmosCatalogNumberValue(value))+'">'}).join('')}
+    if(key==='boosterModelNumber'){match=pmosFindEquipmentByNumber('pump',input.value);if(match){option.querySelector('[data-solar-field="boosterMake"]').value=match.make;option.querySelector('[data-solar-field="boosterModel"]').value=match.model;input.value=match.modelNumber}}
+    if(key==='actuatorMake'){models=valveActuatorModels(input.value);model=option.querySelector('[data-solar-field="actuatorModel"]');number=option.querySelector('[data-solar-field="actuatorModelNumber"]');list=document.getElementById(model.getAttribute('list'));if(list)list.innerHTML=models.map(function(item){return '<option value="'+esc(item.name)+'">'}).join('');model.value='';number.value=''}
+    if(key==='actuatorModel'){make=option.querySelector('[data-solar-field="actuatorMake"]');models=valveActuatorModels(make.value);match=models.filter(function(item){return String(item.name||'').toLowerCase()===String(input.value||'').toLowerCase()})[0];number=option.querySelector('[data-solar-field="actuatorModelNumber"]');list=document.getElementById(number.getAttribute('list'));if(list)list.innerHTML=(match&&match.numbers||[]).map(function(value){return '<option value="'+esc(value)+'">'}).join('')}
+    if(key==='automationMake'){models=PMOS_SOLAR_AUTOMATION_CATALOG[input.value]||[];model=option.querySelector('[data-solar-field="automationModel"]');number=option.querySelector('[data-solar-field="automationModelNumber"]');list=document.getElementById(model.getAttribute('list'));if(list)list.innerHTML=models.map(function(item){return '<option value="'+esc(item.name)+'">'}).join('');model.value='';number.value=''}
+    if(key==='automationModel'){make=option.querySelector('[data-solar-field="automationMake"]');models=PMOS_SOLAR_AUTOMATION_CATALOG[make.value]||[];match=models.filter(function(item){return String(item.name||'').toLowerCase()===String(input.value||'').toLowerCase()})[0];number=option.querySelector('[data-solar-field="automationModelNumber"]');list=document.getElementById(number.getAttribute('list'));if(list)list.innerHTML=(match&&match.numbers||[]).map(function(value){return '<option value="'+esc(value)+'">'}).join('')}
+    if(key==='automationModelNumber'){match=pmosFindSolarAutomationByNumber(input.value);if(match){option.querySelector('[data-solar-field="automationMake"]').value=match.make;option.querySelector('[data-solar-field="automationModel"]').value=match.model;input.value=match.modelNumber}}
+  }
+  function pmosConfigureSolarHost(host){if(!host)return;pmosInstallSolarPanel(host);var type=host.classList.contains('water-body')?host.querySelector('[data-body-field="heaterType"]'):host.querySelector('[data-equipment-field="heaterType"]'),panel=host.querySelector('.pmos-solar-panel');if(!type||!panel)return;panel.style.display=String(type.value||'').trim().toLowerCase()==='solar'?'block':'none'}
+  function pmosInstallSolarOnBody(body){if(!body)return;pmosEnsureSolarHeaterOptions(body);pmosInstallSolarPanel(body);var type=body.querySelector('[data-body-field="heaterType"]');if(type&&!type.dataset.pmosSolarBound){type.dataset.pmosSolarBound='1';type.addEventListener('input',function(){pmosConfigureSolarHost(body)});type.addEventListener('change',function(){pmosConfigureSolarHost(body)})}pmosConfigureSolarHost(body)}
+
+  var previousAddWaterBody=addWaterBody;
+  addWaterBody=function(defaultName){previousAddWaterBody(defaultName);var bodies=document.querySelectorAll('.water-body'),body=bodies[bodies.length-1];pmosInstallSolarOnBody(body)};
+  var previousAddEquipment=addEquipment;
+  addEquipment=function(bodyCard,type,defaults){previousAddEquipment(bodyCard,type,defaults);if(type==='HEATER'){var cards=bodyCard.querySelectorAll('[data-equipment-type="HEATER"]'),card=cards[cards.length-1];pmosEnsureSolarHeaterOptions(card);pmosInstallSolarPanel(card);var heaterType=card&&card.querySelector('[data-equipment-field="heaterType"]');if(heaterType){heaterType.addEventListener('input',function(){pmosConfigureSolarHost(card)});heaterType.addEventListener('change',function(){pmosConfigureSolarHost(card)});pmosConfigureSolarHost(card)}}};
+
+  var previousCollectWaterBodies=collectWaterBodies;
+  collectWaterBodies=function(){
+    var bodies=previousCollectWaterBodies(),cards=document.querySelectorAll('.water-body');
+    bodies.forEach(function(body,index){
+      body.equipment=body.equipment||[];var card=cards[index];
+      var chemistry=(body.equipment||[]).filter(function(item){return item.type==='CHEMISTRY_AUTOMATION'})[0];
+      if(chemistry){
+        if(!body.equipment.some(function(item){return item.type==='ACID_TANK'}))body.equipment.push({type:'ACID_TANK',details:{purpose:'Chemistry automation pH dosing'}});
+        if(!body.equipment.some(function(item){return item.type==='PH_PROBE'}))body.equipment.push({type:'PH_PROBE',details:{connectedTo:'Chemistry Automation'}});
+        if(!body.equipment.some(function(item){return item.type==='ORP_PROBE'}))body.equipment.push({type:'ORP_PROBE',details:{connectedTo:'Chemistry Automation'}});
+        if(String(body.sanitization||'').toLowerCase()==='chlorine'&&!body.equipment.some(function(item){return item.type==='CHLORINE_TANK'}))body.equipment.push({type:'CHLORINE_TANK',details:{purpose:'Liquid chlorine feed'}});
+      }
+      if(!card)return;
+      Array.prototype.forEach.call(card.querySelectorAll('.pmos-solar-panel'),function(panel){
+        function add(kind,type,keys){var option=panel.querySelector('[data-solar-kind="'+kind+'"]'),enabled=option&&option.querySelector('[data-solar-enabled="'+kind+'"]');if(!enabled||!enabled.checked)return;var details={};keys.forEach(function(key){var input=option.querySelector('[data-solar-field="'+key+'"]');details[key.replace(/^(booster|actuator|automation)/,'').replace(/^./,function(c){return c.toLowerCase()})]=input?String(input.value||'').trim():''});body.equipment.push({type:type,details:details})}
+        add('booster','SOLAR_BOOSTER_PUMP',['boosterMake','boosterModel','boosterModelNumber']);
+        add('actuator','SOLAR_VALVE_ACTUATOR',['actuatorMake','actuatorModel','actuatorModelNumber']);
+        add('automation','SOLAR_AUTOMATION',['automationMake','automationModel','automationModelNumber']);
+      });
+    });return bodies
+  };
+
+  var previousEquipmentTypeLabel=equipmentTypeLabel;
+  equipmentTypeLabel=function(type){return {ACID_TANK:'Acid Tank',CHLORINE_TANK:'Chlorine Tank',PH_PROBE:'pH Probe',ORP_PROBE:'ORP Probe',SOLAR_BOOSTER_PUMP:'Solar Booster Pump',SOLAR_VALVE_ACTUATOR:'Solar Valve Actuator',SOLAR_AUTOMATION:'Solar Automation'}[type]||previousEquipmentTypeLabel(type)};
+
+  pmosEnsureSolarHeaterOptions(document);
+})();
+`;
+  };
+})();

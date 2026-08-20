@@ -1,0 +1,48 @@
+/** User-facing terminology helpers for Customer Accounts. */
+function pmosAccountTerminologyText_(value) {
+  if (value == null) return value;
+  let text = String(value)
+    .replace(/household pool profile/gi, 'customer account')
+    .replace(/household contacts/gi, 'additional contacts')
+    .replace(/household contact/gi, 'additional contact')
+    .replace(/household name/gi, 'account name')
+    .replace(/relink this household/gi, 'relink this account')
+    .replace(/this household/gi, 'this account');
+  if (typeof pmosEnhanceCustomerAccountEditorWithWaterMaintenance_ === 'function' &&
+      text.indexOf('id="customerStatus"') >= 0 &&
+      text.indexOf('id="frequency"') >= 0) {
+    text = pmosEnhanceCustomerAccountEditorWithWaterMaintenance_(text);
+  }
+  if (typeof pmosFinalizeRuntimeCustomerHtml_ === 'function' &&
+      text.indexOf('</script></body></html>') >= 0) {
+    const context = text.indexOf('id="profileName"') >= 0
+      ? 'LOOKUP'
+      : (text.indexOf('id="customerStatus"') >= 0 ? 'EDITOR' : 'GENERIC');
+    text = pmosFinalizeRuntimeCustomerHtml_(text, context);
+  }
+  return text;
+}
+
+function pmosAccountTerminologyState_(value) {
+  if (!value || typeof value !== 'object') return value;
+  ['message', 'matchReason', 'explanation', 'summary', 'contactStatus'].forEach(function(key) {
+    if (typeof value[key] === 'string') value[key] = pmosAccountTerminologyText_(value[key]);
+  });
+  if (Array.isArray(value.rows)) value.rows.forEach(pmosAccountTerminologyState_);
+  if (Array.isArray(value.candidates)) value.candidates.forEach(pmosAccountTerminologyState_);
+  if (Array.isArray(value.results)) value.results.forEach(pmosAccountTerminologyState_);
+  if (Array.isArray(value.contacts)) value.contacts.forEach(pmosAccountTerminologyState_);
+  return value;
+}
+
+function getPmosGoogleContactAccountState(customerId) {
+  return pmosAccountTerminologyState_(getPmosGoogleContactStateForAccount_(customerId));
+}
+
+function previewPmosGoogleContactAccountSync(customerId, direction) {
+  return pmosAccountTerminologyState_(previewPmosGoogleContactAccountSyncWithAddress_(customerId, direction));
+}
+
+function applyPmosGoogleContactAccountSync(customerId, direction, resourceName) {
+  return pmosAccountTerminologyState_(applyPmosGoogleContactAccountSyncWithAddress_(customerId, direction, resourceName));
+}

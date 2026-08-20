@@ -326,14 +326,15 @@ function ensureChemicalSheets_() {
 function showChemistryCatalog() {
   const html = HtmlService.createHtmlOutput(
     `<div style="font-family:Arial;padding:18px">
-      <h2>PMOS Chemistry Catalog</h2>
-      <p>Select products in the PMOS app or edit the Chemical Products sheet.</p>
+      <h2>PMOS Chemical Catalog</h2>
+      <p>The Chemical Catalog defines the products PMOS recognizes for chemical reporting and usage tracking. Add or update products in the Chemical Products sheet.</p>
       <p>Accepted amounts include: ¼, 1/4, ½, 0.5, 1 1/2, and decimals.</p>
       <p>PMOS stores normalized records such as 1 L 250 mL or 2 kg 500 g.</p>
-      <button onclick="google.script.run.withSuccessHandler(function(){google.script.host.close();}).ensureChemicalSheets_()">Repair Chemistry Sheets</button>
+      <p style="font-size:12px;color:#64748b">Inventory-on-hand tracking is not yet enabled; this catalog is the product source that inventory can use when that workflow is added.</p>
+      <button onclick="google.script.run.withSuccessHandler(function(){google.script.host.close();}).ensureChemicalSheets_()">Repair Chemical Sheets</button>
     </div>`
-  ).setWidth(480).setHeight(300);
+  ).setWidth(520).setHeight(350);
 
 
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Chemistry Catalog');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Chemical Catalog');
 }
