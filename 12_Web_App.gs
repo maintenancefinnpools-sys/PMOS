@@ -2,26 +2,72 @@
  * PMOS v1.9.0 — Web application entry point.
  */
 
-/** Stable production/development Web App deployment used by the Sheets menu. */
-const PMOS_WEB_APP_DEPLOYMENT_URL =
-  'https://script.google.com/macros/s/AKfycbz-dBP_IPG9kQr9-d-PcmZGySJxy3J1epj3yt3YAe6JQcKV8Iyviagys2n-XlkY93jtuw/exec';
+/**
+ * Development deployment used only to repair/migrate the current development
+ * spreadsheet from the obsolete Web App URL. Runtime resolution is stored in
+ * Document Properties so production can keep its own deployment after merge.
+ */
+const PMOS_DEVELOPMENT_WEB_APP_DEPLOYMENT_ID =
+  'AKfycbz-dBP_IPG9kQr9-d-PcmZGySJxy3J1epj3yt3YAe6JQcKV8Iyviagys2n-XlkY93jtuw';
+const PMOS_OBSOLETE_DEVELOPMENT_WEB_APP_DEPLOYMENT_ID =
+  'AKfycbxxLzHWOaVhjh1Dlk9ky_zpSi11FtwCHCSV55-IvvFgBFsuAyRU';
+
+/** Builds the stable /exec URL for a versioned Apps Script Web App deployment. */
+function buildPmosWebAppUrlFromDeploymentId_(deploymentId) {
+  const id = String(deploymentId || '').trim();
+  return id ? 'https://script.google.com/macros/s/' + id + '/exec' : '';
+}
 
 /**
- * Returns the Web App URL used by PMOS entry points.
- *
- * A Document Property may override the checked-in deployment URL later without
- * changing code. This is intentionally preferred over ScriptApp.getService().getUrl(),
- * because a spreadsheet-bound execution can report an older deployment URL even
- * when the Web App deployment itself has been updated to a newer version.
+ * Stores the Web App deployment for this spreadsheet only.
+ * Run once per Apps Script/spreadsheet environment. Updating the SAME deployment
+ * to Version 2, 3, 4, etc. does not require running this again because its
+ * deployment ID and /exec URL stay the same.
  */
-function getPmosWebAppUrl_() {
+function setPmosWebAppDeploymentId_(deploymentId) {
+  const id = String(deploymentId || '').trim();
+  if (!id) throw new Error('A PMOS Web App deployment ID is required.');
   const props = PropertiesService.getDocumentProperties();
-  const configured = String(props.getProperty('PMOS_WEB_APP_URL') || '').trim();
-  if (configured) return configured;
+  props.setProperty('PMOS_WEB_APP_DEPLOYMENT_ID', id);
+  // Retire the earlier URL property so it can never override the deployment ID.
+  props.deleteProperty('PMOS_WEB_APP_URL');
+  return buildPmosWebAppUrlFromDeploymentId_(id);
+}
 
-  const stable = String(PMOS_WEB_APP_DEPLOYMENT_URL || '').trim();
-  if (stable) return stable;
+/**
+ * One-time compatibility migration for the current PMOS development spreadsheet.
+ * The previous menu implementation stored/reported an obsolete development URL.
+ * If that exact obsolete deployment is found, replace it with the current stable
+ * development deployment. A different configured deployment is never overwritten,
+ * which keeps this code safe when merged into the operational Apps Script project.
+ */
+function migratePmosWebAppDeploymentSetting_() {
+  const props = PropertiesService.getDocumentProperties();
+  let deploymentId = String(props.getProperty('PMOS_WEB_APP_DEPLOYMENT_ID') || '').trim();
+  const legacyUrl = String(props.getProperty('PMOS_WEB_APP_URL') || '').trim();
 
+  if (!deploymentId && legacyUrl) {
+    const match = legacyUrl.match(/\/macros\/s\/([^/]+)\/exec(?:[?#].*)?$/i);
+    if (match) deploymentId = String(match[1] || '').trim();
+  }
+
+  if (!deploymentId || deploymentId === PMOS_OBSOLETE_DEVELOPMENT_WEB_APP_DEPLOYMENT_ID) {
+    deploymentId = PMOS_DEVELOPMENT_WEB_APP_DEPLOYMENT_ID;
+    props.setProperty('PMOS_WEB_APP_DEPLOYMENT_ID', deploymentId);
+  }
+
+  // The old full-URL property is no longer authoritative.
+  if (legacyUrl) props.deleteProperty('PMOS_WEB_APP_URL');
+  return deploymentId;
+}
+
+/** Returns the project-specific PMOS Web App URL used by all entry points. */
+function getPmosWebAppUrl_() {
+  const deploymentId = migratePmosWebAppDeploymentSetting_();
+  if (deploymentId) return buildPmosWebAppUrlFromDeploymentId_(deploymentId);
+
+  // Last-resort compatibility only. Normal PMOS operation should resolve from
+  // PMOS_WEB_APP_DEPLOYMENT_ID instead of ScriptApp.getService().getUrl().
   return String(ScriptApp.getService().getUrl() || '').trim();
 }
 
@@ -99,7 +145,7 @@ function showPmosWebAppLink() {
   const url = getPmosWebAppUrl_();
   if (!url) {
     SpreadsheetApp.getUi().alert(
-      'PMOS Web App is not deployed yet. In Apps Script, use Deploy → New deployment → Web app, then reopen the PMOS menu.'
+      'PMOS Web App is not configured. Set the Web App deployment ID for this spreadsheet and reopen the PMOS menu.'
     );
     return;
   }
