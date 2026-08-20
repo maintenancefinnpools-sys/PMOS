@@ -13,6 +13,13 @@ function pmosAccountTerminologyText_(value) {
       text.indexOf('id="frequency"') >= 0) {
     text = pmosEnhanceCustomerAccountEditorWithWaterMaintenance_(text);
   }
+  if (typeof pmosFinalizeRuntimeCustomerHtml_ === 'function' &&
+      text.indexOf('</script></body></html>') >= 0) {
+    const context = text.indexOf('id="profileName"') >= 0
+      ? 'LOOKUP'
+      : (text.indexOf('id="customerStatus"') >= 0 ? 'EDITOR' : 'GENERIC');
+    text = pmosFinalizeRuntimeCustomerHtml_(text, context);
+  }
   return text;
 }
 
