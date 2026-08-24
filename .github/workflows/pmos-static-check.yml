@@ -23,6 +23,9 @@ jobs:
       - name: Check Add Customer input formatting behavior
         run: node tools/check_customer_input_formatters.js
 
+      - name: Check shared customer equipment behavior
+        run: node tools/check_customer_equipment_contract.js
+
       - name: Report self-only global candidates
         run: python3 tools/report_unused_apps_script_globals.py
 

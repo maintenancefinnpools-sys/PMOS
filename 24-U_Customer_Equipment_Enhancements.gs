@@ -11,13 +11,13 @@
     pmosCustomerEquipmentEditorStyles_ = function () {
       return baseStyles() +
         '.pmos-solar-panel{grid-column:1/-1;margin-top:4px;padding:9px;border:1px solid #d5e0e5;border-radius:8px;background:#f7fafb}' +
-        '.pmos-solar-title{margin-bottom:7px;color:#293944;font-size:10px;font-weight:900}' +
+        '.pmos-solar-title{margin-bottom:7px;color:#293944;font-size:11px;font-weight:900}' +
         '.pmos-solar-options{display:flex;gap:8px;flex-wrap:wrap}' +
         '.pmos-solar-option{display:grid;gap:7px;min-width:190px;flex:1 1 220px;padding:8px;border:1px solid #dce5e8;border-radius:7px;background:#fff}' +
         '.pmos-solar-fields{display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}' +
         '.pmos-solar-fields.open{display:grid}' +
-        '.pmos-solar-fields label{display:flex;flex-direction:column;gap:4px;color:#6f7d84;font-size:9px;font-weight:900;text-transform:uppercase}' +
-        '.pmos-solar-fields input{width:100%;min-height:34px;padding:6px 8px;border:1px solid #bfcbd1;border-radius:7px;background:#fff;color:#293944;font:inherit}' +
+        '.pmos-solar-fields label{display:flex;flex-direction:column;gap:4px;color:#6f7d84;font-size:11px;font-weight:900;text-transform:uppercase}' +
+        '.pmos-solar-fields input{width:100%;min-height:34px;padding:6px 8px;border:1px solid #bfcbd1;border-radius:7px;background:#fff;color:#293944;font:inherit;font-size:13px}' +
         '@media(max-width:760px){.pmos-solar-fields{grid-template-columns:1fr}}';
     };
   }
@@ -148,10 +148,12 @@
       body.equipment=body.equipment||[];var card=cards[index];
       var chemistry=(body.equipment||[]).filter(function(item){return item.type==='CHEMISTRY_AUTOMATION'})[0];
       if(chemistry){
-        if(!body.equipment.some(function(item){return item.type==='ACID_TANK'}))body.equipment.push({type:'ACID_TANK',details:{purpose:'Chemistry automation pH dosing'}});
-        if(!body.equipment.some(function(item){return item.type==='PH_PROBE'}))body.equipment.push({type:'PH_PROBE',details:{connectedTo:'Chemistry Automation'}});
-        if(!body.equipment.some(function(item){return item.type==='ORP_PROBE'}))body.equipment.push({type:'ORP_PROBE',details:{connectedTo:'Chemistry Automation'}});
-        if(String(body.sanitization||'').toLowerCase()==='chlorine'&&!body.equipment.some(function(item){return item.type==='CHLORINE_TANK'}))body.equipment.push({type:'CHLORINE_TANK',details:{purpose:'Liquid chlorine feed'}});
+        var chemistryDetails=chemistry.details||{};
+        if(!body.equipment.some(function(item){return item.type==='FLOW_CELL'}))body.equipment.push({type:'FLOW_CELL',details:{make:chemistryDetails.make,model:chemistryDetails.flowCellModel,partNumber:chemistryDetails.flowCellPartNumber,connectedTo:'Chemistry Automation'}});
+        if(!body.equipment.some(function(item){return item.type==='ACID_TANK'}))body.equipment.push({type:'ACID_TANK',details:{make:chemistryDetails.make,model:chemistryDetails.acidTankModel,partNumber:chemistryDetails.acidTankPartNumber,pumpMotorModel:chemistryDetails.acidPumpMotorModel,pumpMotorPartNumber:chemistryDetails.acidPumpMotorPartNumber,pumpHeadPartNumber:chemistryDetails.pumpHeadPartNumber,purpose:'Chemistry automation pH dosing'}});
+        if(!body.equipment.some(function(item){return item.type==='PH_PROBE'}))body.equipment.push({type:'PH_PROBE',details:{make:chemistryDetails.make,model:chemistryDetails.phProbeModel,partNumber:chemistryDetails.phProbePartNumber,connectedTo:'Chemistry Automation'}});
+        if(!body.equipment.some(function(item){return item.type==='ORP_PROBE'}))body.equipment.push({type:'ORP_PROBE',details:{make:chemistryDetails.make,model:chemistryDetails.orpProbeModel,partNumber:chemistryDetails.orpProbePartNumber,connectedTo:'Chemistry Automation'}});
+        if(String(body.sanitization||'').toLowerCase()==='chlorine'&&!body.equipment.some(function(item){return item.type==='CHLORINE_TANK'}))body.equipment.push({type:'CHLORINE_TANK',details:{make:chemistryDetails.make,model:chemistryDetails.chlorineTankModel,partNumber:chemistryDetails.chlorineTankPartNumber,pumpMotorModel:chemistryDetails.chlorinePumpMotorModel,pumpMotorPartNumber:chemistryDetails.chlorinePumpMotorPartNumber,pumpHeadPartNumber:chemistryDetails.pumpHeadPartNumber,purpose:'Liquid chlorine feed'}});
       }
       if(!card)return;
       Array.prototype.forEach.call(card.querySelectorAll('.pmos-solar-panel'),function(panel){
@@ -164,7 +166,7 @@
   };
 
   var previousEquipmentTypeLabel=equipmentTypeLabel;
-  equipmentTypeLabel=function(type){return {ACID_TANK:'Acid Tank',CHLORINE_TANK:'Chlorine Tank',PH_PROBE:'pH Probe',ORP_PROBE:'ORP Probe',SOLAR_BOOSTER_PUMP:'Solar Booster Pump',SOLAR_VALVE_ACTUATOR:'Solar Valve Actuator',SOLAR_AUTOMATION:'Solar Automation'}[type]||previousEquipmentTypeLabel(type)};
+  equipmentTypeLabel=function(type){return {FLOW_CELL:'Flow Cell',ACID_TANK:'Acid Tank',CHLORINE_TANK:'Chlorine Tank',PH_PROBE:'pH Probe',ORP_PROBE:'ORP Probe',SOLAR_BOOSTER_PUMP:'Solar Booster Pump',SOLAR_VALVE_ACTUATOR:'Valve Actuator',SOLAR_AUTOMATION:'Solar Automation'}[type]||previousEquipmentTypeLabel(type)};
 
   pmosEnsureSolarHeaterOptions(document);
 })();
