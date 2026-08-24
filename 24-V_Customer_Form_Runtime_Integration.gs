@@ -20,56 +20,15 @@ function pmosCustomerRuntimeListName_(firstName, lastName, fallback) {
 }
 
 function pmosEnsureCategorizedNotesRuntime_() {
-  const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
-    PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
-  ]);
-  if (!sheet) throw new Error('Customers sheet was not found.');
-  let table = readPmosHeaderTable_(sheet);
-  ensureMaintenanceClientHeaders_(sheet, table, [
-    'Customer Notes', 'Opening Notes', 'Closing Notes', 'Maintenance Notes'
-  ]);
-  return readPmosHeaderTable_(sheet);
+  return ensurePmosCustomerCategorizedNotes_();
 }
 
 function pmosReadCategorizedNotesRuntime_(customerId) {
-  const record = getPmosCustomerEditorRow_(customerId);
-  const read = function(aliases) {
-    const index = findHeaderIndex_(record.headers, aliases);
-    return index >= 0 ? String(record.values[index] || '').trim() : '';
-  };
-  return {
-    generalNotes: read(['Customer Notes', 'General Notes', 'Notes', 'Details']),
-    openingNotes: read(['Opening Notes']),
-    closingNotes: read(['Closing Notes']),
-    maintenanceNotes: read(['Maintenance Notes'])
-  };
+  return readPmosCustomerCategorizedNotes_(customerId);
 }
 
 function pmosSaveCategorizedNotesRuntime_(customerId, input) {
-  const request = input || {};
-  pmosEnsureCategorizedNotesRuntime_();
-  const record = getPmosCustomerEditorRow_(customerId);
-  const values = record.values.slice();
-  const has = function(key) { return Object.prototype.hasOwnProperty.call(request, key); };
-  const clean = function(value, limit) {
-    return String(value == null ? '' : value).trim().slice(0, limit || 10000);
-  };
-  if (has('generalNotes') || has('notes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, ['Customer Notes'],
-      clean(has('generalNotes') ? request.generalNotes : request.notes, 10000));
-  }
-  if (has('openingNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, ['Opening Notes'], clean(request.openingNotes, 10000));
-  }
-  if (has('closingNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, ['Closing Notes'], clean(request.closingNotes, 10000));
-  }
-  if (has('maintenanceNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, ['Maintenance Notes'], clean(request.maintenanceNotes, 10000));
-  }
-  record.sheet.getRange(record.rowNumber, 1, 1, values.length).setValues([values]);
-  SpreadsheetApp.flush();
-  return pmosReadCategorizedNotesRuntime_(customerId);
+  return savePmosCustomerCategorizedNotes_(customerId, input);
 }
 
 function pmosNormalizeSolarEquipmentRuntime_(input) {
@@ -231,24 +190,6 @@ function returnFromPmosCustomerAccountEditorRuntime(customerId, returnContext) {
   showPmosCustomerAccountLookupRuntime(customerId);
 }
 
-function pmosRuntimeTemporaryManualPlacementScript_() {
-  return String.raw`
-(function(){
-  if(window.__pmosRuntimeTemporaryManualPlacement)return;window.__pmosRuntimeTemporaryManualPlacement=true;
-  function setup(){
-    var visits=document.getElementById('visits'),addVisit=document.getElementById('addVisit'),dateSuggestions=document.getElementById('dateSuggestions');
-    if(!visits||!addVisit||!dateSuggestions||document.getElementById('frequency')||document.getElementById('temporaryManualPlacementToggle'))return;
-    var heading=visits.previousElementSibling;
-    if(!heading||!heading.classList||!heading.classList.contains('section'))return;
-    visits.style.display='none';addVisit.style.display='none';
-    var toggle=document.createElement('button');toggle.id='temporaryManualPlacementToggle';toggle.type='button';toggle.className='pmos-manual-route-toggle';toggle.textContent='Select manually';toggle.style.gridColumn='1/-1';toggle.style.justifySelf='start';heading.insertAdjacentElement('afterend',toggle);
-    toggle.onclick=function(){var show=visits.style.display==='none';visits.style.display=show?'block':'none';addVisit.style.display=show?'inline-block':'none';toggle.textContent=show?'Hide manual placement':'Select manually';if(show){var first=visits.querySelector('.visit-date');if(first&&!first.value)first.focus()}};
-  }
-  document.addEventListener('DOMContentLoaded',function(){setup();setTimeout(setup,80)});
-})();
-`;
-}
-
 function pmosRuntimeCustomerBridgeScript_(context) {
   if (context === 'ADD_CUSTOMER') {
     return String.raw`
@@ -368,9 +309,6 @@ function pmosWithRuntimeCustomerFormAssets_(context, callback) {
       let script = routeScriptBase();
       if (typeof pmosRouteManualUiScript_ === 'function' && script.indexOf('__pmosManualRouteUiLoaded') < 0) {
         script += pmosRouteManualUiScript_();
-      }
-      if (context === 'TEMPORARY' && script.indexOf('__pmosRuntimeTemporaryManualPlacement') < 0) {
-        script += pmosRuntimeTemporaryManualPlacementScript_();
       }
       script = pmosRewriteRuntimeCustomerEndpoints_(script);
       return script;

@@ -198,12 +198,3 @@ function pmosCustomerLifecycleProfileEnhancementScript_() {
 })();
 `;
 }
-
-(function(){
-  if (typeof pmosCustomerProfileEnhancementScript_ === 'function') {
-    const baseProfileScript = pmosCustomerProfileEnhancementScript_;
-    pmosCustomerProfileEnhancementScript_ = function() {
-      return baseProfileScript() + pmosCustomerLifecycleProfileEnhancementScript_();
-    };
-  }
-})();

@@ -5,63 +5,40 @@
  * while standardizing account-name display, note categories, body/equipment notes,
  * solar-heating equipment, manual route controls, and the Add Service Location handoff.
  */
-const PMOS_OPENING_NOTES_HEADER_ = 'Opening Notes';
-const PMOS_CLOSING_NOTES_HEADER_ = 'Closing Notes';
-const PMOS_MAINTENANCE_NOTES_HEADER_ = 'Maintenance Notes';
-
 function ensurePmosCustomerCategorizedNotes_() {
-  const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
-    PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
-  ]);
-  if (!sheet) throw new Error('Customers sheet was not found.');
-  let table = readPmosHeaderTable_(sheet);
-  ensureMaintenanceClientHeaders_(sheet, table, [
-    'Customer Notes',
-    PMOS_OPENING_NOTES_HEADER_,
-    PMOS_CLOSING_NOTES_HEADER_,
-    PMOS_MAINTENANCE_NOTES_HEADER_
-  ]);
-  return readPmosHeaderTable_(sheet);
+  return ensurePmosCustomerContextNotesTable_().table;
 }
 
 function readPmosCustomerCategorizedNotes_(customerId) {
   const id = String(customerId || '').trim();
   if (!id) return {generalNotes: '', openingNotes: '', closingNotes: '', maintenanceNotes: ''};
-  const record = getPmosCustomerEditorRow_(id);
-  const read = function(aliases) {
-    const index = findHeaderIndex_(record.headers, aliases);
-    return index >= 0 ? String(record.values[index] || '').trim() : '';
-  };
+  const notes = getPmosCustomerContextNotes_(id);
   return {
-    generalNotes: read(['Customer Notes', 'General Notes', 'Notes', 'Details']),
-    openingNotes: read([PMOS_OPENING_NOTES_HEADER_]),
-    closingNotes: read([PMOS_CLOSING_NOTES_HEADER_]),
-    maintenanceNotes: read([PMOS_MAINTENANCE_NOTES_HEADER_])
+    generalNotes: notes.generalNotes,
+    openingNotes: notes.openingNotes,
+    closingNotes: notes.closingNotes,
+    maintenanceNotes: notes.maintenanceNotes
   };
 }
 
 function savePmosCustomerCategorizedNotes_(customerId, input) {
   const request = input || {};
-  ensurePmosCustomerCategorizedNotes_();
-  const record = getPmosCustomerEditorRow_(customerId);
-  const values = record.values.slice();
   const has = function(key) { return Object.prototype.hasOwnProperty.call(request, key); };
   const clean = function(value, limit) { return String(value == null ? '' : value).trim().slice(0, limit || 10000); };
+  const notes = {};
   if (has('generalNotes') || has('notes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, ['Customer Notes', 'General Notes', 'Notes', 'Details'],
-      clean(has('generalNotes') ? request.generalNotes : request.notes, 10000));
+    notes.generalNotes = clean(has('generalNotes') ? request.generalNotes : request.notes, 10000);
   }
   if (has('openingNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, [PMOS_OPENING_NOTES_HEADER_], clean(request.openingNotes, 10000));
+    notes.openingNotes = clean(request.openingNotes, 10000);
   }
   if (has('closingNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, [PMOS_CLOSING_NOTES_HEADER_], clean(request.closingNotes, 10000));
+    notes.closingNotes = clean(request.closingNotes, 10000);
   }
   if (has('maintenanceNotes')) {
-    pmosCustomerEditorSetAliases_(record.headers, values, [PMOS_MAINTENANCE_NOTES_HEADER_], clean(request.maintenanceNotes, 10000));
+    notes.maintenanceNotes = clean(request.maintenanceNotes, 10000);
   }
-  record.sheet.getRange(record.rowNumber, 1, 1, values.length).setValues([values]);
-  SpreadsheetApp.flush();
+  savePmosCustomerContextNotes_(customerId, notes);
   return readPmosCustomerCategorizedNotes_(customerId);
 }
 
@@ -145,13 +122,17 @@ function pmosRouteManualUiScript_() {
 }
 
 function pmosCustomerProfileEnhancementScript_() {
-  return String.raw`
+  let script = String.raw`
 (function(){
   if(window.__pmosProfileEnhancementLoaded||typeof renderProfile!=='function')return;window.__pmosProfileEnhancementLoaded=true;
   var baseRenderProfile=renderProfile;
   renderProfile=function(profile){baseRenderProfile(profile);profile=profile||{};var first=String(profile.firstName||'').trim(),last=String(profile.lastName||'').trim(),display=[first,last].filter(Boolean).join(' ')||profile.accountName||profile.displayName;if(document.getElementById('profileName'))document.getElementById('profileName').textContent=display;if(document.getElementById('avatar')&&typeof initials==='function')document.getElementById('avatar').textContent=initials(display);Array.prototype.forEach.call(document.querySelectorAll('.card .label'),function(label){if(String(label.textContent||'').trim().toLowerCase()==='customer notes')label.textContent='General notes'});var content=document.getElementById('content'),notes=content&&content.querySelector('.notes'),extra=[];if(profile.openingNotes)extra.push(card('Opening notes',profile.openingNotes));if(profile.closingNotes)extra.push(card('Closing notes',profile.closingNotes));if(profile.maintenanceNotes&&(profile.frequency||(profile.routes||[]).length))extra.push(card('Maintenance notes',profile.maintenanceNotes));if(extra.length){if(!notes){var head=document.createElement('div');head.className='section-head';head.innerHTML='<h3>Customer details</h3>';notes=document.createElement('div');notes.className='notes';content.insertBefore(head,document.getElementById('editorNote'));content.insertBefore(notes,document.getElementById('editorNote'))}notes.insertAdjacentHTML('beforeend',extra.join(''));notes.classList.toggle('single',notes.children.length===1)}(profile.bodiesOfWater||[]).forEach(function(body){if(!body)return;var title=String(body.name||body.type||''),summary=null;Array.prototype.some.call(content.querySelectorAll('.summary-card'),function(cardNode){var titleNode=cardNode.querySelector('.summary-title');if(titleNode&&String(titleNode.textContent||'')===title){summary=cardNode;return true}return false});if(!summary)return;var details=summary.querySelector('.summary-details');if(!details)return;if(body.equipmentNotes){var note=document.createElement('div');note.className='equipment-item';note.innerHTML='<b>Equipment Notes</b> · '+esc(body.equipmentNotes);details.appendChild(note)}var solar=body.heater&&body.heater.solarEquipment||[];if(solar.length){var list=document.createElement('div');list.className='equipment-list';list.innerHTML=solar.map(function(item){var label={BOOSTER_PUMP:'Booster Pump',VALVE_ACTUATOR:'Valve Actuator',CONTROLLER:'Automation / Controller',OTHER:'Other Equipment'}[item.type]||'Solar Equipment',detailText=[item.make,item.model,item.modelNumber,item.quantity?('Qty '+item.quantity):'',item.notes].filter(Boolean).join(' · ');return '<div class="equipment-item"><b>Solar · '+esc(label)+'</b>'+(detailText?' · '+esc(detailText):'')+'</div>'}).join('');details.appendChild(list)}});if(typeof fitContactValues==='function')fitContactValues()};
 })();
 `;
+  if (typeof pmosCustomerLifecycleProfileEnhancementScript_ === 'function') {
+    script += pmosCustomerLifecycleProfileEnhancementScript_();
+  }
+  return script;
 }
 
 (function () {

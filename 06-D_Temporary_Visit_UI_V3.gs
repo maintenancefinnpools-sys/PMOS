@@ -2,6 +2,24 @@
  * Temporary Visit V3 — address-first UI aligned with Add Maintenance Client.
  * Scheduling remains delegated to scheduleTemporaryVisitsV2().
  */
+function pmosTemporaryManualPlacementScript_() {
+  return String.raw`
+(function(){
+  if(window.__pmosTemporaryManualPlacement)return;window.__pmosTemporaryManualPlacement=true;
+  function setup(){
+    var visits=document.getElementById('visits'),addVisit=document.getElementById('addVisit'),dateSuggestions=document.getElementById('dateSuggestions');
+    if(!visits||!addVisit||!dateSuggestions||document.getElementById('frequency')||document.getElementById('temporaryManualPlacementToggle'))return;
+    var heading=visits.previousElementSibling;
+    if(!heading||!heading.classList||!heading.classList.contains('section'))return;
+    visits.style.display='none';addVisit.style.display='none';
+    var toggle=document.createElement('button');toggle.id='temporaryManualPlacementToggle';toggle.type='button';toggle.className='pmos-manual-route-toggle';toggle.textContent='Select manually';toggle.style.gridColumn='1/-1';toggle.style.justifySelf='start';heading.insertAdjacentElement('afterend',toggle);
+    toggle.onclick=function(){var show=visits.style.display==='none';visits.style.display=show?'block':'none';addVisit.style.display=show?'inline-block':'none';toggle.textContent=show?'Hide manual placement':'Select manually';if(show){var first=visits.querySelector('.visit-date');if(first&&!first.value)first.focus()}};
+  }
+  document.addEventListener('DOMContentLoaded',function(){setup();setTimeout(setup,80)});
+})();
+`;
+}
+
 function showTemporaryVisitSchedulerV3() {
   const html = HtmlService.createHtmlOutput(`<!doctype html><html><head><base target="_top"><style>
 *{box-sizing:border-box}body{margin:0;padding:18px;font-family:Arial,sans-serif;color:#1f2937;background:#f8fafc}h2{margin:0 0 5px}.muted{font-size:12px;color:#64748b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-top:16px}.full{grid-column:1/-1}.section{grid-column:1/-1;margin-top:5px;padding-top:11px;border-top:1px solid #e2e8f0;font-size:13px;font-weight:700}label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700}input,textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font:inherit;background:#fff}textarea{min-height:72px;resize:vertical}.address-wrap{position:relative}.address-list{display:none;position:absolute;z-index:50;left:0;right:0;top:100%;max-height:235px;overflow:auto;background:#fff;border:1px solid #94a3b8;border-radius:0 0 8px 8px;box-shadow:0 10px 22px rgba(15,23,42,.18)}.address-option{display:block;width:100%;border:0;border-bottom:1px solid #e2e8f0;background:#fff;padding:10px;text-align:left;cursor:pointer}.address-option:hover,.address-option.active{background:#dbeafe}.address-status,.address-details{display:none;grid-column:1/-1;padding:8px 10px;border-radius:7px;font-size:12px}.address-status{background:#eff6ff;color:#1d4ed8}.address-details{background:#ecfdf5;border:1px solid #86efac;color:#166534}.date-suggestions{display:none;grid-column:1/-1}.date-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:9px}.date-option{width:100%;padding:11px;text-align:left;background:#fff;border:2px solid #dbeafe;border-radius:10px;cursor:pointer}.date-option:hover{background:#eff6ff}.date-option.selected{border-color:#2563eb;background:#eff6ff}.rec-title{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}.rec-points{margin:7px 0 0;padding-left:16px;color:#475569;font-size:11px;line-height:1.35}.rec-points li{margin:2px 0}.date-meta{font-size:11px;color:#475569;line-height:1.4;margin-top:4px}.visit-card{grid-column:1/-1;border:1px solid #d1d5db;border-radius:10px;padding:12px;background:#fff}.visit-head{display:flex;justify-content:space-between;align-items:center}.visit-grid{display:grid;grid-template-columns:minmax(150px,.8fr) 90px minmax(180px,1fr);gap:10px}.recommendation{margin-top:9px;padding:9px;border-radius:8px;background:#f1f5f9;white-space:pre-line;font-size:12px}.good{background:#dcfce7;color:#166534}.fair{background:#fef3c7;color:#92400e}.poor{background:#fee2e2;color:#991b1b}.buttons{display:flex;gap:8px;margin-top:16px}button{padding:9px 13px;border:0;border-radius:8px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff;transition:background .18s ease,color .18s ease}.primary.scheduling{background:#93c5fd;color:#1e3a5f}.primary.scheduled{background:#cfe8d8;color:#315c43}.secondary{background:#e2e8f0;color:#1f2937}.small{padding:7px 9px}.status{display:none;margin-top:12px;padding:10px;border-radius:8px;background:#f1f5f9;white-space:pre-line;font-size:12px}.error{background:#fee2e2;color:#991b1b}.success{background:#dcfce7;color:#166534}@media(max-width:700px){.grid,.date-grid,.visit-grid{grid-template-columns:1fr}.full,.section,.date-suggestions,.visit-card{grid-column:1}}
@@ -15,9 +33,10 @@ ${pmosRouteRecommendationCardStyles_()}
 <div class="section">Visit placement</div><div id="visits"></div><button id="addVisit" type="button" class="secondary small" style="grid-column:1/-1;justify-self:start">+ Add Another Visit</button>
 <div class="section">Visit information</div><label class="full">Entry information<textarea id="entryInformation" placeholder="Gate code, access details, special instructions..."></textarea></label><label class="full">Customer / service notes<textarea id="notes" placeholder="Customer preferences or service notes..."></textarea></label>
 </div><div class="buttons"><button id="save" class="primary">Schedule Visit(s)</button><button id="close" class="secondary">Close</button></div><div id="status" class="status"></div>
-<script>
-${pmosRouteRecommendationCardScript_()}
-(function(){
+	<script>
+	${pmosRouteRecommendationCardScript_()}
+	${pmosTemporaryManualPlacementScript_()}
+	(function(){
 var address=document.getElementById('address'),addressList=document.getElementById('addressList'),addressStatus=document.getElementById('addressStatus'),addressDetails=document.getElementById('addressDetails'),lastName=document.getElementById('lastName'),firstName=document.getElementById('firstName'),phone=document.getElementById('phone'),email=document.getElementById('email'),entry=document.getElementById('entryInformation'),notes=document.getElementById('notes'),dateSuggestions=document.getElementById('dateSuggestions'),visits=document.getElementById('visits'),status=document.getElementById('status'),save=document.getElementById('save');
 var selectedAddress=null,addressTimer=null,addressRequest=0,addressOptions=[],activeAddress=-1,addressCache={},lastAddressItems=[],dateRequest=0,visitCount=0,calendarTitleEdited=false;
 function setStatus(t,k){status.textContent=t||'';status.className='status '+(k||'');status.style.display=t?'block':'none'}
