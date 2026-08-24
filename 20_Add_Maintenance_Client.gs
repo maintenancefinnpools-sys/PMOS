@@ -141,9 +141,9 @@ function rankMaintenanceRoadRecommendations_(items) {
     // weight than driving distance.
     item._balancedRouteCost =
       maintenanceNormalizedRoadCost_(item.estimatedRouteMinutes, ranges.route) * 0.50 +
-      maintenanceNormalizedRoadCost_(item.customerCount, ranges.stops) * 0.25 +
-      maintenanceNormalizedRoadCost_(item.addedDurationMinutes, ranges.addedTime) * 0.20 +
-      maintenanceNormalizedRoadCost_(item.addedDistanceKm, ranges.addedDistance) * 0.05;
+      maintenanceNormalizedRoadCost_(item.customerCount, ranges.stops) * 0.40 +
+      maintenanceNormalizedRoadCost_(item.addedDurationMinutes, ranges.addedTime) * 0.06 +
+      maintenanceNormalizedRoadCost_(item.addedDistanceKm, ranges.addedDistance) * 0.04;
   });
   recommendations.sort(compareMaintenanceRoadRecommendations_);
   recommendations.forEach(function (item) { delete item._balancedRouteCost; });
