@@ -5,7 +5,7 @@
  * equipment services, but deliberately performs no route calculation, route placement,
  * maintenance template creation, or recurring Calendar synchronization.
  */
-function showPmosAddCustomer() {
+function showPmosAddCustomerLegacy_() {
   migrateMaintenanceCustomerEquipmentStorage_();
   const html = HtmlService.createHtmlOutput(`
 <!DOCTYPE html><html><head><base target="_top">

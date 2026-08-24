@@ -45,6 +45,8 @@ def main() -> None:
     account_editor = read("24-L_Customer_Profile_Account_Integration.gs")
     water = read("24-S_Customer_Water_Maintenance_Editor.gs")
     notes_bridge = read("24-W_Customer_Context_Notes_UI.gs")
+    sheets_add_customer = read("Sheets_Add_Customer.html")
+    sheets_add_customer_server = read("24-R1_Add_Customer_Sheets_Parity.gs")
 
     ordered(index, ["Customer Look-Up", "Add Customer", "Add Maintenance Client"], "Customers menu order", failures)
     ordered(index, ["Temporary Maintenance", "Service Call", "Opening / Closing"], "Scheduling menu order", failures)
@@ -66,6 +68,9 @@ def main() -> None:
     require(add, "inlineHostId:'acAdditionalLocationHost'", "inline Add Customer location editor", failures)
     for label in ("Entry Information", "General Notes", "Opening Notes", "Closing Notes"):
         require(add, label, f"Add Customer {label}", failures)
+    require(sheets_add_customer_server, "createTemplateFromFile('Sheets_Add_Customer')", "shared Sheets Add Customer template", failures)
+    require(sheets_add_customer, "include('Web_Add_Customer')", "Web/Sheets Add Customer form parity", failures)
+    require(sheets_add_customer, "include('Web_Add_Service_Location')", "Web/Sheets inline service-location parity", failures)
 
     require(maintenance, "amMaintenanceNotes", "maintenance-form Maintenance Notes", failures)
     require(maintenance, "amAccountContacts", "maintenance Account Contacts", failures)
