@@ -29,7 +29,6 @@ function setPmosWebAppDeploymentId_(deploymentId) {
   if (!id) throw new Error('A PMOS Web App deployment ID is required.');
   const props = PropertiesService.getDocumentProperties();
   props.setProperty('PMOS_WEB_APP_DEPLOYMENT_ID', id);
-  // Retire the earlier URL property so it can never override the deployment ID.
   props.deleteProperty('PMOS_WEB_APP_URL');
   return buildPmosWebAppUrlFromDeploymentId_(id);
 }
@@ -56,7 +55,6 @@ function migratePmosWebAppDeploymentSetting_() {
     props.setProperty('PMOS_WEB_APP_DEPLOYMENT_ID', deploymentId);
   }
 
-  // The old full-URL property is no longer authoritative.
   if (legacyUrl) props.deleteProperty('PMOS_WEB_APP_URL');
   return deploymentId;
 }
@@ -65,9 +63,6 @@ function migratePmosWebAppDeploymentSetting_() {
 function getPmosWebAppUrl_() {
   const deploymentId = migratePmosWebAppDeploymentSetting_();
   if (deploymentId) return buildPmosWebAppUrlFromDeploymentId_(deploymentId);
-
-  // Last-resort compatibility only. Normal PMOS operation should resolve from
-  // PMOS_WEB_APP_DEPLOYMENT_ID instead of ScriptApp.getService().getUrl().
   return String(ScriptApp.getService().getUrl() || '').trim();
 }
 
@@ -75,9 +70,6 @@ function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   template.pmosVersion = PMOS_VERSION;
 
-  // Reuse the authoritative customer equipment editor in the Web App. These
-  // helpers are extended by the equipment enhancement/fix modules at load time,
-  // so the Web App receives the same current catalogs and behavior as Sheets.
   template.pmosEquipmentEditorStyles =
     typeof pmosCustomerEquipmentEditorStyles_ === 'function'
       ? pmosCustomerEquipmentEditorStyles_()
@@ -87,9 +79,6 @@ function doGet() {
       ? pmosCustomerEquipmentEditorScript_()
       : '';
 
-  // Account Contacts, service-location contacts, and billing address are also
-  // shared component generators. Rendering their client helpers once in the Web
-  // App keeps Add Customer aligned with the Sheets Customer Editor architecture.
   template.pmosServiceLocationContactStyles =
     typeof pmosServiceLocationContactStyles_ === 'function'
       ? pmosServiceLocationContactStyles_()
@@ -121,10 +110,6 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-/**
- * Performs the same lightweight preparation used when Add Customer is opened
- * from Sheets, without introducing Web-only customer storage or migration logic.
- */
 function preparePmosWebAddCustomer() {
   if (typeof migrateMaintenanceCustomerEquipmentStorage_ === 'function') {
     migrateMaintenanceCustomerEquipmentStorage_();
@@ -136,10 +121,10 @@ function preparePmosWebAddCustomer() {
 }
 
 /**
- * Opens the deployed PMOS Web App from the Sheets menu.
- * Apps Script menu items invoke server functions, so a transient HTML bridge opens
- * the Web App in a new tab and immediately closes itself. If the browser blocks the
- * new tab, the bridge remains visible with a normal fallback link.
+ * Opens a small launcher from the Sheets menu. Browsers frequently block an
+ * automatic window.open() triggered after an Apps Script menu callback, so this
+ * dialog intentionally requires one direct user action. The launch button receives
+ * focus automatically, allowing Enter to open PMOS immediately without a mouse.
  */
 function showPmosWebAppLink() {
   const url = getPmosWebAppUrl_();
@@ -150,24 +135,31 @@ function showPmosWebAppLink() {
     return;
   }
 
-  const safeUrl = escapeHtml_(url);
   const html = HtmlService.createHtmlOutput(
     '<!DOCTYPE html><html><head><base target="_blank"></head>' +
-    '<body style="font-family:Arial,sans-serif;padding:18px;color:#293944">' +
-      '<div id="fallback" style="display:none">' +
-        '<h3 style="margin:0 0 8px">PMOS Web App</h3>' +
-        '<p style="margin:0 0 14px;color:#5f6d75">Your browser blocked the new tab. Use the link below.</p>' +
-        '<a href="' + safeUrl + '" target="_blank" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#0f5470;color:#fff;text-decoration:none;font-weight:700">Open PMOS Web App</a>' +
+    '<body style="margin:0;font-family:Arial,sans-serif;background:#f7f9fa;color:#293944">' +
+      '<div style="padding:22px;text-align:center">' +
+        '<h3 style="margin:0 0 8px;font-size:18px">PMOS Web App</h3>' +
+        '<p style="margin:0 0 18px;color:#5f6d75;font-size:13px">Press Enter or click below to open PMOS.</p>' +
+        '<button id="openPmosButton" type="button" ' +
+          'style="padding:11px 18px;border:0;border-radius:8px;background:#0f5470;color:#fff;font-weight:700;font-size:14px;cursor:pointer;outline-offset:3px">' +
+          'Open PMOS Web App' +
+        '</button>' +
       '</div>' +
       '<script>' +
+        'var pmosUrl=' + JSON.stringify(url) + ';' +
+        'function openPmos(){' +
+          'var opened=window.open(pmosUrl,"_blank");' +
+          'if(opened){setTimeout(function(){google.script.host.close();},150);}' +
+        '}' +
         'window.addEventListener("load",function(){' +
-          'var opened=window.open(' + JSON.stringify(url) + ',"_blank");' +
-          'if(opened){setTimeout(function(){google.script.host.close();},100);}' +
-          'else{document.getElementById("fallback").style.display="block";}' +
+          'var button=document.getElementById("openPmosButton");' +
+          'button.addEventListener("click",openPmos);' +
+          'button.focus();' +
         '});' +
       '</script>' +
     '</body></html>'
-  ).setWidth(400).setHeight(175);
+  ).setWidth(360).setHeight(165);
 
-  SpreadsheetApp.getUi().showModelessDialog(html, 'Opening PMOS Web App…');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'Open PMOS Web App');
 }
