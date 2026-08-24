@@ -135,15 +135,15 @@ function rankMaintenanceRoadRecommendations_(items) {
     addedTime: maintenanceRoadRange_(complete, 'addedDurationMinutes'),
     addedDistance: maintenanceRoadRange_(complete, 'addedDistanceKm')
   };
+  const weights = getPmosRieSettings_().rankingWeights;
   complete.forEach(function (item) {
-    // Balanced routing considers the finished workday and route load together
-    // with insertion efficiency. Driving time intentionally carries more
-    // weight than driving distance.
+    // Route-day selection uses the configured recommendation mix. Exact
+    // insertion positions remain independently optimized for added road time.
     item._balancedRouteCost =
-      maintenanceNormalizedRoadCost_(item.estimatedRouteMinutes, ranges.route) * 0.50 +
-      maintenanceNormalizedRoadCost_(item.customerCount, ranges.stops) * 0.40 +
-      maintenanceNormalizedRoadCost_(item.addedDurationMinutes, ranges.addedTime) * 0.06 +
-      maintenanceNormalizedRoadCost_(item.addedDistanceKm, ranges.addedDistance) * 0.04;
+      maintenanceNormalizedRoadCost_(item.estimatedRouteMinutes, ranges.route) * weights.route / 100 +
+      maintenanceNormalizedRoadCost_(item.customerCount, ranges.stops) * weights.stops / 100 +
+      maintenanceNormalizedRoadCost_(item.addedDurationMinutes, ranges.addedTime) * weights.addedTime / 100 +
+      maintenanceNormalizedRoadCost_(item.addedDistanceKm, ranges.addedDistance) * weights.addedDistance / 100;
   });
   recommendations.sort(compareMaintenanceRoadRecommendations_);
   recommendations.forEach(function (item) { delete item._balancedRouteCost; });
