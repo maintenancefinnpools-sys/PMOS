@@ -16,6 +16,8 @@ function showPmosAddCustomer() {
 
   const html = template.evaluate()
     .setTitle('Add Customer')
+    .setWidth(1180)
+    .setHeight(860)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   SpreadsheetApp.getUi().showModelessDialog(html, 'Add Customer');

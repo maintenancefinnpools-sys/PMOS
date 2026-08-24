@@ -69,6 +69,8 @@ def main() -> None:
     for label in ("Entry Information", "General Notes", "Opening Notes", "Closing Notes"):
         require(add, label, f"Add Customer {label}", failures)
     require(sheets_add_customer_server, "createTemplateFromFile('Sheets_Add_Customer')", "shared Sheets Add Customer template", failures)
+    require(sheets_add_customer_server, ".setWidth(1180)", "large Sheets Add Customer width", failures)
+    require(sheets_add_customer_server, ".setHeight(860)", "large Sheets Add Customer height", failures)
     require(sheets_add_customer, "include('Web_Add_Customer')", "Web/Sheets Add Customer form parity", failures)
     require(sheets_add_customer, "include('Web_Add_Service_Location')", "Web/Sheets inline service-location parity", failures)
 
