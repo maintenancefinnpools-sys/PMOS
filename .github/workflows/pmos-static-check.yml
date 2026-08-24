@@ -20,6 +20,9 @@ jobs:
       - name: Check customer lifecycle contract
         run: python3 tools/check_customer_lifecycle_contract.py
 
+      - name: Check Add Customer input formatting behavior
+        run: node tools/check_customer_input_formatters.js
+
       - name: Report self-only global candidates
         run: python3 tools/report_unused_apps_script_globals.py
 

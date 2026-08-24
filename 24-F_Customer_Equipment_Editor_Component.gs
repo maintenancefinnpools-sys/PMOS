@@ -6,7 +6,18 @@ function pmosCustomerEquipmentEditorStyles_() {
 function pmosCustomerEquipmentEditorScript_() {
   return String.raw`
 function byId(id){return document.getElementById(id)}
-function formatPmosPhoneInput(input){if(!input)return;var digits=String(input.value||'').replace(/\D/g,'').slice(0,10),value='';if(digits.length)value='('+digits.slice(0,3);if(digits.length>=3)value+=') '+digits.slice(3,6);if(digits.length>=6)value+=' - '+digits.slice(6,10);input.value=value}
+function formatPmosTitleCaseValue(value){return String(value||'').replace(/(^|[\s'’-])([a-zà-öø-ÿ])/g,function(match,prefix,letter){return prefix+letter.toUpperCase()})}
+function formatPmosTitleCaseInput(input){if(!input)return;var start=input.selectionStart,end=input.selectionEnd,value=String(input.value||''),formatted=formatPmosTitleCaseValue(value);if(formatted===value)return;input.value=formatted;if(start!=null&&input.setSelectionRange)input.setSelectionRange(start,end)}
+function formatPmosPhoneValue(value){
+  var digits=String(value||'').replace(/\D/g,'');
+  if(digits.length===11&&digits.charAt(0)==='1')digits=digits.slice(1);
+  digits=digits.slice(0,10);
+  if(!digits)return'';
+  if(digits.length<4)return'('+digits;
+  if(digits.length<7)return'('+digits.slice(0,3)+') '+digits.slice(3);
+  return'('+digits.slice(0,3)+') '+digits.slice(3,6)+'-'+digits.slice(6);
+}
+function formatPmosPhoneInput(input){if(!input)return;input.value=formatPmosPhoneValue(input.value)}
 function esc(s){return String(s==null?'':s).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]})}
 function setAddressRouteStatus(message,isError){var box=byId('addressRouteStatus');box.textContent=message||'';box.style.display=message?'block':'none';box.style.background=isError?'#fee2e2':'#eff6ff';box.style.color=isError?'#991b1b':'#1d4ed8';if(isError)byId('recommendationStatus').classList.remove('calculating')}
 function setRecommendationMessage(message,calculating){var box=byId('recommendationStatus');box.textContent=message||'';box.classList.toggle('calculating',!!calculating)}
