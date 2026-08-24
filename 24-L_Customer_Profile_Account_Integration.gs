@@ -41,10 +41,16 @@ function searchPmosCustomerAccountProfiles(query) {
   return listPmosCustomerAccountsForServiceLocations('').map(function(account) {
     const primary = byCustomerId[account.customerId] || {};
     const locationCount = Number(account.serviceLocationCount || 1);
+    const accountListName = String(account.listName || '').trim();
+    const usefulAccountListName = accountListName && accountListName !== String(account.customerId || '').trim()
+      ? accountListName : '';
     return {
       customerId: account.customerId,
       displayName: primary.displayName || account.displayName,
-      listName: account.listName || primary.listName,
+      // The account helper may legitimately fall back to Customer ID when a legacy
+      // header is not recognized. Never let that fallback mask the name already read
+      // by the canonical customer-profile search.
+      listName: primary.listName || usefulAccountListName || primary.displayName || account.displayName || account.customerId,
       calendarTitle: primary.calendarTitle || '',
       address: primary.address || account.address,
       phone: primary.phone || account.phone,
@@ -54,6 +60,7 @@ function searchPmosCustomerAccountProfiles(query) {
       sidebarMeta: locationCount > 1 ? locationCount + ' service locations' : '',
       accountSearchText: normalizePmosCustomerSearch_([
         primary.displayName,
+        primary.listName,
         account.listName,
         primary.phone,
         primary.email,

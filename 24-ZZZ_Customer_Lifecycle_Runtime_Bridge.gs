@@ -10,23 +10,7 @@
   if (typeof getPmosCustomerAccountEditorDataRuntime === 'function') {
     const baseEditorRuntime = getPmosCustomerAccountEditorDataRuntime;
     getPmosCustomerAccountEditorDataRuntime = function(customerId) {
-      const data = baseEditorRuntime(customerId);
-      const id = String(customerId || data.customerId || '').trim();
-      data.accountContacts = typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(id) : [];
-      data.orderedAccountContacts = pmosCustomerOrderedAccountContacts_(id);
-      data.serviceLocationContacts = typeof getPmosServiceLocationContacts_ === 'function'
-        ? getPmosServiceLocationContacts_(id) : (data.serviceLocationContacts || []);
-      data.accountBillingAddress = typeof getPmosAccountBillingAddress === 'function'
-        ? getPmosAccountBillingAddress(id) : (data.accountBillingAddress || {enabled: false});
-      const notes = pmosCustomerLifecycleNotes_(id);
-      data.generalNotes = notes.generalNotes || data.generalNotes || data.notes || '';
-      data.notes = data.generalNotes;
-      data.equipmentNotes = notes.equipmentNotes || '';
-      data.maintenanceNotes = notes.maintenanceNotes || '';
-      data.openingNotes = notes.openingNotes || '';
-      data.closingNotes = notes.closingNotes || '';
-      data.waterMaintenance = data.waterMaintenance || getPmosWaterMaintenanceEditorState_(id);
-      return data;
+      return pmosAttachCustomerLifecycleEditorData_(baseEditorRuntime(customerId), customerId);
     };
   }
 

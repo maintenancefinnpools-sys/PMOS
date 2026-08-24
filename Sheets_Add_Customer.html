@@ -68,7 +68,7 @@
         if(!customerId)return;
         google.script.run
           .withSuccessHandler(function(){google.script.host.close();})
-          .showPmosCustomerAccountLookup(customerId);
+          .showPmosCustomerAccountLookupRuntime(customerId);
       });
     </script>
   </body>

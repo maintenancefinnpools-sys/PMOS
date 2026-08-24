@@ -59,6 +59,10 @@ function pmosCustomerLifecycleStatus_(waterMaintenance) {
 function pmosAttachCustomerLifecycle_(profile, customerId) {
   const id = String(customerId || profile && profile.customerId || '').trim();
   const result = profile || {};
+  if (result._pmosLifecycleComplete === true) {
+    return typeof normalizePmosProfileEquipmentForContext_ === 'function'
+      ? normalizePmosProfileEquipmentForContext_(result) : result;
+  }
   const waterMaintenance = getPmosWaterMaintenanceEditorState_(id);
   const notes = pmosCustomerLifecycleNotes_(id);
   result.waterMaintenance = waterMaintenance;
@@ -75,6 +79,44 @@ function pmosAttachCustomerLifecycle_(profile, customerId) {
   result.maintenanceNotes = notes.maintenanceNotes || '';
   result.openingNotes = notes.openingNotes || '';
   result.closingNotes = notes.closingNotes || '';
+  result._pmosLifecycleComplete = true;
+  return typeof normalizePmosProfileEquipmentForContext_ === 'function'
+    ? normalizePmosProfileEquipmentForContext_(result) : result;
+}
+
+function pmosAttachCustomerLifecycleEditorData_(data, customerId) {
+  const result = data || {};
+  const id = String(customerId || result.customerId || '').trim();
+  if (result._pmosLifecycleComplete === true) {
+    return typeof normalizePmosProfileEquipmentForContext_ === 'function'
+      ? normalizePmosProfileEquipmentForContext_(result) : result;
+  }
+  result.accountContacts = typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(id) : [];
+  result.orderedAccountContacts = [{
+    primary: true,
+    firstName: String(result.firstName || '').trim(),
+    lastName: String(result.lastName || '').trim(),
+    role: 'Primary Account Contact',
+    phone: String(result.phone || '').trim(),
+    email: String(result.email || '').trim(),
+    notes: '',
+    resourceName: ''
+  }].concat(result.accountContacts.map(function(contact) {
+    return Object.assign({primary: false}, contact || {});
+  }));
+  result.serviceLocationContacts = typeof getPmosServiceLocationContacts_ === 'function'
+    ? getPmosServiceLocationContacts_(id) : (result.serviceLocationContacts || []);
+  result.accountBillingAddress = typeof getPmosAccountBillingAddress === 'function'
+    ? getPmosAccountBillingAddress(id) : (result.accountBillingAddress || {enabled: false});
+  const notes = pmosCustomerLifecycleNotes_(id);
+  result.generalNotes = notes.generalNotes || result.generalNotes || result.notes || '';
+  result.notes = result.generalNotes;
+  result.equipmentNotes = notes.equipmentNotes || '';
+  result.maintenanceNotes = notes.maintenanceNotes || '';
+  result.openingNotes = notes.openingNotes || '';
+  result.closingNotes = notes.closingNotes || '';
+  result.waterMaintenance = result.waterMaintenance || getPmosWaterMaintenanceEditorState_(id);
+  result._pmosLifecycleComplete = true;
   return typeof normalizePmosProfileEquipmentForContext_ === 'function'
     ? normalizePmosProfileEquipmentForContext_(result) : result;
 }
@@ -94,21 +136,7 @@ function getPmosCustomerLifecycleEditorData(customerId) {
   const data = typeof getPmosCustomerAccountEditorDataRuntime === 'function'
     ? getPmosCustomerAccountEditorDataRuntime(id)
     : getPmosCustomerAccountEditorDataWithWaterMaintenance(id);
-  data.accountContacts = typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(id) : [];
-  data.orderedAccountContacts = pmosCustomerOrderedAccountContacts_(id);
-  data.serviceLocationContacts = typeof getPmosServiceLocationContacts_ === 'function' ? getPmosServiceLocationContacts_(id) : [];
-  data.accountBillingAddress = typeof getPmosAccountBillingAddress === 'function'
-    ? getPmosAccountBillingAddress(id) : {enabled: false};
-  const notes = pmosCustomerLifecycleNotes_(id);
-  data.generalNotes = notes.generalNotes || data.generalNotes || data.notes || '';
-  data.notes = data.generalNotes;
-  data.equipmentNotes = notes.equipmentNotes || '';
-  data.maintenanceNotes = notes.maintenanceNotes || '';
-  data.openingNotes = notes.openingNotes || '';
-  data.closingNotes = notes.closingNotes || '';
-  data.waterMaintenance = data.waterMaintenance || getPmosWaterMaintenanceEditorState_(id);
-  return typeof normalizePmosProfileEquipmentForContext_ === 'function'
-    ? normalizePmosProfileEquipmentForContext_(data) : data;
+  return pmosAttachCustomerLifecycleEditorData_(data, id);
 }
 
 function savePmosCustomerLifecycleEditorData(input) {

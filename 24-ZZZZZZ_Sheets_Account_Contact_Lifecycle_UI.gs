@@ -7,14 +7,20 @@
       if (html.indexOf('__pmosSheetsAccountContactLifecycle') >= 0) return html;
       if (typeof pmosAccountContactStyles_ === 'function') {
         html = html.replace('</style>', pmosAccountContactStyles_() +
-          '.pmos-sheets-account-contact-host{grid-column:1/-1;display:grid;gap:9px}.pmos-sheets-account-contact-copy{color:#68747a;font-size:10px;line-height:1.45}.pmos-sheets-account-contact-add{justify-self:start;margin:0!important;padding:7px 10px!important;border:1px solid #9db6c1!important;border-radius:7px!important;background:#fff!important;color:#0f5470!important;font-size:10px!important;font-weight:900!important;cursor:pointer}\n</style>');
+          '.pmos-sheets-account-contact-host{grid-column:1/-1;display:grid;gap:9px}.pmos-sheets-account-contact-copy{color:#68747a;font-size:10px;line-height:1.45}.pmos-sheets-account-contact-add{justify-self:start;margin:0!important;padding:7px 10px!important;border:1px solid #9db6c1!important;border-radius:7px!important;background:#fff!important;color:#0f5470!important;font-size:10px!important;font-weight:900!important;cursor:pointer}.pmos-sheets-editor-loading>*:not(#pmosSheetsEditorLoading){visibility:hidden!important}#pmosSheetsEditorLoading{display:none;position:fixed;inset:0;z-index:9999;place-items:center;padding:32px;background:#e5eaed;color:#293944;text-align:center}.pmos-sheets-editor-loading #pmosSheetsEditorLoading{display:grid}.pmos-sheets-editor-spinner{width:38px;height:38px;margin:0 auto 13px;border:4px solid #cad8de;border-top-color:#0f5470;border-radius:50%;animation:pmos-sheets-editor-spin .85s linear infinite}#pmosSheetsEditorLoading.error .pmos-sheets-editor-spinner{display:none}#pmosSheetsEditorLoading strong{display:block;font-size:16px}#pmosSheetsEditorLoading span{display:block;max-width:470px;margin-top:7px;color:#68747a;font-size:11px;line-height:1.5;white-space:pre-wrap}@keyframes pmos-sheets-editor-spin{to{transform:rotate(360deg)}}\n</style>');
       }
       const accountScript = typeof pmosAccountContactClientScript_ === 'function'
         ? pmosAccountContactClientScript_() : '';
+      html = html.replace('<body>', '<body class="pmos-sheets-editor-loading"><div id="pmosSheetsEditorLoading" role="status" aria-live="polite"><div><div class="pmos-sheets-editor-spinner"></div><strong id="pmosSheetsEditorLoadingTitle">Loading customer…</strong><span id="pmosSheetsEditorLoadingMessage">Preparing account contacts, service location, maintenance, notes, and equipment.</span></div></div>');
       html = html.replace('</script></body></html>', accountScript + String.raw`
 (function(){
   if(window.__pmosSheetsAccountContactLifecycle)return;window.__pmosSheetsAccountContactLifecycle=true;
   var hydrated=false,watchTimer=0;
+  function revealEditor(){document.body.classList.remove('pmos-sheets-editor-loading');document.body.removeAttribute('aria-busy')}
+  function showLoadError(message){var box=document.getElementById('pmosSheetsEditorLoading'),title=document.getElementById('pmosSheetsEditorLoadingTitle'),copy=document.getElementById('pmosSheetsEditorLoadingMessage');if(box)box.classList.add('error');if(title)title.textContent='Customer could not be loaded';if(copy)copy.textContent=message||'Close the editor and try again.'}
+  document.body.setAttribute('aria-busy','true');
+  var baseSetStatus=typeof window.setStatus==='function'?window.setStatus:null;
+  if(baseSetStatus){window.setStatus=function(message,error){var result=baseSetStatus.apply(this,arguments);if(error)showLoadError(message);return result}}
   function setupHost(){
     var legacy=document.getElementById('additionalContacts'),addLegacy=document.getElementById('addContact'),first=document.getElementById('firstName'),last=document.getElementById('lastName'),phone=document.getElementById('phone'),email=document.getElementById('email');
     if(!legacy||!first||!last)return null;
@@ -33,7 +39,7 @@
     var host=setupHost();if(!host||!window.loaded)return false;
     if(typeof window.pmosResetRemovedAccountContacts==='function')window.pmosResetRemovedAccountContacts('accountContacts');
     if(typeof pmosRenderAccountContacts==='function')pmosRenderAccountContacts('accountContacts',window.loaded.accountContacts||[]);
-    hydrated=true;return true;
+    hydrated=true;setTimeout(revealEditor,0);return true;
   }
   if(typeof window.loadExistingContacts==='function')window.loadExistingContacts=function(){var legacy=document.getElementById('additionalContacts');if(legacy)legacy.innerHTML=''};
   var basePayload=typeof window.payload==='function'?window.payload:null;

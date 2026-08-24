@@ -37,13 +37,17 @@ function pmosAccountContactsLikelySamePerson_(left, right) {
   return !!(leftName && rightName && leftName === rightName);
 }
 
-function pmosMergedAccountContactsForLifecycle_(customerId) {
-  const saved = (typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(customerId) : [])
+function pmosMergedAccountContactsForLifecycle_(customerId, existingContacts) {
+  const source = Array.isArray(existingContacts)
+    ? existingContacts
+    : (typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(customerId) : []);
+  const saved = source
     .map(function(contact) { return Object.assign({}, contact || {}); });
   let record;
   try { record = getPmosCustomerContactRecord_(customerId, false); }
   catch (ignored) { return saved; }
   const primary = String(record.resourceName || (record.resourceNames || [])[0] || '').trim();
+  saved._pmosPrimaryResourceName = primary;
   const additionalResources = (record.resourceNames || []).filter(function(resourceName) {
     return resourceName && resourceName !== primary;
   });
@@ -82,22 +86,27 @@ function pmosMergedAccountContactsForLifecycle_(customerId) {
     };
   }
 
-  if (typeof getPmosCustomerLifecycleEditorData === 'function') {
-    const baseLifecycleEditor = getPmosCustomerLifecycleEditorData;
-    getPmosCustomerLifecycleEditorData = function(customerId) {
-      const data = baseLifecycleEditor(customerId);
-      data.accountContacts = pmosAnnotateAccountContactPrimaryLink_(customerId, pmosMergedAccountContactsForLifecycle_(customerId));
-      data.orderedAccountContacts = pmosCustomerOrderedAccountContacts_(customerId);
-      return data;
-    };
-  }
-
   if (typeof getPmosCustomerAccountEditorDataRuntime === 'function') {
     const baseRuntimeEditor = getPmosCustomerAccountEditorDataRuntime;
     getPmosCustomerAccountEditorDataRuntime = function(customerId) {
       const data = baseRuntimeEditor(customerId);
-      data.accountContacts = pmosAnnotateAccountContactPrimaryLink_(customerId, pmosMergedAccountContactsForLifecycle_(customerId));
-      data.orderedAccountContacts = pmosCustomerOrderedAccountContacts_(customerId);
+      const merged = pmosMergedAccountContactsForLifecycle_(customerId, data.accountContacts || []);
+      const primary = Object.assign({primary: true}, (data.orderedAccountContacts || [])[0] || {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: 'Primary Account Contact',
+        phone: data.phone,
+        email: data.email,
+        notes: ''
+      });
+      data.primaryAccountContactResourceName = String(merged._pmosPrimaryResourceName || '').trim();
+      primary.resourceName = data.primaryAccountContactResourceName;
+      data.accountContacts = merged.map(function(contact) {
+        return Object.assign({__pmosPrimaryResourceName: data.primaryAccountContactResourceName}, contact || {});
+      });
+      data.orderedAccountContacts = [primary].concat(merged.map(function(contact) {
+        return Object.assign({primary: false}, contact || {});
+      }));
       return data;
     };
   }

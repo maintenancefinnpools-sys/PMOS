@@ -55,29 +55,6 @@ function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResource
 }
 
 (function () {
-  if (typeof getPmosCustomerLifecycleEditorData === 'function') {
-    const baseLifecycleEditorData = getPmosCustomerLifecycleEditorData;
-    getPmosCustomerLifecycleEditorData = function(customerId) {
-      const data = baseLifecycleEditorData(customerId);
-      data.accountContacts = pmosAnnotateAccountContactPrimaryLink_(customerId, data.accountContacts || []);
-      data.primaryAccountContactResourceName = pmosPrimaryAccountGoogleResourceName_(customerId);
-      if (Array.isArray(data.orderedAccountContacts) && data.orderedAccountContacts.length) {
-        data.orderedAccountContacts[0].resourceName = data.primaryAccountContactResourceName;
-      }
-      return data;
-    };
-  }
-
-  if (typeof getPmosCustomerAccountEditorDataRuntime === 'function') {
-    const baseRuntimeEditorData = getPmosCustomerAccountEditorDataRuntime;
-    getPmosCustomerAccountEditorDataRuntime = function(customerId) {
-      const data = baseRuntimeEditorData(customerId);
-      data.accountContacts = pmosAnnotateAccountContactPrimaryLink_(customerId, data.accountContacts || []);
-      data.primaryAccountContactResourceName = pmosPrimaryAccountGoogleResourceName_(customerId);
-      return data;
-    };
-  }
-
   if (typeof pmosCustomerPrimaryAccountContact_ === 'function') {
     const basePrimaryContact = pmosCustomerPrimaryAccountContact_;
     pmosCustomerPrimaryAccountContact_ = function(customerId) {

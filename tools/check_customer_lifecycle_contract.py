@@ -50,11 +50,17 @@ def main() -> None:
     notes_bridge = read("24-W_Customer_Context_Notes_UI.gs")
     sheets_add_customer = read("Sheets_Add_Customer.html")
     sheets_add_customer_server = read("24-R1_Add_Customer_Sheets_Parity.gs")
+    lifecycle = read("24-Z_Customer_Profile_Editor_Lifecycle.gs")
+    lifecycle_runtime = read("24-ZZZ_Customer_Lifecycle_Runtime_Bridge.gs")
+    sheets_editor_lifecycle = read("24-ZZZZZZ_Sheets_Account_Contact_Lifecycle_UI.gs")
+    legacy_contact_bridge = read("24-ZZZZZZZ_Legacy_Account_Contact_Bridge.gs")
 
     ordered(index, ["Customer Look-Up", "Add Customer", "Add Maintenance Client"], "Customers menu order", failures)
     ordered(index, ["Temporary Maintenance", "Service Call", "Opening / Closing"], "Scheduling menu order", failures)
     require(index, "pmosRouteRecommendationCardStyles_()", "shared route-card styles", failures)
     require(index, "pmosRouteRecommendationCardScript_()", "shared route-card script", failures)
+    require(index, "pmosOpenCustomerProfile(customerId)", "direct created-customer profile handoff", failures)
+    forbid(index, "search.value=customerId", "Customer-ID search workaround for profile handoff", failures)
 
     require(add, "Customer Contact Info", "combined customer-contact card", failures)
     forbid(add, "Customer Identity", "separate Customer Identity card", failures)
@@ -77,6 +83,7 @@ def main() -> None:
     require(sheets_add_customer_server, ".setHeight(860)", "large Sheets Add Customer height", failures)
     require(sheets_add_customer, "include('Web_Add_Customer')", "Web/Sheets Add Customer form parity", failures)
     require(sheets_add_customer, "include('Web_Add_Service_Location')", "Web/Sheets inline service-location parity", failures)
+    require(sheets_add_customer, ".showPmosCustomerAccountLookupRuntime(customerId)", "runtime Sheets profile handoff", failures)
 
     require(maintenance, "amMaintenanceNotes", "maintenance-form Maintenance Notes", failures)
     require(maintenance, "amAccountContacts", "maintenance Account Contacts", failures)
@@ -93,6 +100,8 @@ def main() -> None:
     require(editor, "maintenanceRemovalConfirmed", "pending maintenance-removal confirmation", failures)
     require(editor, "Saving…", "editor save working state", failures)
     require(editor, "inlineHostId:'ceAdditionalLocationHost'", "inline editor location form", failures)
+    require(editor, "classList.add('ce-loading')", "Web editor loading gate", failures)
+    require(editor, "finishLoading()", "Web editor reveal after complete hydration", failures)
     require(editor, "<label class=\"ce-full\">Maintenance Notes<textarea id=\"ceMaintenanceNotes\"", "Maintenance Notes in maintenance section", failures)
     for form in (maintenance, editor, location):
         require(form, "pmosRouteRecommendationHtml", "shared detailed route cards", failures)
@@ -147,6 +156,13 @@ def main() -> None:
     require(notes_bridge, "scope.matches('#view-addcustomer,#view-addmaintenance,#ceBackdrop,#slBackdrop')", "no duplicate Web note injection", failures)
     require(maintenance_contacts, "data-pmos-native-maint-contacts", "no duplicate maintenance contact injection", failures)
     require(maintenance_contacts, "savePmosAccountBillingAddress_", "maintenance billing persistence", failures)
+    require(account_editor, "listName: primary.listName || usefulAccountListName", "customer name preferred over Customer ID fallback", failures)
+    require(lifecycle, "_pmosLifecycleComplete", "lifecycle payload completion marker", failures)
+    require(lifecycle, "pmosAttachCustomerLifecycleEditorData_", "single lifecycle editor enrichment helper", failures)
+    require(lifecycle_runtime, "pmosAttachCustomerLifecycleEditorData_(baseEditorRuntime(customerId), customerId)", "shared Sheets/Web lifecycle enrichment", failures)
+    require(sheets_editor_lifecycle, "pmos-sheets-editor-loading", "Sheets editor loading gate", failures)
+    require(sheets_editor_lifecycle, "setTimeout(revealEditor,0)", "Sheets editor reveal after contact hydration", failures)
+    forbid(legacy_contact_bridge, "const baseLifecycleEditor = getPmosCustomerLifecycleEditorData", "duplicate legacy lifecycle editor enrichment", failures)
 
     if failures:
         print("PMOS customer lifecycle contract failed:")
