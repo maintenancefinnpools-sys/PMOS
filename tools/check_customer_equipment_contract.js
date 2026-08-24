@@ -54,8 +54,6 @@ assert(context.clientSource.includes("host.style.display=checkbox.checked?'block
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(!context.clientSource.includes('prepareMainEquipmentPartNumbers'), 'Pump/filter/heater part-number fields should not be added.');
 assert(!context.clientSource.includes('automationPartNumber'), 'Equipment Automation should not show a blanket part-number field.');
-assert(context.clientSource.includes('grid.insertBefore(panel,coverTitle)'), 'Solar equipment must appear inside the Heater area before Covers.');
-assert(context.clientSource.includes('pmosHydrateSolarEquipmentDetails'), 'Saved Solar equipment must reopen inside the Heater card.');
 
 for (const partNumber of ['521357', '522621', '522622', '522472', '522473', '522186', '522187', '754000310', '521338Z', '521348Z']) {
   assert(context.clientSource.includes(partNumber), `IntelliChem component ${partNumber} is missing.`);
@@ -63,4 +61,4 @@ for (const partNumber of ['521357', '522621', '522622', '522472', '522473', '522
 assert(context.clientSource.includes("fieldValue(body,'[data-body-field=\"sanitization\"]')!=='Chlorine'"), 'Chlorine chemistry default guard is missing.');
 assert(context.clientSource.includes("model.value='IntelliChem Chlorine Tank with Tank-Mounted Pump'"), 'Chlorine tank default is missing.');
 
-console.log('Shared customer equipment contract clean: conditional catalog numbers, compact chemistry details, and heater-grouped solar equipment present.');
+console.log('Shared customer equipment contract clean: conditional catalog numbers and compact full-width chemistry details present.');

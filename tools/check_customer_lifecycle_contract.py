@@ -116,7 +116,8 @@ def main() -> None:
     require(account_model, "Account ID", "account/service-location grouping", failures)
     require(account_model, "Primary Service Location", "primary-location identity", failures)
 
-    require(equipment, "Solar heating equipment", "Solar equipment UI", failures)
+    require(equipment, "Solar Heater", "compact Solar Heater UI", failures)
+    require(equipment, "data-solar-add", "Solar Heater add-equipment dropdown", failures)
     require(equipment, "data-body-equipment-notes", "body-specific Equipment Notes", failures)
     require(equipment_fixes, "clean.equipmentNotes", "Equipment Notes normalization", failures)
     require(equipment_fixes, "solarEquipment", "Solar normalization", failures)
@@ -132,8 +133,10 @@ def main() -> None:
     require(shared_equipment, "hydrateChemistryAutomationDetails", "chemistry equipment detail hydration", failures)
     forbid(shared_equipment, "prepareMainEquipmentPartNumbers", "blanket pump/filter/heater part-number fields", failures)
     forbid(shared_equipment, "automationPartNumber", "blanket Equipment Automation part-number field", failures)
-    require(equipment_enhancements, "grid.insertBefore(panel,coverTitle)", "Solar equipment grouped before Covers", failures)
-    require(equipment_enhancements, "pmosHydrateSolarEquipmentDetails", "Solar equipment edit hydration", failures)
+    require(equipment, "grid.insertBefore(panel,coverTitle)", "Solar Heater grouped before Covers", failures)
+    require(equipment, "pmosHydrateSolarEquipmentDetails", "Solar equipment edit hydration", failures)
+    forbid(equipment_enhancements, "pmosInstallSolarPanel", "duplicate Solar Heating panel", failures)
+    forbid(equipment_enhancements, "data-solar-enabled", "duplicate Solar Heating checkbox list", failures)
     require(customer_editor, "pmosHydrateSolarEquipmentDetails(card,item.type,details)", "editor Solar equipment hydration", failures)
     forbid(equipment_enhancements, "type:'FLOW_CELL'", "duplicate standalone chemistry flow-cell item", failures)
 
