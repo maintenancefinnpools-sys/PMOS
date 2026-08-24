@@ -48,6 +48,9 @@ assert(context.editorStyles.includes('.chemistry-fields>label'), 'Chemistry Auto
 assert(context.editorStyles.includes('.chemistry-component-row'), 'Orderly Chemistry Automation component rows are missing.');
 assert(context.clientSource.includes('chemistry-selectors'), 'Compact Chemistry Automation selectors are missing.');
 assert(context.clientSource.includes('chemistry-equipment-card'), 'Chemistry Automation equipment card is missing.');
+assert(context.editorStyles.includes('.chemistry-equipment-host{grid-column:1/-1;width:100%'), 'Chemistry Automation equipment card is not full width.');
+assert(context.clientSource.includes("box.insertAdjacentElement('afterend',host)"), 'Chemistry Automation equipment card is not below both automation selectors.');
+assert(context.clientSource.includes("host.style.display=checkbox.checked?'block':'none'"), 'Full-width Chemistry Automation equipment card does not follow its toggle.');
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(!context.clientSource.includes('prepareMainEquipmentPartNumbers'), 'Pump/filter/heater part-number fields should not be added.');
 assert(!context.clientSource.includes('automationPartNumber'), 'Equipment Automation should not show a blanket part-number field.');

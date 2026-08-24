@@ -12,8 +12,8 @@
       return baseStyles() +
         '.chemistry-selectors{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}' +
         '.chemistry-selectors>label,.chemistry-component-row>label,.chemistry-other-equipment{display:flex;flex-direction:column;gap:5px;color:#6f7d84;font-size:11px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}' +
-        '.chemistry-fields>[data-chemistry-equipment-host]{grid-column:1/-1}.chemistry-equipment-card{margin-top:2px}' +
-        '.chemistry-component-list{display:grid;gap:8px}.chemistry-component-row{display:grid;grid-template-columns:minmax(150px,.8fr) repeat(2,minmax(0,1fr));gap:10px;align-items:end;padding:9px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}' +
+        '.chemistry-equipment-host{grid-column:1/-1;width:100%;box-sizing:border-box}.chemistry-equipment-card{width:100%;margin-top:2px;box-sizing:border-box}' +
+        '.chemistry-component-list{display:grid;gap:8px}.chemistry-component-row{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(300px,2fr) minmax(160px,.8fr);gap:10px;align-items:end;padding:9px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}' +
         '.chemistry-component-name{align-self:center;color:#293944;font-size:12px;font-weight:900}.chemistry-other-equipment{padding-top:3px}' +
         '.pmos-solar-panel{grid-column:1/-1;margin:4px 0 0;padding:10px;border:1px solid #c9dde6;border-radius:8px;background:#fff}' +
         '.pmos-solar-title{margin-bottom:8px;color:#293944;font-size:12px;font-weight:900}' +
