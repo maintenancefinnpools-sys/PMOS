@@ -37,12 +37,14 @@
     if(!notes||!opening||!closing||!maintenanceContext())return;
     var existing=byIdLocal('maintenanceNotes'),host=byIdLocal('maintenanceNotesField');
     if(!existing){
-      var prototype=fieldHostLocal(notes),node,area=document.createElement('textarea');area.id='maintenanceNotes';
+      var prototype=fieldHostLocal(notes),node,area=document.createElement('textarea');area.id='maintenanceNotes';area.style.font='inherit';
       if(prototype&&prototype.matches&&prototype.matches('label')){node=document.createElement('label');node.className=(prototype.className||'full')+' pmos-note-field';node.appendChild(document.createTextNode('Maintenance Notes'));node.appendChild(area)}
       else{node=document.createElement('div');node.className='field wide pmos-note-field';var label=document.createElement('label');label.appendChild(document.createTextNode('Maintenance Notes '));var optional=document.createElement('span');optional.style.cssText='font-weight:400;text-transform:none;letter-spacing:0';optional.textContent='optional';label.appendChild(optional);label.appendChild(area);node.appendChild(label)}
       node.id='maintenanceNotesField';closing.insertAdjacentElement('afterend',node);host=node;existing=area;
       if(window.loaded&&loaded.maintenanceNotes!=null)existing.value=loaded.maintenanceNotes||'';
     }
+    var maintenanceGrid=document.querySelector('#waterMaintenanceSection>.grid');
+    if(host&&maintenanceGrid&&host.parentNode!==maintenanceGrid)maintenanceGrid.appendChild(host);
     if(host)host.style.display=maintenanceIsOn()?'':'none';
   }
   function wireToggle(id){var toggle=byIdLocal(id);if(!toggle||toggle.__pmosLateNotesWired)return;toggle.__pmosLateNotesWired=true;toggle.addEventListener('change',function(){setTimeout(ensureLateMaintenanceNotes,0)})}

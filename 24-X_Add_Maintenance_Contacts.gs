@@ -48,6 +48,21 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
       const result = baseCreateMaintenanceCustomer(request);
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
 
+      if (Object.prototype.hasOwnProperty.call(request, 'accountBillingAddress') &&
+          typeof savePmosAccountBillingAddress_ === 'function') {
+        try {
+          const billing = normalizePmosAccountBillingAddress_(request.accountBillingAddress || {enabled: false});
+          savePmosAccountBillingAddress_(result.customerId, billing);
+          result.accountBillingAddress = billing;
+          if (typeof syncPmosAccountHolderGoogleAddress_ === 'function') {
+            syncPmosAccountHolderGoogleAddress_(result.customerId);
+          }
+        } catch (error) {
+          result.warnings.push('Maintenance customer was saved, but the Account Billing Address could not be synchronized: ' +
+            String(error && error.message ? error.message : error));
+        }
+      }
+
       if (typeof syncPmosAccountContactsToGoogle_ === 'function') {
         try {
           const accountResult = syncPmosAccountContactsToGoogle_(result.customerId, accountContacts);
@@ -113,7 +128,7 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
 
   function titleInput(input){if(!input)return;if(window.pmosTitleCaseInput)window.pmosTitleCaseInput(input);else input.value=String(input.value||'').replace(/(^|[\s'’-])([a-zà-öø-ÿ])/g,function(m,p,l){return p+l.toUpperCase()})}
   function formatMaintPhone(input){if(!input)return;if(typeof formatPmosPhoneInput==='function'){formatPmosPhoneInput(input);return}var digits=String(input.value||'').replace(/\D/g,'').slice(0,10),value='';if(digits.length)value='('+digits.slice(0,3);if(digits.length>=3)value+=') '+digits.slice(3,6);if(digits.length>=6)value+=' - '+digits.slice(6,10);input.value=value}
-  function maintenanceScope(){return document.getElementById('view-addmaintenance')||(document.getElementById('frequency')&&document.getElementById('recommendations')&&document.getElementById('saveButton')?document.body:null)}
+  function maintenanceScope(){var web=document.getElementById('view-addmaintenance');if(web&&web.querySelector('[data-pmos-native-maint-contacts]'))return null;return web||(document.getElementById('frequency')&&document.getElementById('recommendations')&&document.getElementById('saveButton')?document.body:null)}
   function ids(scope){var web=!!(scope&&scope.id==='view-addmaintenance');return web?{last:'amLastName',first:'amFirstName',phone:'amPhone',email:'amEmail',notes:'amNotes',save:'amCreateButton'}:{last:'lastName',first:'firstName',phone:'phone',email:'email',notes:'notes',save:'saveButton'}}
   function escMaint(value){return String(value==null?'':value).replace(/[&<>\"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]})}
   function roleOptions(values){return values.map(function(value){return '<option value="'+escMaint(value)+'">'+escMaint(value)+'</option>'}).join('')}

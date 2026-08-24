@@ -11,6 +11,7 @@
     <style><?!= pmosServiceLocationContactStyles ?></style>
     <style><?!= pmosAccountBillingStyles ?></style>
     <style><?!= pmosAccountContactStyles ?></style>
+    <style><?!= pmosRouteRecommendationCardStyles_() ?></style>
     <style>.main .muted{font-size:inherit}</style>
     <script>
       window.pmosActivateEquipmentScope=function(storeId){
@@ -53,6 +54,7 @@
     <script><?!= pmosServiceLocationContactScript ?></script>
     <script><?!= pmosAccountBillingScript ?></script>
     <script><?!= pmosAccountContactScript ?></script>
+    <script><?!= pmosRouteRecommendationCardScript_() ?></script>
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -63,13 +65,13 @@
           <nav class="nav" aria-label="Primary navigation">
             <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Dashboard</span></button>
             <div class="nav-section">Customers</div>
+            <button class="nav-item nav-subitem" data-view="customers"><span class="nav-icon">⌕</span><span>Customer Look-Up</span></button>
             <button class="nav-item nav-subitem" data-view="addcustomer"><span class="nav-icon">＋</span><span>Add Customer</span></button>
             <button class="nav-item nav-subitem" data-view="addmaintenance"><span class="nav-icon">＋</span><span>Add Maintenance Client</span></button>
-            <button class="nav-item nav-subitem" data-view="customers"><span class="nav-icon">⌕</span><span>Customer Look-Up</span></button>
             <div class="nav-section">Operations</div>
             <div class="nav-menu-label"><span class="nav-icon">▣</span><span>Scheduling</span></div>
-            <button class="nav-item nav-subitem" data-view="servicecall"><span class="nav-icon">•</span><span>Service Call</span></button>
             <button class="nav-item nav-subitem" data-view="tempmaintenance"><span class="nav-icon">•</span><span>Temporary Maintenance</span></button>
+            <button class="nav-item nav-subitem" data-view="servicecall"><span class="nav-icon">•</span><span>Service Call</span></button>
             <button class="nav-item nav-subitem" data-view="openingclosing"><span class="nav-icon">•</span><span>Opening / Closing</span></button>
             <button class="nav-item nav-subitem" data-view="routes"><span class="nav-icon">↕</span><span>Route Manager</span></button>
             <button class="nav-item" data-view="jobs"><span class="nav-icon">✓</span><span>PMOS Operations</span></button>

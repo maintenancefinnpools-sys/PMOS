@@ -96,13 +96,13 @@ function packPmosContextNotesEnvelope_(notes) {
   function enc(value){return encodeURIComponent(JSON.stringify(value))}
   function dec(value){try{return JSON.parse(decodeURIComponent(value))}catch(error){return null}}
   function noteScope(node){return node&&node.closest&&node.closest('#view-addcustomer,#view-addmaintenance,#ceBackdrop,#slBackdrop,.shell,body')||document.body}
-  function noteInput(scope,key){return scope&&scope.querySelector('[data-pmos-context-note="'+key+'"]')}
+  function noteInput(scope,key){if(!scope)return null;var ids={equipmentNotes:['ceEquipmentNotes','slEquipmentNotes'],maintenanceNotes:['amMaintenanceNotes','ceMaintenanceNotes','slMaintenanceNotes'],openingNotes:['acOpeningNotes','amOpeningNotes','ceOpeningNotes','slOpeningNotes'],closingNotes:['acClosingNotes','amClosingNotes','ceClosingNotes','slClosingNotes']}[key]||[];var generated=scope.querySelector('[data-pmos-context-note="'+key+'"]');if(generated)return generated;for(var i=0;i<ids.length;i++){var node=scope.querySelector('#'+ids[i]);if(node)return node}return null}
   function generalNotes(scope){for(var i=0;i<PMOS_NOTE_IDS.length;i++){var node=scope.querySelector('#'+PMOS_NOTE_IDS[i]);if(node)return node}return null}
   function renameGeneralLabel(textarea){var label=textarea&&textarea.closest('label');if(!label)return;Array.prototype.some.call(label.childNodes,function(node){if(node.nodeType===3&&/customer\s*\/\s*service notes|customer notes|service notes/i.test(node.nodeValue||'')){node.nodeValue='General Notes ';return true}return false})}
   function makeNoteField(label,key){var wrap=document.createElement('label');wrap.className='pmos-context-note-field';wrap.textContent=label;var area=document.createElement('textarea');area.setAttribute('data-pmos-context-note',key);wrap.appendChild(area);return wrap}
   function equipmentHost(scope){return scope.querySelector('.ac-equipment-shell,.am-equipment-shell,.ce-equipment,.sl-equipment')||scope.querySelector('.water-bodies')}
   function installContextNotesFor(textarea){
-    if(!textarea||textarea.dataset.pmosContextNotes==='1')return;textarea.dataset.pmosContextNotes='1';var scope=noteScope(textarea);renameGeneralLabel(textarea);
+    if(!textarea||textarea.dataset.pmosContextNotes==='1')return;textarea.dataset.pmosContextNotes='1';var scope=noteScope(textarea);renameGeneralLabel(textarea);if(scope.matches&&scope.matches('#view-addcustomer,#view-addmaintenance,#ceBackdrop,#slBackdrop'))return;
     var host=equipmentHost(scope);if(host&&!scope.querySelector('[data-pmos-context-note="equipmentNotes"]')){var equipment=makeNoteField('Equipment Notes','equipmentNotes');equipment.style.margin='10px';host.insertAdjacentElement('afterend',equipment)}
     if(!scope.querySelector('.pmos-context-note-grid')){var grid=document.createElement('div');grid.className='pmos-context-note-grid';grid.appendChild(makeNoteField('Maintenance Notes','maintenanceNotes'));grid.appendChild(makeNoteField('Opening Notes','openingNotes'));grid.appendChild(makeNoteField('Closing Notes','closingNotes'));var label=textarea.closest('label')||textarea;label.insertAdjacentElement('afterend',grid)}
   }

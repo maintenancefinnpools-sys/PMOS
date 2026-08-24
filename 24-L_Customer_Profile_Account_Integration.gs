@@ -94,8 +94,11 @@ function getPmosCustomerAccountProfile(customerId) {
 }
 
 function getPmosCustomerAccountEditorData(customerId) {
-  const data = getPmosCustomerEditorData(customerId);
+  // Account initialization can fill missing Account ID, primary-location, or
+  // default location-name cells. Do that before the editor token is generated;
+  // otherwise a newly opened editor can invalidate its own optimistic-lock token.
   const account = getPmosCustomerAccount_(customerId);
+  const data = getPmosCustomerEditorData(customerId);
   const selected = account.locations.filter(function(location) {
     return String(location.customerId) === String(customerId);
   })[0] || null;
