@@ -60,5 +60,11 @@ for (const partNumber of ['521357', '522621', '522622', '522472', '522473', '522
 }
 assert(context.clientSource.includes("fieldValue(body,'[data-body-field=\"sanitization\"]')!=='Chlorine'"), 'Chlorine chemistry default guard is missing.');
 assert(context.clientSource.includes("model.value='IntelliChem Chlorine Tank with Tank-Mounted Pump'"), 'Chlorine tank default is missing.');
+assert(context.clientSource.includes("data-body-field=\"shape\""), 'Body shape field is missing.');
+assert(context.clientSource.includes("data-body-field=\"volume\""), 'Body volume field is missing.');
+assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self-Contained Unit'"), 'Standalone hot-tub guard is missing.');
+assert(context.clientSource.includes("make.value='Floater'"), 'Standalone hot-tub floater default is missing.');
+const saltMakes = Object.keys(context.PMOS_SANITIZER_CATALOG.SALT_SYSTEM);
+assert(saltMakes.indexOf('Jandy') < saltMakes.indexOf('Sta-Rite') && saltMakes.indexOf('Sta-Rite') < saltMakes.indexOf('Nature2'), 'Nature2 make ordering is incorrect.');
 
-console.log('Shared customer equipment contract clean: conditional catalog numbers and compact full-width chemistry details present.');
+console.log('Shared customer equipment contract clean: catalogs, body overview, standalone spa, and chemistry safeguards present.');

@@ -79,3 +79,41 @@
 `;
   };
 })();
+
+/** Shared body overview and standalone-spa behavior used by every customer form. */
+(function () {
+  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
+    const baseStyles = pmosCustomerEquipmentEditorStyles_;
+    pmosCustomerEquipmentEditorStyles_ = function () {
+      return baseStyles() +
+        '.body-grid{grid-template-columns:repeat(5,minmax(0,1fr))}' +
+        '.body-overview-field select,.body-overview-field input{min-width:0}' +
+        '.body-title,.unit-title{font-size:14px}.equipment-head{font-size:13px}' +
+        '.body-grid>label,.equipment-grid>label,.chemistry-fields>label,.automation-fields>label,.spa-details>label,.spa-unit-fields>label,.chemistry-selectors>label,.chemistry-component-row>label,.chemistry-other-equipment,.pmos-equipment-notes label,.pmos-solar-equipment-grid label{font-size:12px}' +
+        '.body-grid input,.body-grid select,.equipment-grid input,.equipment-grid select,.chemistry-fields input,.automation-fields input,.automation-fields select,.spa-details input,.spa-details select,.spa-unit-fields input,.pmos-solar-equipment-grid input,.pmos-solar-equipment-grid textarea{font-size:13px}' +
+        '.inline-button,.remove-button,.pmos-solar-add{font-size:12px}' +
+        '@media(max-width:960px){.body-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}' +
+        '@media(max-width:760px){.body-grid{grid-template-columns:1fr}}';
+    };
+  }
+
+  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
+  const baseScript = pmosCustomerEquipmentEditorScript_;
+  pmosCustomerEquipmentEditorScript_ = function () {
+    return baseScript() + String.raw`
+(function(){
+  var PMOS_BODY_SHAPES=['Rectangle','Round','Oval','Kidney','L-Shaped','Roman','Grecian','Lazy L','Figure Eight','Coffin','Free Form','Other'];
+  var PMOS_MAKE_ORDER=['Pentair','Hayward','Jandy','Sta-Rite','Nature2'];
+  function pmosReorderCatalogMakes(){Object.keys(PMOS_SANITIZER_CATALOG||{}).forEach(function(type){var source=PMOS_SANITIZER_CATALOG[type]||{},ordered={};PMOS_MAKE_ORDER.forEach(function(make){if(source[make])ordered[make]=source[make]});Object.keys(source).forEach(function(make){if(!ordered[make])ordered[make]=source[make]});PMOS_SANITIZER_CATALOG[type]=ordered})}
+  function pmosInstallBodyOverview(card){if(!card||card.querySelector('[data-body-field="shape"]'))return;var sanitization=card.querySelector('[data-body-field="sanitization"]'),anchor=sanitization&&sanitization.closest('label');if(!anchor)return;anchor.classList.add('body-overview-field');var shape=document.createElement('label'),volume=document.createElement('label');shape.className='body-overview-field';volume.className='body-overview-field';shape.innerHTML='Shape<select data-body-field="shape"><option value="">Select shape</option>'+PMOS_BODY_SHAPES.map(function(value){return'<option value="'+esc(value)+'">'+esc(value)+'</option>'}).join('')+'</select>';volume.innerHTML='Volume<input data-body-field="volume" inputmode="decimal" placeholder="e.g. 75,000 L">';anchor.insertAdjacentElement('afterend',shape);shape.insertAdjacentElement('afterend',volume)}
+  function pmosConfigureStandaloneBody(card){if(!card)return;var bodyType=fieldValue(card,'[data-body-field="name"]').toLowerCase(),setup=fieldValue(card,'[data-body-field="equipmentSetup"]'),standalone=bodyType==='spa'&&setup==='Self-Contained Unit',chemistry=card.querySelector('.chemistry-option'),automation=card.querySelector('.automation-option');[chemistry,automation].forEach(function(option){if(option)option.style.display=standalone?'none':''});if(!standalone)return;var chemistryToggle=card.querySelector('[data-body-field="chemistryEnabled"]'),automationToggle=card.querySelector('[data-body-field="automationEnabled"]');if(chemistryToggle&&chemistryToggle.checked){chemistryToggle.checked=false;toggleChemistryAutomation(chemistryToggle)}if(automationToggle&&automationToggle.checked){automationToggle.checked=false;toggleEquipmentAutomation(automationToggle)}var sanitization=card.querySelector('[data-body-field="sanitization"]');if(sanitization){sanitization.value='Chlorine';renderPrimarySanitizer(sanitization);var primary=card.querySelector('.primary-sanitizer-card'),make=primary&&primary.querySelector('[data-equipment-field="make"]');if(make){make.value='Floater';updateSanitizerModels(make)}}}
+  pmosReorderCatalogMakes();
+  if(typeof prepareWaterBodyOptions==='function'){var basePrepare=prepareWaterBodyOptions;prepareWaterBodyOptions=function(root){var result=basePrepare.apply(this,arguments);Array.prototype.forEach.call((root||document).querySelectorAll('.water-body'),function(card){pmosInstallBodyOverview(card);pmosConfigureStandaloneBody(card)});return result}}
+  if(typeof addWaterBody==='function'){var baseAddBody=addWaterBody;addWaterBody=function(){var result=baseAddBody.apply(this,arguments),cards=document.querySelectorAll('.water-body'),card=cards[cards.length-1];pmosInstallBodyOverview(card);return result}}
+  if(typeof configureSpaEquipment==='function'){var baseConfigureSpa=configureSpaEquipment;configureSpaEquipment=function(card){var result=baseConfigureSpa.apply(this,arguments);pmosConfigureStandaloneBody(card);return result}}
+  if(typeof collectWaterBodies==='function'){var baseCollect=collectWaterBodies;collectWaterBodies=function(){var bodies=baseCollect.apply(this,arguments)||[],cards=document.querySelectorAll('.water-body');Array.prototype.forEach.call(cards,function(card,index){if(!bodies[index])return;bodies[index].shape=fieldValue(card,'[data-body-field="shape"]');bodies[index].volume=fieldValue(card,'[data-body-field="volume"]')});return bodies}}
+  if(typeof hydrateBodies==='function'){var baseHydrate=hydrateBodies;hydrateBodies=function(bodies){var result=baseHydrate.apply(this,arguments),rows=bodies||[],cards=document.querySelectorAll('.water-body');Array.prototype.forEach.call(cards,function(card,index){pmosInstallBodyOverview(card);var body=rows[index]||{},shape=card.querySelector('[data-body-field="shape"]'),volume=card.querySelector('[data-body-field="volume"]');if(shape)shape.value=body.shape||'';if(volume)volume.value=body.volume||'';pmosConfigureStandaloneBody(card)});return result}}
+})();
+`;
+  };
+})();

@@ -10,6 +10,8 @@
       const bodies = (normalized.bodiesOfWater || []).map(function(body, index) {
         const raw = rawBodies[index] || {};
         const clean = Object.assign({}, body);
+        clean.shape = String(raw.shape || '').trim().slice(0, 120);
+        clean.volume = String(raw.volume || '').trim().slice(0, 120);
         clean.equipmentNotes = String(raw.equipmentNotes || '').trim().slice(0, 5000);
         clean.heater = Object.assign({}, body.heater || {});
         const solarEquipment = normalizePmosSolarEquipment_(raw.heater && raw.heater.solarEquipment);
