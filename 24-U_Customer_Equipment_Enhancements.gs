@@ -10,15 +10,20 @@
     const baseStyles = pmosCustomerEquipmentEditorStyles_;
     pmosCustomerEquipmentEditorStyles_ = function () {
       return baseStyles() +
-        '.pmos-solar-panel{grid-column:1/-1;margin-top:4px;padding:9px;border:1px solid #d5e0e5;border-radius:8px;background:#f7fafb}' +
-        '.pmos-solar-title{margin-bottom:7px;color:#293944;font-size:11px;font-weight:900}' +
-        '.pmos-solar-options{display:flex;gap:8px;flex-wrap:wrap}' +
-        '.pmos-solar-option{display:grid;gap:7px;min-width:190px;flex:1 1 220px;padding:8px;border:1px solid #dce5e8;border-radius:7px;background:#fff}' +
+        '.chemistry-selectors{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}' +
+        '.chemistry-selectors>label,.chemistry-component-row>label,.chemistry-other-equipment{display:flex;flex-direction:column;gap:5px;color:#6f7d84;font-size:11px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}' +
+        '.chemistry-fields>[data-chemistry-equipment-host]{grid-column:1/-1}.chemistry-equipment-card{margin-top:2px}' +
+        '.chemistry-component-list{display:grid;gap:8px}.chemistry-component-row{display:grid;grid-template-columns:minmax(150px,.8fr) repeat(2,minmax(0,1fr));gap:10px;align-items:end;padding:9px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}' +
+        '.chemistry-component-name{align-self:center;color:#293944;font-size:12px;font-weight:900}.chemistry-other-equipment{padding-top:3px}' +
+        '.pmos-solar-panel{grid-column:1/-1;margin:4px 0 0;padding:10px;border:1px solid #c9dde6;border-radius:8px;background:#fff}' +
+        '.pmos-solar-title{margin-bottom:8px;color:#293944;font-size:12px;font-weight:900}' +
+        '.pmos-solar-options{display:grid;gap:8px}' +
+        '.pmos-solar-option{display:grid;gap:7px;padding:9px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}' +
         '.pmos-solar-fields{display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}' +
         '.pmos-solar-fields.open{display:grid}' +
         '.pmos-solar-fields label{display:flex;flex-direction:column;gap:4px;color:#6f7d84;font-size:11px;font-weight:900;text-transform:uppercase}' +
         '.pmos-solar-fields input{width:100%;min-height:34px;padding:6px 8px;border:1px solid #bfcbd1;border-radius:7px;background:#fff;color:#293944;font:inherit;font-size:13px}' +
-        '@media(max-width:760px){.pmos-solar-fields{grid-template-columns:1fr}}';
+        '@media(max-width:760px){.chemistry-selectors,.chemistry-component-row,.pmos-solar-fields{grid-template-columns:1fr}}';
     };
   }
 
@@ -89,14 +94,14 @@
   }
   function pmosFindSanitizerByTypeNumber(type,value){
     var target=pmosNormEquipmentNumber(value),found=null;if(!target)return null;
-    Object.keys(PMOS_SANITIZER_CATALOG[type]||{}).some(function(make){return (PMOS_SANITIZER_CATALOG[type][make]||[]).some(function(model){var exact=(model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(pmosCatalogNumberValue(number))===target})[0];if(exact){found={make:make,model:model.name,modelNumber:pmosCatalogNumberValue(exact)};return true}return false})});return found
+    Object.keys(PMOS_SANITIZER_CATALOG[type]||{}).some(function(make){return (PMOS_SANITIZER_CATALOG[type][make]||[]).some(function(model){var modelExact=(model.modelNumbers||[]).filter(function(number){return pmosNormEquipmentNumber(pmosCatalogNumberValue(number))===target})[0],partExact=(model.partNumbers||model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(pmosCatalogNumberValue(number))===target})[0],exact=modelExact||partExact;if(exact){found={make:make,model:model.name,field:modelExact?'modelNumber':'partNumber',number:pmosCatalogNumberValue(exact)};return true}return false})});return found
   }
   function pmosFindSolarAutomationByNumber(value){
     var target=pmosNormEquipmentNumber(value),found=null;if(!target)return null;Object.keys(PMOS_SOLAR_AUTOMATION_CATALOG).some(function(make){return PMOS_SOLAR_AUTOMATION_CATALOG[make].some(function(model){var exact=(model.numbers||[]).filter(function(number){return pmosNormEquipmentNumber(number)===target})[0];if(exact){found={make:make,model:model.name,modelNumber:exact};return true}return false})});return found
   }
 
   /* Correct reverse lookup inside the sanitizer type selected on the card. */
-  document.addEventListener('input',function(event){var input=event.target;if(!input||input.getAttribute('data-equipment-field')!=='modelNumber')return;var card=input.closest('.equipment-card'),type=card&&card.getAttribute('data-equipment-type');if(!type||!PMOS_SANITIZER_CATALOG[type])return;var match=pmosFindSanitizerByTypeNumber(type,input.value);if(!match)return;var make=card.querySelector('[data-equipment-field="make"]'),model=card.querySelector('[data-equipment-field="model"]');if(make){make.value=match.make;make.dispatchEvent(new Event('input',{bubbles:true}))}if(model){model.value=match.model;model.dispatchEvent(new Event('input',{bubbles:true}))}input.value=match.modelNumber});
+  document.addEventListener('input',function(event){var input=event.target,field=input&&input.getAttribute('data-equipment-field');if(field!=='modelNumber'&&field!=='partNumber')return;var card=input.closest('.equipment-card'),type=card&&card.getAttribute('data-equipment-type');if(!type||!PMOS_SANITIZER_CATALOG[type])return;var match=pmosFindSanitizerByTypeNumber(type,input.value);if(!match)return;var make=card.querySelector('[data-equipment-field="make"]'),model=card.querySelector('[data-equipment-field="model"]');if(make){make.value=match.make;make.dispatchEvent(new Event('input',{bubbles:true}))}if(model){model.value=match.model;model.dispatchEvent(new Event('input',{bubbles:true}))}var number=card.querySelector('[data-equipment-field="'+match.field+'"]');if(number)number.value=match.number});
 
   /* Solar is a heating method, but collector make/model may be freely typed. */
   var baseTypedCatalogModels=typedCatalogModels;
@@ -113,11 +118,11 @@
 
   function pmosInstallSolarPanel(host){
     if(!host||host.querySelector('.pmos-solar-panel'))return;var grid=host.classList.contains('water-body')?host.querySelector('.body-grid'):host.querySelector('.equipment-grid');if(!grid)return;var suffix='solar_'+Date.now()+'_'+Math.round(Math.random()*100000),panel=document.createElement('div');panel.className='pmos-solar-panel';panel.style.display='none';
-    panel.innerHTML='<div class="pmos-solar-title">Optional Solar Equipment</div><div class="pmos-solar-options">'+
+    panel.innerHTML='<div class="pmos-solar-title">Solar Heating Equipment</div><div class="pmos-solar-options">'+
       pmosSolarToggleHtml('booster','Booster Pump',pmosSolarInput('Make','boosterMake','list="solarPumpMakes_'+suffix+'"')+pmosSolarInput('Model','boosterModel','list="solarPumpModels_'+suffix+'"')+pmosSolarInput('Model #','boosterModelNumber','list="solarPumpNumbers_'+suffix+'"')+'<datalist id="solarPumpModels_'+suffix+'"></datalist><datalist id="solarPumpNumbers_'+suffix+'"></datalist>'+pmosPumpMakes(suffix))+
       pmosSolarToggleHtml('actuator','Valve Actuator',pmosSolarInput('Make','actuatorMake','list="solarActuatorMakes_'+suffix+'"')+pmosSolarInput('Model','actuatorModel','list="solarActuatorModels_'+suffix+'"')+pmosSolarInput('Model #','actuatorModelNumber','list="solarActuatorNumbers_'+suffix+'"')+'<datalist id="solarActuatorModels_'+suffix+'"></datalist><datalist id="solarActuatorNumbers_'+suffix+'"></datalist>'+pmosActuatorMakes(suffix))+
       pmosSolarToggleHtml('automation','Solar Automation',pmosSolarInput('Make','automationMake','list="solarAutomationMakes_'+suffix+'"')+pmosSolarInput('Model','automationModel','list="solarAutomationModels_'+suffix+'"')+pmosSolarInput('Model #','automationModelNumber','list="solarAutomationNumbers_'+suffix+'"')+'<datalist id="solarAutomationModels_'+suffix+'"></datalist><datalist id="solarAutomationNumbers_'+suffix+'"></datalist>'+pmosSolarAutomationMakes(suffix))+
-      '</div>';grid.appendChild(panel);
+      '</div>';if(host.classList.contains('water-body')){var coverTitle=Array.prototype.filter.call(grid.querySelectorAll('.unit-title'),function(title){return String(title.textContent||'').trim()==='Covers'})[0];if(coverTitle)grid.insertBefore(panel,coverTitle);else grid.appendChild(panel)}else grid.appendChild(panel);
     Array.prototype.forEach.call(panel.querySelectorAll('[data-solar-enabled]'),function(box){box.addEventListener('change',function(){var fields=box.closest('.pmos-solar-option').querySelector('.pmos-solar-fields');fields.classList.toggle('open',box.checked)})});
     panel.addEventListener('input',pmosSolarPanelInput);
     host.dataset.pmosSolarInstalled='1';
@@ -135,6 +140,7 @@
   }
   function pmosConfigureSolarHost(host){if(!host)return;pmosInstallSolarPanel(host);var type=host.classList.contains('water-body')?host.querySelector('[data-body-field="heaterType"]'):host.querySelector('[data-equipment-field="heaterType"]'),panel=host.querySelector('.pmos-solar-panel');if(!type||!panel)return;panel.style.display=String(type.value||'').trim().toLowerCase()==='solar'?'block':'none'}
   function pmosInstallSolarOnBody(body){if(!body)return;pmosEnsureSolarHeaterOptions(body);pmosInstallSolarPanel(body);var type=body.querySelector('[data-body-field="heaterType"]');if(type&&!type.dataset.pmosSolarBound){type.dataset.pmosSolarBound='1';type.addEventListener('input',function(){pmosConfigureSolarHost(body)});type.addEventListener('change',function(){pmosConfigureSolarHost(body)})}pmosConfigureSolarHost(body)}
+  window.pmosHydrateSolarEquipmentDetails=function(body,type,details){var config={SOLAR_BOOSTER_PUMP:['booster','booster'],SOLAR_VALVE_ACTUATOR:['actuator','actuator'],SOLAR_AUTOMATION:['automation','automation']}[type],panel=body&&body.querySelector('.pmos-solar-panel');if(!config||!panel)return false;var option=panel.querySelector('[data-solar-kind="'+config[0]+'"]'),enabled=option&&option.querySelector('[data-solar-enabled="'+config[0]+'"]'),fields=option&&option.querySelector('.pmos-solar-fields');if(!option||!enabled||!fields)return false;enabled.checked=true;fields.classList.add('open');Object.keys(details||{}).forEach(function(key){var fieldKey=config[1]+key.charAt(0).toUpperCase()+key.slice(1),input=option.querySelector('[data-solar-field="'+fieldKey+'"]');if(input)input.value=details[key]==null?'':details[key]});pmosConfigureSolarHost(body);return true};
 
   var previousAddWaterBody=addWaterBody;
   addWaterBody=function(defaultName){previousAddWaterBody(defaultName);var bodies=document.querySelectorAll('.water-body'),body=bodies[bodies.length-1];pmosInstallSolarOnBody(body)};
@@ -146,15 +152,6 @@
     var bodies=previousCollectWaterBodies(),cards=document.querySelectorAll('.water-body');
     bodies.forEach(function(body,index){
       body.equipment=body.equipment||[];var card=cards[index];
-      var chemistry=(body.equipment||[]).filter(function(item){return item.type==='CHEMISTRY_AUTOMATION'})[0];
-      if(chemistry){
-        var chemistryDetails=chemistry.details||{};
-        if(!body.equipment.some(function(item){return item.type==='FLOW_CELL'}))body.equipment.push({type:'FLOW_CELL',details:{make:chemistryDetails.make,model:chemistryDetails.flowCellModel,partNumber:chemistryDetails.flowCellPartNumber,connectedTo:'Chemistry Automation'}});
-        if(!body.equipment.some(function(item){return item.type==='ACID_TANK'}))body.equipment.push({type:'ACID_TANK',details:{make:chemistryDetails.make,model:chemistryDetails.acidTankModel,partNumber:chemistryDetails.acidTankPartNumber,pumpMotorModel:chemistryDetails.acidPumpMotorModel,pumpMotorPartNumber:chemistryDetails.acidPumpMotorPartNumber,pumpHeadPartNumber:chemistryDetails.pumpHeadPartNumber,purpose:'Chemistry automation pH dosing'}});
-        if(!body.equipment.some(function(item){return item.type==='PH_PROBE'}))body.equipment.push({type:'PH_PROBE',details:{make:chemistryDetails.make,model:chemistryDetails.phProbeModel,partNumber:chemistryDetails.phProbePartNumber,connectedTo:'Chemistry Automation'}});
-        if(!body.equipment.some(function(item){return item.type==='ORP_PROBE'}))body.equipment.push({type:'ORP_PROBE',details:{make:chemistryDetails.make,model:chemistryDetails.orpProbeModel,partNumber:chemistryDetails.orpProbePartNumber,connectedTo:'Chemistry Automation'}});
-        if(String(body.sanitization||'').toLowerCase()==='chlorine'&&!body.equipment.some(function(item){return item.type==='CHLORINE_TANK'}))body.equipment.push({type:'CHLORINE_TANK',details:{make:chemistryDetails.make,model:chemistryDetails.chlorineTankModel,partNumber:chemistryDetails.chlorineTankPartNumber,pumpMotorModel:chemistryDetails.chlorinePumpMotorModel,pumpMotorPartNumber:chemistryDetails.chlorinePumpMotorPartNumber,pumpHeadPartNumber:chemistryDetails.pumpHeadPartNumber,purpose:'Liquid chlorine feed'}});
-      }
       if(!card)return;
       Array.prototype.forEach.call(card.querySelectorAll('.pmos-solar-panel'),function(panel){
         function add(kind,type,keys){var option=panel.querySelector('[data-solar-kind="'+kind+'"]'),enabled=option&&option.querySelector('[data-solar-enabled="'+kind+'"]');if(!enabled||!enabled.checked)return;var details={};keys.forEach(function(key){var input=option.querySelector('[data-solar-field="'+key+'"]');details[key.replace(/^(booster|actuator|automation)/,'').replace(/^./,function(c){return c.toLowerCase()})]=input?String(input.value||'').trim():''});body.equipment.push({type:type,details:details})}
