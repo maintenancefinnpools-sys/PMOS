@@ -5,12 +5,14 @@ function pmosCustomerEquipmentProfileStyles_() {
 .pmos-body-profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:11px}.pmos-body-profile-title{margin:0;color:var(--text,#293944);font-size:16px;font-weight:900}.pmos-body-meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px}.pmos-body-chip{padding:4px 8px;border:1px solid #b8c7ce;border-radius:999px;background:#dce8ed;color:#111;font-size:10px;font-weight:900}.pmos-body-relation{color:var(--muted,#68747a);font-size:11px;font-weight:700}
 .pmos-equipment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-items:start}.pmos-profile-card{position:relative;align-self:start;min-width:0;border:1px solid var(--border,#d2dade);border-radius:9px;background:#fff;overflow:hidden}.pmos-profile-card.pmos-wide{grid-column:1/-1}.pmos-profile-card>summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-height:64px;padding:11px 38px 11px 12px;list-style:none;cursor:default}.pmos-profile-card.pmos-expandable>summary{cursor:pointer}.pmos-profile-card>summary::-webkit-details-marker{display:none}.pmos-card-copy{min-width:0}.pmos-card-heading{color:var(--muted,#68747a);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.pmos-card-subject{margin-top:5px;color:var(--text,#293944);font-size:12px;font-weight:900;line-height:1.35;word-break:break-word}.pmos-card-number{display:inline-flex;align-items:center;gap:4px;margin-left:7px;border:0;background:transparent;color:var(--muted,#68747a);font:inherit;font-size:9px;font-weight:700;cursor:pointer;vertical-align:baseline}.pmos-card-number:hover{color:var(--brand-dark,#0f5470)}.pmos-copy-icon{font-size:11px;line-height:1}.pmos-card-chevron{position:absolute;top:12px;right:12px;color:var(--brand-dark,#0f5470);font-size:14px;font-weight:900;transition:transform .15s}.pmos-profile-card[open] .pmos-card-chevron{transform:rotate(180deg)}.pmos-card-detail{padding:0 12px 12px;color:var(--text,#293944);font-size:11px;line-height:1.45}.pmos-card-detail-line{padding-top:9px;border-top:1px solid var(--border,#d2dade)}
 .pmos-table-card[open] .pmos-card-subject{display:none}.pmos-equipment-table{display:grid;grid-template-columns:minmax(120px,.75fr) minmax(180px,1.6fr) minmax(95px,.65fr);gap:0;border-top:1px solid var(--border,#d2dade)}.pmos-equipment-table-head,.pmos-equipment-table-row{display:contents}.pmos-equipment-table span{min-width:0;padding:7px 8px;border-bottom:1px solid #e6ecef;word-break:break-word}.pmos-equipment-table-head span{color:var(--muted,#68747a);font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}.pmos-equipment-table-row span{font-size:10px}.pmos-equipment-table .pmos-table-number{display:flex;align-items:flex-start;gap:4px}.pmos-equipment-note{grid-column:1/-1;padding:11px 12px;border:1px solid var(--border,#d2dade);border-radius:9px;background:#fff;color:var(--text,#293944);font-size:11px;white-space:pre-wrap}.pmos-copy-status{position:fixed;z-index:99999;right:18px;bottom:18px;padding:8px 11px;border-radius:7px;background:#293944;color:#fff;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+@media(min-width:1180px){#view-customers .pmos-equipment-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.pmos-body-profile-head{align-items:flex-start;flex-direction:column}.pmos-body-meta{justify-content:flex-start}.pmos-equipment-grid{grid-template-columns:1fr}.pmos-profile-card.pmos-wide{grid-column:auto}.pmos-equipment-table{grid-template-columns:minmax(95px,.8fr) minmax(130px,1.4fr) minmax(75px,.7fr)}}`;
 }
 
 function pmosCustomerEquipmentProfileClientScript_() {
   return String.raw`
 (function(){
+  window.__pmosEquipmentProfileCardsLoaded=true;
   function esc(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
   function arr(value){return Array.isArray(value)?value:[]}
   function details(item){return item&&item.details&&typeof item.details==='object'?item.details:(item||{})}
@@ -40,13 +42,18 @@ function pmosCustomerEquipmentProfileClientScript_() {
 })();`;
 }
 
+function pmosInjectCustomerEquipmentProfileUi_(html) {
+  let output = String(html || '');
+  if (output.indexOf('__pmosEquipmentProfileCardsLoaded') >= 0) return output;
+  output = output.replace('</style></head>', pmosCustomerEquipmentProfileStyles_() + '\n</style></head>');
+  output = output.replace('</script></body></html>', pmosCustomerEquipmentProfileClientScript_() + '\n</script></body></html>');
+  return output;
+}
+
 (function () {
   if (typeof buildPmosCustomerAccountLookupHtml_ !== 'function') return;
   const baseBuildLookup = buildPmosCustomerAccountLookupHtml_;
   buildPmosCustomerAccountLookupHtml_ = function(mode, initialCustomerId) {
-    let html = baseBuildLookup(mode, initialCustomerId);
-    html = html.replace('</style></head>', pmosCustomerEquipmentProfileStyles_() + '\n</style></head>');
-    html = html.replace('</script></body></html>', pmosCustomerEquipmentProfileClientScript_() + '\n</script></body></html>');
-    return html;
+    return pmosInjectCustomerEquipmentProfileUi_(baseBuildLookup(mode, initialCustomerId));
   };
 })();

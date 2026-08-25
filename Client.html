@@ -31,6 +31,7 @@
     $('viewTitle').textContent=viewMeta[name][0];
     $('viewSubtitle').textContent=viewMeta[name][1];
     $('sidebar').classList.remove('open');
+    if(viewHasNestedSidebar($(`view-${name}`)))setSidebarCollapsed(true);
     document.dispatchEvent(new CustomEvent('pmos:viewchange',{detail:{name:name}}));
   }
   async function load(){
@@ -64,11 +65,15 @@
   function renderHistory(){const versions=routeData(state.data).versions;$('historyList').innerHTML=versions.length?versions.map(v=>`<div class="history-row"><div class="history-info"><strong>${esc(v.label)}</strong><span>${esc(v.timestamp)}</span></div><button class="button secondary restore-button" data-id="${esc(v.id)}">Restore</button></div>`).join(''):'<div class="empty">No saved route versions.</div>';document.querySelectorAll('.restore-button').forEach(b=>b.onclick=()=>confirmAction('Restore route version?','Current routes will be backed up before this version is restored.',()=>restoreVersion(b.dataset.id)));}
   async function restoreVersion(id){setBusy('Restoring…');try{const result=await server('restoreRouteVersion',id);state.data.routes=result.routes||[];state.data.pending=result.pending||[];resetRouteOrder();renderAll();$('saveState').textContent='Restored';notify('Route version restored. Calendar changes remain pending until reviewed.','success');document.dispatchEvent(new CustomEvent('pmos:refresh',{detail:{skipShell:true}}));}catch(error){$('saveState').textContent='Restore failed';notify(error.message,'error');}}
   function confirmAction(title,message,action){$('confirmTitle').textContent=title;$('confirmMessage').textContent=message;state.confirmAction=action;$('confirmModal').hidden=false;}
-  function toggleSidebar(){const collapsed=$('appShell').classList.toggle('sidebar-collapsed'),button=$('sidebarCollapse');button.title=collapsed?'Show navigation':'Hide navigation';button.setAttribute('aria-label',button.title);}
+  function viewHasNestedSidebar(view){return !!(view&&view.querySelector('.customer-sidebar,.op-sidebar,[data-pmos-side-menu]'));}
+  function setSidebarCollapsed(collapsed){const shell=$('appShell'),button=$('sidebarCollapse');shell.classList.toggle('sidebar-collapsed',!!collapsed);button.title=collapsed?'Show navigation':'Hide navigation';button.setAttribute('aria-label',button.title);}
+  function toggleSidebar(){setSidebarCollapsed(!$('appShell').classList.contains('sidebar-collapsed'));}
   function initEvents(){
     document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>showView(b.dataset.view));
     $('menuButton').onclick=()=>$('sidebar').classList.toggle('open');
     $('sidebarCollapse').onclick=toggleSidebar;
+    $('appBrand').onclick=()=>setSidebarCollapsed(true);
+    $('appBrand').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setSidebarCollapsed(true);}};
     $('refreshButton').onclick=()=>{if(state.dirty&&!confirm('Discard unsaved route order and refresh?'))return;document.dispatchEvent(new CustomEvent('pmos:refresh'));};
     $('routeSelect').onchange=e=>{if(state.dirty&&!confirm('Discard unsaved route order?')){e.target.value=state.activeRoute;return;}state.activeRoute=e.target.value;resetRouteOrder();renderRoute()};
     $('routeSearch').oninput=renderRoute;

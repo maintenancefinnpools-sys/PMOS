@@ -259,6 +259,9 @@ function pmosRewriteRuntimeCustomerEndpoints_(html) {
 
 function pmosFinalizeRuntimeCustomerHtml_(html, context) {
   let output = pmosRewriteRuntimeCustomerEndpoints_(html);
+  if (context === 'LOOKUP' && typeof pmosInjectCustomerEquipmentProfileUi_ === 'function') {
+    output = pmosInjectCustomerEquipmentProfileUi_(output);
+  }
   if (context === 'LOOKUP' && output.indexOf('__pmosProfileEnhancementLoaded') < 0 &&
       typeof pmosCustomerProfileEnhancementScript_ === 'function') {
     output = output.replace('</script></body></html>',
