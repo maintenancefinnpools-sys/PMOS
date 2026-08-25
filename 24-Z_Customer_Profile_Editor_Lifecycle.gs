@@ -160,6 +160,18 @@ function savePmosCustomerLifecycleEditorData(input) {
   const locationName = String(request.serviceLocationName || '').trim();
   if (!locationName) throw new Error('Service Location Name is required.');
 
+  // Keep Calendar identity one-way: renaming a Service Location updates the
+  // Calendar title unless the user supplied a different title in this save.
+  // Editing Calendar Title never writes back to Service Location Name.
+  const identityRecord = getPmosCustomerEditorRow_(customerId);
+  const priorLocationIndex = findHeaderIndex_(identityRecord.headers, ['Service Location Name']);
+  const priorCalendarIndex = findHeaderIndex_(identityRecord.headers, ['Calendar Title']);
+  const priorLocationName = priorLocationIndex >= 0 ? String(identityRecord.values[priorLocationIndex] || '').trim() : '';
+  const priorCalendarTitle = priorCalendarIndex >= 0 ? String(identityRecord.values[priorCalendarIndex] || '').trim() : '';
+  if (locationName !== priorLocationName && (!String(request.calendarTitle || '').trim() || String(request.calendarTitle || '').trim() === priorCalendarTitle)) {
+    request.calendarTitle = locationName;
+  }
+
   const beforeMaintenance = getPmosWaterMaintenanceEditorState_(customerId);
   if (!Object.prototype.hasOwnProperty.call(request, 'waterMaintenance')) {
     request.waterMaintenance = !!beforeMaintenance.enabled;
@@ -229,11 +241,19 @@ function pmosCustomerLifecycleProfileEnhancementScript_() {
 (function(){
   if(window.__pmosCustomerLifecycleProfile)return;window.__pmosCustomerLifecycleProfile=true;
   function escLife(value){return String(value==null?'':value).replace(/[&<>\"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]})}
-  function contactHtml(contact){var name=[contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.role||'Contact',role=contact.primary?'Primary Account Contact':(contact.role||'');return '<div class="household-contact-card"><div><div class="household-contact-name">'+escLife(name)+'</div>'+(role?'<div class="result-meta">'+escLife(role)+'</div>':'')+'</div>'+(contact.phone?'<a href="tel:'+escLife(String(contact.phone).replace(/[^0-9+]/g,''))+'">'+escLife(contact.phone)+'</a>':'<span></span>')+(contact.email?'<a href="mailto:'+escLife(contact.email)+'">'+escLife(contact.email)+'</a>':'<span></span>')+'</div>'}
+  function contactKey(contact){var email=String(contact.email||'').trim().toLowerCase(),phone=String(contact.phone||'').replace(/\D/g,''),name=[contact.firstName,contact.lastName].join(' ').toLowerCase().replace(/\s+/g,' ').trim();return email?'e:'+email:phone?'p:'+phone:'n:'+name}
+  function contactHtml(contact,kind){var name=[contact.firstName,contact.lastName].filter(Boolean).join(' ')||contact.role||'Contact',role=contact.role&&!contact.primary?contact.role:'',badge=contact.primary?'Primary Contact':kind;return '<div class="household-contact-card"><div><div class="household-contact-name">'+escLife(name)+' <span style="display:inline-block;margin-left:5px;padding:2px 5px;border:1px solid #b8c7ce;border-radius:999px;color:#40535d;font-size:8px;font-weight:900;vertical-align:middle">'+escLife(badge)+'</span></div>'+(role?'<div class="result-meta">'+escLife(role)+'</div>':'')+'</div>'+(contact.phone?'<a href="tel:'+escLife(String(contact.phone).replace(/[^0-9+]/g,''))+'">'+escLife(contact.phone)+'</a>':'<span></span>')+(contact.email?'<a href="mailto:'+escLife(contact.email)+'">'+escLife(contact.email)+'</a>':'<span></span>')+'</div>'}
+  function contactSections(profile){var account=Array.isArray(profile.accountContacts)?profile.accountContacts:[],local=Array.isArray(profile.serviceLocationContacts)?profile.serviceLocationContacts:[],primary=account.filter(function(contact,index){return contact.primary||index===0})[0]||null,primaryKey=primary?contactKey(primary):'',combined={};account.forEach(function(contact,index){if(contact===primary||contact.primary||index===0)return;var key=contactKey(contact);if(key&&key!==primaryKey)combined[key]={contact:contact,kind:'Account Contact'}});local.forEach(function(contact){var key=contactKey(contact);if(key&&key!==primaryKey)combined[key]={contact:contact,kind:'Service Location Contact'}});var html='';if(primary)html+='<div data-pmos-primary-contact><div class="section-head"><h3>Primary Contact</h3></div><div class="household-contact-list">'+contactHtml(primary,'Primary Contact')+'</div></div>';var additional=Object.keys(combined).map(function(key){return combined[key]});if(additional.length)html+='<div data-pmos-additional-contacts><div class="section-head"><h3>Additional Contacts</h3></div><div class="household-contact-list">'+additional.map(function(item){return contactHtml(item.contact,item.kind)}).join('')+'</div></div>';return html}
+  function noteCard(label,value){return value?'<div class="card pmos-lifecycle-note"><div class="label">'+escLife(label)+'</div><div style="white-space:pre-wrap">'+escLife(value)+'</div></div>':''}
+  function findHead(content,text){return Array.prototype.filter.call(content.querySelectorAll('.section-head h3'),function(head){return String(head.textContent||'').toLowerCase().indexOf(text)>=0})[0]}
   var baseRender=typeof renderProfile==='function'?renderProfile:null;if(!baseRender)return;
   renderProfile=function(profile){baseRender(profile);profile=profile||{};var content=document.getElementById('content');if(!content)return;
-    var existing=content.querySelector('[data-pmos-lifecycle-account-contacts]');if(existing)existing.remove();
-    if(profile.accountContacts&&profile.accountContacts.length){var section=document.createElement('div');section.setAttribute('data-pmos-lifecycle-account-contacts','true');section.innerHTML='<div class="section-head"><h3>Account Contacts</h3></div><div class="household-contact-list">'+profile.accountContacts.map(contactHtml).join('')+'</div>';var firstHead=content.querySelector('.section-head');if(firstHead)content.insertBefore(section,firstHead);else content.insertBefore(section,content.firstChild)}
+    Array.prototype.forEach.call(content.querySelectorAll('[data-pmos-lifecycle-account-contacts],#serviceLocationContactsProfile'),function(node){node.remove()});
+    var contacts=contactSections(profile);if(contacts){var section=document.createElement('div');section.setAttribute('data-pmos-lifecycle-account-contacts','true');section.innerHTML=contacts;var firstHead=content.querySelector('.section-head');if(firstHead)content.insertBefore(section,firstHead);else content.insertBefore(section,content.firstChild)}
+    Array.prototype.forEach.call(content.querySelectorAll('[data-pmos-lifecycle-context-note]'),function(node){node.remove()});
+    var maintenanceHead=findHead(content,'maintenance'),equipmentHead=findHead(content,'bodies of water');
+    if(profile.maintenanceNotes&&maintenanceHead){var maintenanceNote=document.createElement('div');maintenanceNote.setAttribute('data-pmos-lifecycle-context-note','true');maintenanceNote.innerHTML=noteCard('Maintenance Notes',profile.maintenanceNotes);maintenanceHead.parentNode.insertAdjacentElement('afterend',maintenanceNote)}
+    if(profile.equipmentNotes&&equipmentHead){var equipmentNote=document.createElement('div');equipmentNote.setAttribute('data-pmos-lifecycle-context-note','true');equipmentNote.innerHTML=noteCard('Equipment Notes',profile.equipmentNotes);equipmentHead.parentNode.insertAdjacentElement('afterend',equipmentNote)}
     var badge=document.getElementById('status');if(badge&&profile.maintenanceStatus)badge.textContent=profile.maintenanceStatus;
   };
 })();

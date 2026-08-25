@@ -29,7 +29,9 @@ if (/setTimeout\(\(\)=>loadCustomers/.test(customers)) failures.push('Customer L
 
 requireText(operations, 'class="op-sidebar-toggle"', 'Operations uses the compact corner sidebar control', failures);
 requireText(operations, "$('opBrand').addEventListener('click'", 'Operations logo collapses its sidebar', failures);
-requireText(profileCards, '#view-customers .pmos-equipment-grid{grid-template-columns:repeat(3', 'wide Web profiles use three equipment columns', failures);
+requireText(profileCards, 'function fitGrid(grid)', 'Web equipment grid adapts to card content', failures);
+requireText(profileCards, "grid.classList.add('pmos-three-columns')", 'wide Web profiles can use three equipment columns', failures);
+requireText(profileCards, 'text.scrollWidth>text.clientWidth', 'equipment cards fall back to two columns before text truncates', failures);
 requireText(profileCards, '__pmosEquipmentProfileCardsLoaded', 'shared profile UI has an idempotent runtime marker', failures);
 requireText(runtime, 'pmosInjectCustomerEquipmentProfileUi_(output)', 'Sheets runtime explicitly injects the shared equipment profile UI', failures);
 

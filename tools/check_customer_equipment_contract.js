@@ -66,6 +66,8 @@ assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self
 assert(context.clientSource.includes("make.value='Floater'"), 'Standalone hot-tub floater default is missing.');
 assert(context.clientSource.includes("SD60 (22.5 in · 250 lb)"), 'Pentair SD60 size metadata is not corrected.');
 assert(context.clientSource.includes("?'145322':''"), 'Verified Pentair SD60 part number is missing.');
+assert(context.clientSource.includes('data-body-field="filterModelNumber"'), 'Main filter model-number field is missing.');
+assert(context.clientSource.includes('pmosInstallFilterModelNumber'), 'Added-filter model-number installer is missing.');
 assert(context.clientSource.includes("attached.value='Attached Spa'"), 'Attached Spa classification is missing.');
 const saltMakes = Object.keys(context.PMOS_SANITIZER_CATALOG.SALT_SYSTEM);
 assert(saltMakes.indexOf('Jandy') < saltMakes.indexOf('Sta-Rite') && saltMakes.indexOf('Sta-Rite') < saltMakes.indexOf('Nature2'), 'Nature2 make ordering is incorrect.');
@@ -108,5 +110,7 @@ assert(profileContext.profileStyles.includes('align-items:start'), 'Equipment ca
 assert(profileContext.profileStyles.includes('color:#111'), 'Shape and volume badges do not use dark text.');
 assert(profileContext.profileClientSource.includes('navigator.clipboard'), 'Clipboard API support is missing.');
 assert(profileContext.profileClientSource.includes("document.execCommand('copy')"), 'Clipboard fallback is missing.');
+assert(profileContext.profileClientSource.includes('function rawNumber(value)'), 'Copied equipment numbers are not normalized.');
+assert(profileContext.profileClientSource.includes('data-pmos-adaptive-grid'), 'Equipment profiles do not opt into adaptive columns.');
 
 console.log('Shared customer equipment contract clean: catalogs, body overview, standalone spa, and chemistry safeguards present.');
