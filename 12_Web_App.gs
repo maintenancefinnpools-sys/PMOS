@@ -78,6 +78,14 @@ function doGet() {
     typeof pmosCustomerEquipmentEditorScript_ === 'function'
       ? pmosCustomerEquipmentEditorScript_()
       : '';
+  template.pmosEquipmentProfileStyles =
+    typeof pmosCustomerEquipmentProfileStyles_ === 'function'
+      ? pmosCustomerEquipmentProfileStyles_()
+      : '';
+  template.pmosEquipmentProfileScript =
+    typeof pmosCustomerEquipmentProfileClientScript_ === 'function'
+      ? pmosCustomerEquipmentProfileClientScript_()
+      : '';
 
   template.pmosServiceLocationContactStyles =
     typeof pmosServiceLocationContactStyles_ === 'function'

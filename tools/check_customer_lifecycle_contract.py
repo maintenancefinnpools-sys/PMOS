@@ -30,6 +30,7 @@ def ordered(text: str, needles: list[str], label: str, failures: list[str]) -> N
 def main() -> None:
     failures: list[str] = []
     index = read("Index.html")
+    client = read("Client.html")
     add = read("Web_Add_Customer.html")
     maintenance = read("Web_Add_Maintenance.html")
     editor = read("Web_Customer_Edit.html")
@@ -62,6 +63,8 @@ def main() -> None:
     require(index, "pmosRouteRecommendationCardScript_()", "shared route-card script", failures)
     require(index, "pmosOpenCustomerProfile(customerId)", "direct created-customer profile handoff", failures)
     forbid(index, "search.value=customerId", "Customer-ID search workaround for profile handoff", failures)
+    require(client, "function routeData(value)", "null-safe Web route payload normalizer", failures)
+    require(client, "state.data=routeData(data)", "normalized Web startup route data", failures)
 
     require(add, "Customer Contact Info", "combined customer-contact card", failures)
     forbid(add, "Customer Identity", "separate Customer Identity card", failures)

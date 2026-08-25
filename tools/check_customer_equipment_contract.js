@@ -64,7 +64,49 @@ assert(context.clientSource.includes("data-body-field=\"shape\""), 'Body shape f
 assert(context.clientSource.includes("data-body-field=\"volume\""), 'Body volume field is missing.');
 assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self-Contained Unit'"), 'Standalone hot-tub guard is missing.');
 assert(context.clientSource.includes("make.value='Floater'"), 'Standalone hot-tub floater default is missing.');
+assert(context.clientSource.includes("SD60 (22.5 in · 250 lb)"), 'Pentair SD60 size metadata is not corrected.');
+assert(context.clientSource.includes("?'145322':''"), 'Verified Pentair SD60 part number is missing.');
+assert(context.clientSource.includes("attached.value='Attached Spa'"), 'Attached Spa classification is missing.');
 const saltMakes = Object.keys(context.PMOS_SANITIZER_CATALOG.SALT_SYSTEM);
 assert(saltMakes.indexOf('Jandy') < saltMakes.indexOf('Sta-Rite') && saltMakes.indexOf('Sta-Rite') < saltMakes.indexOf('Nature2'), 'Nature2 make ordering is incorrect.');
+
+const profileSource = fs.readFileSync(path.join(root, '24-YZ_Customer_Equipment_Profile_Cards.gs'), 'utf8');
+const profileContext = {
+  console,
+  navigator: {},
+  setTimeout() {},
+  document: {
+    addEventListener() {},
+    querySelector() { return null; },
+  },
+};
+profileContext.window = profileContext;
+vm.createContext(profileContext);
+vm.runInContext(
+  profileSource + '\nthis.profileClientSource=pmosCustomerEquipmentProfileClientScript_();this.profileStyles=pmosCustomerEquipmentProfileStyles_();',
+  profileContext,
+);
+vm.runInContext(profileContext.profileClientSource, profileContext);
+const sampleBodies = [{
+  name: 'Pool',
+  shape: 'Rectangle',
+  volume: '75,000 L',
+  sanitization: 'Chlorine',
+  filter: {make: 'Pentair', type: 'Sand', model: 'SD60 (22.5 in · 250 lb)'},
+  equipment: [{
+    type: 'WATER_FEATURE',
+    details: {featureType: 'Sheer Descent', actuatorMake: 'Pentair', actuatorModel: 'CVA-24T (180°)', actuatorModelNumber: '263045'},
+  }],
+}, {
+  name: 'Spa', type: 'Spa', spaType: 'Spillover Spa', equipmentSetup: 'Shared with Pool', equipment: [],
+}];
+const profileHtml = profileContext.pmosRenderEquipmentProfiles(sampleBodies);
+for (const token of ['22.5&quot; Diameter · 250 lb Sand', '145322', 'Water Feature: Sheer Descent', '263045', 'Spillover']) {
+  assert(profileHtml.includes(token), `Shared equipment profile is missing ${token}.`);
+}
+assert(profileContext.profileStyles.includes('align-items:start'), 'Equipment cards do not expand independently.');
+assert(profileContext.profileStyles.includes('color:#111'), 'Shape and volume badges do not use dark text.');
+assert(profileContext.profileClientSource.includes('navigator.clipboard'), 'Clipboard API support is missing.');
+assert(profileContext.profileClientSource.includes("document.execCommand('copy')"), 'Clipboard fallback is missing.');
 
 console.log('Shared customer equipment contract clean: catalogs, body overview, standalone spa, and chemistry safeguards present.');
