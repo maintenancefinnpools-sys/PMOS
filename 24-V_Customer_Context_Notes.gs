@@ -12,6 +12,48 @@ const PMOS_CUSTOMER_CONTEXT_NOTE_HEADERS_ = [
   'Closing Notes'
 ];
 
+/**
+ * Older compatibility forms temporarily stored categorized notes inside Customer Notes.
+ * Read that envelope defensively so it can never leak into a profile or editor as text.
+ * This is read-only normalization; the spreadsheet remains the source of truth.
+ */
+function normalizePmosStoredContextNotes_(input) {
+  const result = Object.assign({
+    generalNotes: '',
+    equipmentNotes: '',
+    maintenanceNotes: '',
+    openingNotes: '',
+    closingNotes: ''
+  }, input || {});
+  let raw = String(result.generalNotes || '');
+  for (let depth = 0; depth < 3; depth++) {
+    if (raw.indexOf('PMOS_MAINT_CONTACTS_V1:') === 0) {
+      try {
+        const contacts = JSON.parse(decodeURIComponent(raw.slice('PMOS_MAINT_CONTACTS_V1:'.length)));
+        raw = String(contacts.notes || '');
+        continue;
+      } catch (ignored) { break; }
+    }
+    if (raw.indexOf('PMOS_CONTEXT_NOTES_V1:') === 0) {
+      try {
+        const notes = JSON.parse(decodeURIComponent(raw.slice('PMOS_CONTEXT_NOTES_V1:'.length)));
+        result.generalNotes = String(notes.generalNotes || '');
+        ['equipmentNotes', 'maintenanceNotes', 'openingNotes', 'closingNotes'].forEach(function(key) {
+          if (!String(result[key] || '').trim()) result[key] = String(notes[key] || '');
+        });
+        raw = result.generalNotes;
+        continue;
+      } catch (ignored) { break; }
+    }
+    result.generalNotes = raw;
+    break;
+  }
+  if (/^PMOS_(?:CONTEXT_NOTES|MAINT_CONTACTS)_V1:/.test(String(result.generalNotes || ''))) {
+    result.generalNotes = '';
+  }
+  return result;
+}
+
 function ensurePmosCustomerContextNotesTable_() {
   const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
     PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
@@ -29,13 +71,13 @@ function getPmosCustomerContextNotes_(customerId) {
     const index = findHeaderIndex_(record.headers, aliases);
     return index >= 0 ? String(record.values[index] || '').trim() : '';
   }
-  return {
+  return normalizePmosStoredContextNotes_({
     generalNotes: value(['Customer Notes', 'General Notes', 'Notes', 'Details']),
     equipmentNotes: value(['Equipment Notes']),
     maintenanceNotes: value(['Maintenance Notes']),
     openingNotes: value(['Opening Notes']),
     closingNotes: value(['Closing Notes'])
-  };
+  });
 }
 
 function getPmosCustomerContextNotes(customerId) {
@@ -178,7 +220,8 @@ function normalizePmosProfileEquipmentForContext_(profile) {
 var pmosBaseContextRenderProfile=renderProfile;
 renderProfile=function(profile){
   pmosBaseContextRenderProfile(profile);
-  var entries=[['Equipment Notes',profile.equipmentNotes],['Maintenance Notes',profile.maintenanceNotes],['Opening Notes',profile.openingNotes],['Closing Notes',profile.closingNotes]].filter(function(item){return String(item[1]||'').trim()});
+  if(window.__pmosProfileEnhancementLoaded)return;
+  var entries=[['Maintenance Notes',(profile.frequency||(profile.routes||[]).length)?profile.maintenanceNotes:''],['Opening Notes',profile.openingNotes],['Closing Notes',profile.closingNotes]].filter(function(item){return String(item[1]||'').trim()});
   if(!entries.length)return;
   var target=document.getElementById('content');if(!target)return;
   target.insertAdjacentHTML('beforeend','<div class="section"><div class="section-head"><h3>Context Notes</h3></div><div class="pmos-context-notes">'+entries.map(function(item){return '<div class="pmos-context-note"><b>'+esc(item[0])+'</b><div>'+esc(item[1])+'</div></div>'}).join('')+'</div></div>');

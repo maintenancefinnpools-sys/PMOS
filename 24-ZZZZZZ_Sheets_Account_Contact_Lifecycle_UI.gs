@@ -15,8 +15,8 @@
       html = html.replace('</script></body></html>', accountScript + String.raw`
 (function(){
   if(window.__pmosSheetsAccountContactLifecycle)return;window.__pmosSheetsAccountContactLifecycle=true;
-  var hydrated=false,watchTimer=0;
-  function revealEditor(){document.body.classList.remove('pmos-sheets-editor-loading');document.body.removeAttribute('aria-busy')}
+  var hydrated=false,watchTimer=0,loadWarningTimer=0;
+  function revealEditor(){hydrated=true;if(watchTimer){clearInterval(watchTimer);watchTimer=0}if(loadWarningTimer){clearTimeout(loadWarningTimer);loadWarningTimer=0}document.body.classList.remove('pmos-sheets-editor-loading');document.body.removeAttribute('aria-busy')}
   function showLoadError(message){var box=document.getElementById('pmosSheetsEditorLoading'),title=document.getElementById('pmosSheetsEditorLoadingTitle'),copy=document.getElementById('pmosSheetsEditorLoadingMessage');if(box)box.classList.add('error');if(title)title.textContent='Customer could not be loaded';if(copy)copy.textContent=message||'Close the editor and try again.'}
   document.body.setAttribute('aria-busy','true');
   var baseSetStatus=typeof window.setStatus==='function'?window.setStatus:null;
@@ -39,7 +39,7 @@
     var host=setupHost();if(!host||!window.loaded)return false;
     if(typeof window.pmosResetRemovedAccountContacts==='function')window.pmosResetRemovedAccountContacts('accountContacts');
     if(typeof pmosRenderAccountContacts==='function')pmosRenderAccountContacts('accountContacts',window.loaded.accountContacts||[]);
-    hydrated=true;setTimeout(revealEditor,0);return true;
+    setTimeout(revealEditor,0);return true;
   }
   if(typeof window.loadExistingContacts==='function')window.loadExistingContacts=function(){var legacy=document.getElementById('additionalContacts');if(legacy)legacy.innerHTML=''};
   var basePayload=typeof window.payload==='function'?window.payload:null;
@@ -69,7 +69,15 @@
     };
   }
   function refresh(){setupHost();installSave();if(!hydrated&&window.loaded)hydrate()}
-  document.addEventListener('DOMContentLoaded',function(){refresh();watchTimer=setInterval(function(){refresh();if(hydrated){clearInterval(watchTimer);watchTimer=0}},80);setTimeout(function(){if(watchTimer){clearInterval(watchTimer);watchTimer=0}},5000)});
+  document.addEventListener('DOMContentLoaded',function(){
+    refresh();
+    // Server work can legitimately exceed five seconds. Keep watching until the
+    // payload arrives so a late success can still reveal the fully hydrated form.
+    watchTimer=setInterval(refresh,100);
+    loadWarningTimer=setTimeout(function(){
+      if(!hydrated)showLoadError('Loading this customer is taking longer than expected. Close the editor and try again; the form has not been changed.');
+    },45000);
+  });
 })();
 ` + '\n</script></body></html>');
       return html;

@@ -47,6 +47,7 @@ def main() -> None:
     account_editor = read("24-L_Customer_Profile_Account_Integration.gs")
     customer_editor = read("24-E_Customer_Editor.gs")
     water = read("24-S_Customer_Water_Maintenance_Editor.gs")
+    context_notes = read("24-V_Customer_Context_Notes.gs")
     notes_bridge = read("24-W_Customer_Context_Notes_UI.gs")
     sheets_add_customer = read("Sheets_Add_Customer.html")
     sheets_add_customer_server = read("24-R1_Add_Customer_Sheets_Parity.gs")
@@ -121,6 +122,7 @@ def main() -> None:
     forbid(location, "slEquipmentNotes", "duplicate location-level Equipment Notes", failures)
     require(location, "if(id&&!wasInline)", "nested location stays in parent editor", failures)
     require(profile, "inlineHostId:'customerInlineLocationHost'", "inline profile location form", failures)
+    forbid(profile, "if(profile.equipmentNotes)items.push", "duplicate profile-level Equipment Notes", failures)
 
     require(account_contacts, "Last name</label><input data-account-contact=\"lastName\"", "Account Contact last-name-first layout", failures)
     require(location_contacts, "Last name</label><input data-location-contact=\"lastName\"", "Service Location Contact last-name-first layout", failures)
@@ -176,6 +178,10 @@ def main() -> None:
     require(water, "removePmosWaterMaintenanceRouteRows_", "scoped maintenance-route removal", failures)
     require(water, "schedulePmosWaterMaintenanceRemovalCalendarSync_", "scoped maintenance Calendar cleanup", failures)
     require(notes_bridge, "scope.matches('#view-addcustomer,#view-addmaintenance,#ceBackdrop,#slBackdrop')", "no duplicate Web note injection", failures)
+    require(notes_bridge, "if(window.__pmosCustomerFormEnhancementsLoaded)return", "no duplicate modern Sheets note injection", failures)
+    require(notes_bridge, "if(window.__pmosProfileEnhancementLoaded||window.__pmosCustomerLifecycleProfile)return", "no duplicate modern profile note injection", failures)
+    require(context_notes, "normalizePmosStoredContextNotes_", "stored note-envelope decoder", failures)
+    require(context_notes, "PMOS_CONTEXT_NOTES_V1:", "legacy categorized-note envelope support", failures)
     require(maintenance_contacts, "data-pmos-native-maint-contacts", "no duplicate maintenance contact injection", failures)
     require(maintenance_contacts, "savePmosAccountBillingAddress_", "maintenance billing persistence", failures)
     require(account_editor, "listName: primary.listName || usefulAccountListName", "customer name preferred over Customer ID fallback", failures)
@@ -184,6 +190,9 @@ def main() -> None:
     require(lifecycle_runtime, "pmosAttachCustomerLifecycleEditorData_(baseEditorRuntime(customerId), customerId)", "shared Sheets/Web lifecycle enrichment", failures)
     require(sheets_editor_lifecycle, "pmos-sheets-editor-loading", "Sheets editor loading gate", failures)
     require(sheets_editor_lifecycle, "setTimeout(revealEditor,0)", "Sheets editor reveal after contact hydration", failures)
+    require(sheets_editor_lifecycle, "watchTimer=setInterval(refresh,100)", "Sheets editor late-payload hydration", failures)
+    forbid(sheets_editor_lifecycle, "},5000)", "five-second Sheets editor hydration cutoff", failures)
+    require(editor, "loadCustomerData(id)", "bounded Web editor load", failures)
     forbid(legacy_contact_bridge, "const baseLifecycleEditor = getPmosCustomerLifecycleEditorData", "duplicate legacy lifecycle editor enrichment", failures)
 
     if failures:

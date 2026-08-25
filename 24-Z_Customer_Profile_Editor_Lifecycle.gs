@@ -56,6 +56,20 @@ function pmosCustomerLifecycleStatus_(waterMaintenance) {
   return String(state.status || 'Active').trim() || 'Active';
 }
 
+function pmosCustomerLifecycleVisibleNotes_(stored, fallback) {
+  const source = stored || {};
+  const prior = fallback || {};
+  const values = {
+    generalNotes: source.generalNotes || prior.generalNotes || prior.notes || '',
+    equipmentNotes: source.equipmentNotes || prior.equipmentNotes || '',
+    maintenanceNotes: source.maintenanceNotes || prior.maintenanceNotes || '',
+    openingNotes: source.openingNotes || prior.openingNotes || '',
+    closingNotes: source.closingNotes || prior.closingNotes || ''
+  };
+  return typeof normalizePmosStoredContextNotes_ === 'function'
+    ? normalizePmosStoredContextNotes_(values) : values;
+}
+
 function pmosAttachCustomerLifecycle_(profile, customerId) {
   const id = String(customerId || profile && profile.customerId || '').trim();
   const result = profile || {};
@@ -64,7 +78,7 @@ function pmosAttachCustomerLifecycle_(profile, customerId) {
       ? normalizePmosProfileEquipmentForContext_(result) : result;
   }
   const waterMaintenance = getPmosWaterMaintenanceEditorState_(id);
-  const notes = pmosCustomerLifecycleNotes_(id);
+  const notes = pmosCustomerLifecycleVisibleNotes_(pmosCustomerLifecycleNotes_(id), result);
   result.waterMaintenance = waterMaintenance;
   result.maintenanceStatus = pmosCustomerLifecycleStatus_(waterMaintenance);
   result.accountContacts = pmosCustomerOrderedAccountContacts_(id);
@@ -73,12 +87,12 @@ function pmosAttachCustomerLifecycle_(profile, customerId) {
     ? getPmosServiceLocationContacts_(id) : (result.serviceLocationContacts || []);
   result.accountBillingAddress = typeof getPmosAccountBillingAddress === 'function'
     ? getPmosAccountBillingAddress(id) : (result.accountBillingAddress || {enabled: false});
-  result.generalNotes = notes.generalNotes || result.generalNotes || result.notes || '';
+  result.generalNotes = notes.generalNotes;
   result.notes = result.generalNotes;
-  result.equipmentNotes = notes.equipmentNotes || '';
-  result.maintenanceNotes = notes.maintenanceNotes || '';
-  result.openingNotes = notes.openingNotes || '';
-  result.closingNotes = notes.closingNotes || '';
+  result.equipmentNotes = notes.equipmentNotes;
+  result.maintenanceNotes = notes.maintenanceNotes;
+  result.openingNotes = notes.openingNotes;
+  result.closingNotes = notes.closingNotes;
   result._pmosLifecycleComplete = true;
   return typeof normalizePmosProfileEquipmentForContext_ === 'function'
     ? normalizePmosProfileEquipmentForContext_(result) : result;
@@ -108,13 +122,13 @@ function pmosAttachCustomerLifecycleEditorData_(data, customerId) {
     ? getPmosServiceLocationContacts_(id) : (result.serviceLocationContacts || []);
   result.accountBillingAddress = typeof getPmosAccountBillingAddress === 'function'
     ? getPmosAccountBillingAddress(id) : (result.accountBillingAddress || {enabled: false});
-  const notes = pmosCustomerLifecycleNotes_(id);
-  result.generalNotes = notes.generalNotes || result.generalNotes || result.notes || '';
+  const notes = pmosCustomerLifecycleVisibleNotes_(pmosCustomerLifecycleNotes_(id), result);
+  result.generalNotes = notes.generalNotes;
   result.notes = result.generalNotes;
-  result.equipmentNotes = notes.equipmentNotes || '';
-  result.maintenanceNotes = notes.maintenanceNotes || '';
-  result.openingNotes = notes.openingNotes || '';
-  result.closingNotes = notes.closingNotes || '';
+  result.equipmentNotes = notes.equipmentNotes;
+  result.maintenanceNotes = notes.maintenanceNotes;
+  result.openingNotes = notes.openingNotes;
+  result.closingNotes = notes.closingNotes;
   result.waterMaintenance = result.waterMaintenance || getPmosWaterMaintenanceEditorState_(id);
   result._pmosLifecycleComplete = true;
   return typeof normalizePmosProfileEquipmentForContext_ === 'function'
@@ -221,7 +235,6 @@ function pmosCustomerLifecycleProfileEnhancementScript_() {
     var existing=content.querySelector('[data-pmos-lifecycle-account-contacts]');if(existing)existing.remove();
     if(profile.accountContacts&&profile.accountContacts.length){var section=document.createElement('div');section.setAttribute('data-pmos-lifecycle-account-contacts','true');section.innerHTML='<div class="section-head"><h3>Account Contacts</h3></div><div class="household-contact-list">'+profile.accountContacts.map(contactHtml).join('')+'</div>';var firstHead=content.querySelector('.section-head');if(firstHead)content.insertBefore(section,firstHead);else content.insertBefore(section,content.firstChild)}
     var badge=document.getElementById('status');if(badge&&profile.maintenanceStatus)badge.textContent=profile.maintenanceStatus;
-    if(profile.equipmentNotes){var notes=content.querySelector('.notes');if(notes&&!content.querySelector('[data-pmos-equipment-note]')){var cardNode=document.createElement('div');cardNode.className='card';cardNode.setAttribute('data-pmos-equipment-note','true');cardNode.innerHTML='<div class="label">Equipment Notes</div><div class="value">'+escLife(profile.equipmentNotes)+'</div>';notes.appendChild(cardNode)}}
   };
 })();
 `;
