@@ -12,7 +12,15 @@
     <style><?!= pmosAccountBillingStyles ?></style>
     <style><?!= pmosAccountContactStyles ?></style>
     <style><?!= pmosRouteRecommendationCardStyles_() ?></style>
-    <style>.main .muted{font-size:inherit}</style>
+    <style>
+      .main .muted{font-size:inherit}
+      .main:has(#view-jobs.active),.main:has(#view-customers.active){padding:0;overflow:hidden}
+      .main:has(#view-jobs.active)>.topbar,.main:has(#view-jobs.active)>.alert-region,.main:has(#view-customers.active)>.topbar,.main:has(#view-customers.active)>.alert-region{display:none}
+      .main:has(#view-jobs.active)>#view-jobs,.main:has(#view-customers.active)>#view-customers{height:100vh;min-height:0}
+      #view-addcustomer .ac-layout{max-width:1120px}
+      #view-addcustomer .ac-panel,#view-addcustomer .ac-actions{max-width:none}
+      @media(max-width:900px){.main:has(#view-jobs.active),.main:has(#view-customers.active){padding:0}}
+    </style>
     <script>
       window.pmosActivateEquipmentScope=function(storeId){
         var current=document.getElementById('waterBodies');
@@ -121,6 +129,10 @@
         var customerId=String(event.detail&&event.detail.customerId||'').trim();if(!customerId)return;
         var nav=document.querySelector('.nav-item[data-view="customers"]');if(nav)nav.click();
         if(typeof window.pmosOpenCustomerProfile==='function')window.pmosOpenCustomerProfile(customerId);
+      });
+      document.addEventListener('pmos:edit-customer',function(event){
+        var customerId=String(event.detail&&event.detail.customerId||'').trim();if(!customerId)return;
+        if(typeof window.pmosOpenWebCustomerEditor==='function')window.pmosOpenWebCustomerEditor(customerId);
       });
     </script>
   </body>
