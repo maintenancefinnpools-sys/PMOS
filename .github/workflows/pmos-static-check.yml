@@ -29,6 +29,9 @@ jobs:
       - name: Check Web navigation and customer lookup behavior
         run: node tools/check_web_navigation_lookup_contract.js
 
+      - name: Check Acceptance Test Bot safety contract
+        run: python3 tools/check_acceptance_bot_contract.py
+
       - name: Report self-only global candidates
         run: python3 tools/report_unused_apps_script_globals.py
 
@@ -44,7 +47,7 @@ jobs:
           done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
           node --check /tmp/pmos-combined.js
 
-      - name: Check Web App client JavaScript syntax
+      - name: Check browser client JavaScript syntax
         shell: bash
         run: |
           set -euo pipefail
@@ -53,7 +56,7 @@ jobs:
           import re
           import subprocess
 
-          paths = sorted(Path('.').glob('Web_*.html'))
+          paths = sorted(Path('.').glob('Web_*.html')) + sorted(Path('.').glob('Sheets_*.html'))
           client = Path('Client.html')
           if client.exists():
               paths.append(client)
@@ -65,17 +68,17 @@ jobs:
               scripts = [script for script in scripts if '<?' not in script]
               if not scripts:
                   continue
-              target = Path('/tmp') / ('pmos-web-' + re.sub(r'[^A-Za-z0-9_.-]+', '-', path.name) + '.js')
+              target = Path('/tmp') / ('pmos-browser-' + re.sub(r'[^A-Za-z0-9_.-]+', '-', path.name) + '.js')
               target.write_text('\n\n'.join(scripts), encoding='utf-8')
               subprocess.run(['node', '--check', str(target)], check=True)
               print('checked', path)
               checked += 1
 
           if not checked:
-              raise SystemExit('No Web App client scripts were found to validate.')
+              raise SystemExit('No browser client scripts were found to validate.')
           PY
 
-      - name: Check Web App Apps Script endpoints
+      - name: Check browser Apps Script endpoints
         shell: bash
         run: |
           set -euo pipefail
@@ -86,7 +89,7 @@ jobs:
           gs_text = '\n'.join(path.read_text(encoding='utf-8') for path in sorted(Path('.').glob('*.gs')))
           declared = set(re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(', gs_text))
 
-          paths = sorted(Path('.').glob('Web_*.html'))
+          paths = sorted(Path('.').glob('Web_*.html')) + sorted(Path('.').glob('Sheets_*.html'))
           client = Path('Client.html')
           if client.exists():
               paths.append(client)
@@ -102,9 +105,9 @@ jobs:
           if missing:
               for name in sorted(missing):
                   print(f'Missing Apps Script endpoint {name}: {", ".join(sorted(missing[name]))}')
-              raise SystemExit(f'{len(missing)} Web App Apps Script endpoint(s) are missing.')
+              raise SystemExit(f'{len(missing)} browser Apps Script endpoint(s) are missing.')
 
-          print(f'validated {len(calls)} Web App Apps Script endpoint(s)')
+          print(f'validated {len(calls)} browser Apps Script endpoint(s)')
           PY
 
       - name: Check Web App view and template structure

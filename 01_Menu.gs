@@ -31,6 +31,8 @@ function onOpen() {
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
           .addSeparator()
+          .addItem('Acceptance Test Bot', 'showPmosAcceptanceTestBot')
+          .addSeparator()
           .addItem('Chemical Catalog', 'showChemistryCatalog')
           .addSeparator()
           .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
