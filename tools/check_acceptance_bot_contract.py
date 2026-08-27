@@ -35,6 +35,9 @@ require(SERVER, "normalizePmosAccountContacts_", "Account Contact validation cov
 require(SERVER, "normalizePmosServiceLocationContacts_", "Service Location Contact validation coverage is missing.")
 require(CLIENT, "keepFixtures", "Fixture-retention review option is missing from the bot UI.")
 require(CLIENT, "Clean Up Test Fixtures", "Explicit cleanup control is missing from the bot UI.")
+require(CLIENT, "google.script.host.close()", "Opening results does not reveal the activated Sheet behind the bot dialog.")
+require(SERVER, "sheet.getRange('A1').activate()", "Results navigation does not activate a visible cell.")
+require(SERVER, "const routeState = getPmosWaterMaintenanceRouteState_(created.customerId);", "Maintenance Route Template assertions do not read the dedicated route state.")
 
 for forbidden in ("CalendarApp.", "People.People", "createMaintenanceCustomerAndAutoSync"):
     if forbidden in SERVER:

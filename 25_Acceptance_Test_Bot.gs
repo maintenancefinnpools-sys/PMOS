@@ -213,8 +213,10 @@ function cleanupPmosAcceptanceTestFixtures() {
 
 function openPmosAcceptanceTestResults() {
   const sheet = pmosAcceptanceEnsureResultsSheet_();
-  SpreadsheetApp.getActive().setActiveSheet(sheet);
-  return true;
+  sheet.activate();
+  sheet.getRange('A1').activate();
+  SpreadsheetApp.flush();
+  return {sheetName: sheet.getName(), sheetId: sheet.getSheetId()};
 }
 
 function pmosAcceptanceRunValidationTests_(results) {
@@ -380,10 +382,11 @@ function pmosAcceptanceRunMaintenanceStatusTests_(results, manifest) {
       status, profile.maintenanceStatus);
     pmosAcceptanceRecord_(results, 'Water Maintenance', status + ' Maintenance Notes hydrate in profile',
       'Maintenance Notes ' + status, profile.maintenanceNotes);
-    const routeStatusIndex = state.table
-      ? findHeaderIndex_(state.table.headers, ['Status']) : -1;
-    const actualRouteStatus = state.rows.length && routeStatusIndex >= 0
-      ? String(state.rows[0].row[routeStatusIndex] || '').trim() : '';
+    const routeState = getPmosWaterMaintenanceRouteState_(created.customerId);
+    const routeStatusIndex = routeState.table
+      ? findHeaderIndex_(routeState.table.headers, ['Status']) : -1;
+    const actualRouteStatus = routeState.rows.length && routeStatusIndex >= 0
+      ? String(routeState.rows[0].row[routeStatusIndex] || '').trim() : '';
     pmosAcceptanceRecord_(results, 'Water Maintenance', status + ' saved in Route Template',
       status, actualRouteStatus);
   });
