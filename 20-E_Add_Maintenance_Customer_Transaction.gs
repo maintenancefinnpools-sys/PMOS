@@ -50,7 +50,7 @@ function createMaintenanceCustomer(input) {
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
-      'Email', 'Frequency', 'Service Start Date', 'Entry Information',
+      'Email', 'Status', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
       'Filter', 'Heater', 'Robot(s)', 'Cover', 'Bodies of Water',
       'Year Round'
@@ -772,6 +772,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
   }).filter(Boolean).join('; ') || mainBody.cleaner || cleanEquipmentText(input.robots || input.cleaner);
   const cover = [mainBody.cover.type, mainBody.cover.winterType].filter(Boolean).join(' · ');
   const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
+  const statusMatch = /^(active|inactive|paused)$/i.exec(String(input.status || 'Active').trim());
+  const status = statusMatch
+    ? statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1).toLowerCase()
+    : 'Active';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const day = normalizeMaintenanceDay_(input.day || 'Monday');
   const secondDay = frequency === 'Twice Weekly'
@@ -844,6 +848,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     robots: robots,
     cover: cover,
     bodiesOfWater: bodiesOfWater,
+    status: status,
     yearRound: yearRound,
     frequency: frequency,
     day: day,
@@ -973,7 +978,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Equipment Details JSON': JSON.stringify({version: 1, bodies: request.bodiesOfWater}),
     'Year Round': request.yearRound ? 'Yes' : 'No',
     'Season': request.yearRound ? 'Year Round' : 'Seasonal',
-    'Status': 'Active'
+    'Status': request.status
   };
 }
 
