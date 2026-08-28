@@ -162,6 +162,8 @@ def main() -> None:
     require(maintenance_transaction, "'Status': request.status", "maintenance status persistence", failures)
 
     require(equipment, "Solar Heating Equipment", "compact Solar Heating Equipment UI", failures)
+    require(equipment, "window.pmosEnsureCustomerBodyEnhancements=ensureBody", "shared Solar/body enhancement hook", failures)
+    require(shared_equipment, "pmosConfigureSolarHeating", "core Solar Heating renderer hook", failures)
     require(equipment, "data-solar-add", "Solar Heater add-equipment dropdown", failures)
     ordered(equipment, ["pmos-solar-list\" data-solar-list", "pmos-solar-add\" data-solar-add"], "Solar equipment cards before add dropdown", failures)
     require(equipment, "Solar Automation", "Solar automation catalog option", failures)

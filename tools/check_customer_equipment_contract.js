@@ -46,6 +46,7 @@ assert(sanitizerHtml.includes('data-sanitizer-part-number style="display:none"')
 assert(context.editorStyles.includes('.automation-fields>label'), 'Equipment Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-fields>label'), 'Chemistry Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-component-row'), 'Orderly Chemistry Automation component rows are missing.');
+assert(context.editorStyles.includes('.chemistry-component-list{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important'), 'Compact Chemistry Automation layout is not enforced by the core shared renderer.');
 assert(context.editorStyles.includes('grid-template-columns:repeat(2,minmax(0,1fr))'), 'Chemistry Automation does not use the compact two-column desktop layout.');
 assert(context.clientSource.includes('chemistry-selectors'), 'Compact Chemistry Automation selectors are missing.');
 assert(context.clientSource.includes('chemistry-equipment-card'), 'Chemistry Automation equipment card is missing.');
@@ -53,6 +54,8 @@ assert(context.editorStyles.includes('.chemistry-equipment-host{grid-column:1/-1
 assert(context.clientSource.includes("box.insertAdjacentElement('afterend',host)"), 'Chemistry Automation equipment card is not below both automation selectors.');
 assert(context.clientSource.includes("host.style.display=checkbox.checked?'block':'none'"), 'Full-width Chemistry Automation equipment card does not follow its toggle.');
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
+assert(context.clientSource.includes('pmosEnsureCustomerBodyEnhancements'), 'Core equipment renderer does not invoke the shared body enhancements.');
+assert(context.clientSource.includes('pmosConfigureSolarHeating'), 'Core equipment renderer does not wire Solar Heating changes.');
 assert(context.clientSource.includes('pmosConfigureSharedBody'), 'Shared Pool/Spa equipment inheritance is missing.');
 assert(context.clientSource.includes('All equipment shared with Pool'), 'Shared Pool/Spa equipment summary is missing.');
 assert(context.clientSource.includes("bodies[index].sanitization=''"), 'Shared spa sanitization is still stored as duplicate equipment data.');
