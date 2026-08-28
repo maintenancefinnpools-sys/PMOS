@@ -34,7 +34,13 @@ function runPmosWebOperationTask(taskType) {
 }
 
 function getPmosWebCalendarReviewState() {
-  const audit = runVerifiedCalendarPlanAuditReadOnly_();
+  const snapshot = readPmosCalendarAuditSnapshot_();
+  if (!snapshot || !isPmosCalendarAuditSnapshotCurrent_(snapshot)) return null;
+  return buildPmosWebCalendarReviewState_(rebuildPmosCalendarAuditFromSnapshot_(snapshot));
+}
+
+function buildPmosWebCalendarReviewState_(audit) {
+  audit = audit || {};
   let session = loadPmosReviewSession_();
   if (session && session.scope === 'CALENDAR') {
     session.decisions = loadPmosReviewSessionDecisions_(session.id);
@@ -105,7 +111,10 @@ function runFreshPmosWebCalendarAudit(options) {
   const result = runFreshPmosCalendarAuditFromJobCenter(options || {});
   return {
     result: clonePmosWebValue_(result || {}),
-    reviewState: getPmosWebCalendarReviewState()
+    // The fresh audit already produced the authoritative result and Review
+    // Session. Re-running the audit here doubled Calendar reads and could
+    // exhaust a Web App request before the response reached the browser.
+    reviewState: buildPmosWebCalendarReviewState_(result)
   };
 }
 
