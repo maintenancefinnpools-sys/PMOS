@@ -46,7 +46,7 @@ assert(sanitizerHtml.includes('data-sanitizer-part-number style="display:none"')
 assert(context.editorStyles.includes('.automation-fields>label'), 'Equipment Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-fields>label'), 'Chemistry Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-component-row'), 'Orderly Chemistry Automation component rows are missing.');
-assert(context.editorStyles.includes('.chemistry-component-list{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important'), 'Compact Chemistry Automation layout is not enforced by the core shared renderer.');
+assert(context.editorStyles.includes('.chemistry-component-list{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important'), 'Three-row Chemistry Automation layout is not enforced by the core shared renderer.');
 assert(context.editorStyles.includes('grid-template-columns:repeat(2,minmax(0,1fr))'), 'Chemistry Automation does not use the compact two-column desktop layout.');
 assert(context.clientSource.includes('chemistry-selectors'), 'Compact Chemistry Automation selectors are missing.');
 assert(context.clientSource.includes('chemistry-equipment-card'), 'Chemistry Automation equipment card is missing.');

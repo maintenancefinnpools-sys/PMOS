@@ -13,9 +13,9 @@
         '.chemistry-selectors{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}' +
         '.chemistry-selectors>label,.chemistry-component-row>label,.chemistry-other-equipment{display:flex;flex-direction:column;gap:5px;color:#6f7d84;font-size:11px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}' +
         '.chemistry-equipment-host{grid-column:1/-1;width:100%;box-sizing:border-box}.chemistry-equipment-card{width:100%;margin-top:2px;box-sizing:border-box}' +
-        '.chemistry-component-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.chemistry-component-row{display:grid;grid-template-columns:minmax(110px,.65fr) minmax(170px,1.35fr) minmax(125px,.8fr);gap:8px;align-items:end;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}.chemistry-component-row>label:last-child:nth-child(2){grid-column:2/-1}.chemistry-other-equipment{grid-column:1/-1}' +
+        '.chemistry-component-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.chemistry-component-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;align-items:end;padding:7px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}.chemistry-component-name{grid-column:1/-1}.chemistry-other-equipment{grid-column:1/-1}' +
         '.chemistry-component-name{align-self:center;color:#293944;font-size:12px;font-weight:900}.chemistry-other-equipment{padding-top:3px}' +
-        '@media(max-width:1100px){.chemistry-component-list{grid-template-columns:1fr}}@media(max-width:760px){.chemistry-selectors,.chemistry-component-row{grid-template-columns:1fr}.chemistry-component-row>label:last-child:nth-child(2){grid-column:auto}}';
+        '@media(max-width:1050px){.chemistry-component-list{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.chemistry-selectors,.chemistry-component-list{grid-template-columns:1fr}.chemistry-component-row{grid-template-columns:repeat(2,minmax(0,1fr))}}';
     };
   }
 
