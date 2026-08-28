@@ -14,10 +14,16 @@ const PMOS_ACCEPTANCE_LAST_RUN_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_LAST_RUN_V1';
 const PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_ = 3;
 
 function showPmosAcceptanceTestBot() {
+  return showPmosAcceptanceTestBotFromMenu();
+}
+
+function showPmosAcceptanceTestBotFromMenu() {
+  const ui = pmosAcceptanceSheetUi_();
   const html = HtmlService.createHtmlOutputFromFile('Sheets_Acceptance_Test_Bot')
     .setWidth(760)
     .setHeight(700);
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Acceptance Test Bot');
+  ui.showModelessDialog(html, 'PMOS Acceptance Test Bot');
+  return {opened: true};
 }
 
 function getPmosAcceptanceTestBotState() {
@@ -122,7 +128,6 @@ function runPmosAcceptanceTestBot_(options) {
   };
   properties.setProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_, JSON.stringify(manifest));
 
-  let fatalError = '';
   let acceptanceCleanupResult = {cleaned: false, removedCustomerIds: [], skippedCustomerIds: []};
   const triggersBefore = pmosAcceptanceTriggerHandlers_();
   try {
@@ -143,9 +148,9 @@ function runPmosAcceptanceTestBot_(options) {
       'This suite uses spreadsheet-domain transactions only.'
     );
   } catch (error) {
-    fatalError = String(error && error.message ? error.message : error);
+    const fatalMessage = String(error && error.message ? error.message : error);
     pmosAcceptanceRecord_(results, 'Runner', 'Suite completed without fatal error',
-      'No fatal error', fatalError, fatalError);
+      'No fatal error', fatalMessage, fatalMessage);
   } finally {
     try {
       pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
@@ -190,7 +195,9 @@ function runPmosAcceptanceTestBot_(options) {
     acceptanceCleanupResult,
     keepFixtures
   );
-  pmosAcceptanceWriteResults_(summary, results);
+  pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+    pmosAcceptanceWriteResults_(summary, results);
+  });
   properties.setProperty(PMOS_ACCEPTANCE_LAST_RUN_PROPERTY_, JSON.stringify(summary));
   if (!keepFixtures && acceptanceCleanupResult.cleaned) {
     properties.deleteProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_);
@@ -288,12 +295,16 @@ function cleanupPmosAcceptanceTestFixtures() {
     if (!manifest) {
       return {cleaned: true, removedCustomerIds: [], skippedCustomerIds: [], message: 'No tracked test fixtures remain.'};
     }
-    pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
+    pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+      pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
+    });
     if (!manifest.customerIds.length) {
       properties.deleteProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_);
       return {cleaned: true, removedCustomerIds: [], skippedCustomerIds: [], message: 'No tracked test fixtures remain.'};
     }
-    const result = pmosAcceptanceCleanupManifest_(manifest);
+    const result = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+      return pmosAcceptanceCleanupManifest_(manifest);
+    });
     if (result.cleaned) properties.deleteProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_);
     result.message = result.cleaned
       ? 'Removed ' + result.removedCustomerIds.length + ' tracked test fixture(s).'
@@ -306,7 +317,7 @@ function cleanupPmosAcceptanceTestFixtures() {
 
 function openPmosAcceptanceTestResults() {
   const sheet = pmosAcceptanceEnsureResultsSheet_();
-  sheet.activate();
+  pmosAcceptanceSpreadsheet_().setActiveSheet(sheet);
   sheet.getRange('A1').activate();
   SpreadsheetApp.flush();
   return {sheetName: sheet.getName(), sheetId: sheet.getSheetId()};
@@ -423,10 +434,22 @@ function pmosAcceptanceRunAccountTests_(results, manifest) {
     true, !!(primaryProfile.accountContacts && primaryProfile.accountContacts[0] && primaryProfile.accountContacts[0].primary));
   pmosAcceptanceRecord_(results, 'Contacts', 'Additional Account Contact shared across locations',
     'alex.account@example.com', pmosAcceptanceFindContactEmail_(secondaryProfile.accountContacts, 'alex.account@example.com'));
+  const additionalAccountContact = pmosAcceptanceFindContact_(
+    secondaryProfile.accountContacts,
+    'alex.account@example.com'
+  );
+  pmosAcceptanceRecord_(results, 'Contacts', 'Additional Account Contact notes remain attached',
+    'Account-wide', additionalAccountContact && additionalAccountContact.notes);
   pmosAcceptanceRecord_(results, 'Contacts', 'Primary location excludes secondary Service Location Contact',
     0, (primaryProfile.serviceLocationContacts || []).length);
   pmosAcceptanceRecord_(results, 'Contacts', 'Secondary Service Location Contact remains location-scoped',
     'sam.site@example.com', pmosAcceptanceFindContactEmail_(secondaryProfile.serviceLocationContacts, 'sam.site@example.com'));
+  const secondaryLocationContact = pmosAcceptanceFindContact_(
+    secondaryProfile.serviceLocationContacts,
+    'sam.site@example.com'
+  );
+  pmosAcceptanceRecord_(results, 'Contacts', 'Service Location Contact notes remain attached',
+    'Secondary only', secondaryLocationContact && secondaryLocationContact.notes);
   pmosAcceptanceRecord_(results, 'Notes', 'Primary General Notes remain location-scoped',
     'Primary General ' + manifest.runId, primaryProfile.generalNotes);
   pmosAcceptanceRecord_(results, 'Notes', 'Secondary General Notes remain location-scoped',
@@ -516,7 +539,7 @@ function pmosAcceptanceMaintenanceInput_(name, status, week) {
 }
 
 function pmosAcceptanceRoutePlacement_(week) {
-  const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
+  const sheet = findFirstSheetByName_(pmosAcceptanceSpreadsheet_(), [
     PMOS.ROUTES_SHEET, '4-Week Route Template', 'PMOS 4-Week Route Template', 'Route Template'
   ]);
   if (!sheet) throw new Error('Acceptance tests require the 4-Week Route Template.');
@@ -609,9 +632,9 @@ function pmosAcceptanceTrackFixture_(manifest, customerId) {
 }
 
 function pmosAcceptanceDiscoverMarkedCustomerIds_(manifest) {
-  if (!manifest || String(manifest.marker || '').indexOf(PMOS_ACCEPTANCE_MARKER_PREFIX_) !== 0) return;
+  if (!pmosAcceptanceManifestHasValidMarker_(manifest)) return;
   manifest.customerIds = Array.isArray(manifest.customerIds) ? manifest.customerIds : [];
-  const spreadsheet = SpreadsheetApp.getActive();
+  const spreadsheet = pmosAcceptanceSpreadsheet_();
   const candidates = [
     findFirstSheetByName_(spreadsheet, [
       PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
@@ -648,13 +671,13 @@ function pmosAcceptanceCleanupManifest_(manifest) {
   if (String(manifest.spreadsheetId || '') !== environment.spreadsheetId) {
     throw new Error('The tracked fixtures belong to a different spreadsheet. Cleanup stopped.');
   }
-  if (String(manifest.marker || '').indexOf(PMOS_ACCEPTANCE_MARKER_PREFIX_) !== 0) {
+  if (!pmosAcceptanceManifestHasValidMarker_(manifest)) {
     throw new Error('The fixture manifest is missing the required PMOS TEST BOT marker. Cleanup stopped.');
   }
   const ids = (manifest.customerIds || []).map(function(id) {
     return String(id || '').trim();
   }).filter(Boolean);
-  const spreadsheet = SpreadsheetApp.getActive();
+  const spreadsheet = pmosAcceptanceSpreadsheet_();
   const customerSheet = findFirstSheetByName_(spreadsheet, [
     PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
   ]);
@@ -724,7 +747,7 @@ function pmosAcceptanceRemoveRowsByCustomerId_(sheet, customerIds, deletePhysica
 }
 
 function pmosAcceptanceEnvironment_() {
-  const spreadsheet = SpreadsheetApp.getActive();
+  const spreadsheet = pmosAcceptanceSpreadsheet_();
   const spreadsheetId = spreadsheet.getId();
   const calendarName = pmosAcceptanceCalendarName_();
   const productionNames = {
@@ -763,7 +786,7 @@ function pmosAcceptanceRequireSafeEnvironment_() {
 }
 
 function pmosAcceptanceCalendarName_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(PMOS.SETTINGS_SHEET);
+  const sheet = pmosAcceptanceSpreadsheet_().getSheetByName(PMOS.SETTINGS_SHEET);
   if (!sheet || sheet.getLastRow() < 2) return String(PMOS.CALENDAR_NAME || '').trim();
   const values = sheet.getDataRange().getValues();
   for (let index = 1; index < values.length; index++) {
@@ -781,11 +804,23 @@ function pmosAcceptanceTriggerHandlers_() {
 }
 
 function pmosAcceptanceFindContactEmail_(contacts, expected) {
-  const target = String(expected || '').toLowerCase();
-  const match = (contacts || []).filter(function(contact) {
-    return String(contact && contact.email || '').toLowerCase() === target;
-  })[0];
+  const match = pmosAcceptanceFindContact_(contacts, expected);
   return match ? String(match.email || '').toLowerCase() : '';
+}
+
+function pmosAcceptanceFindContact_(contacts, expectedEmail) {
+  const target = String(expectedEmail || '').toLowerCase();
+  return (contacts || []).filter(function(contact) {
+    return String(contact && contact.email || '').toLowerCase() === target;
+  })[0] || null;
+}
+
+function pmosAcceptanceManifestHasValidMarker_(manifest) {
+  if (!manifest) return false;
+  const runId = String(manifest.runId || '').trim().toUpperCase();
+  const marker = String(manifest.marker || '').trim().toUpperCase();
+  return /^[A-F0-9]{10}$/.test(runId) &&
+    marker === PMOS_ACCEPTANCE_MARKER_PREFIX_ + ' ' + runId;
 }
 
 function pmosAcceptanceFindEquipment_(body, type) {
@@ -852,7 +887,7 @@ function pmosAcceptanceSummarize_(runId, started, completed, results, manifest, 
 }
 
 function pmosAcceptanceEnsureResultsSheet_() {
-  const spreadsheet = SpreadsheetApp.getActive();
+  const spreadsheet = pmosAcceptanceSpreadsheet_();
   let resultsSheet = spreadsheet.getSheetByName(PMOS_ACCEPTANCE_RESULTS_SHEET_);
   if (!resultsSheet) {
     resultsSheet = spreadsheet.insertSheet(PMOS_ACCEPTANCE_RESULTS_SHEET_);
@@ -876,6 +911,7 @@ function pmosAcceptanceEnsureResultsSheet_() {
 
 function pmosAcceptanceWriteResults_(summary, results) {
   const sheet = pmosAcceptanceEnsureResultsSheet_();
+  pmosAcceptanceRemoveExistingResultRows_(sheet, summary.runId);
   const started = new Date(summary.startedAt);
   const rows = results.map(function(row) {
     return [
@@ -901,6 +937,41 @@ function pmosAcceptanceWriteResults_(summary, results) {
     if (row[6] === 'FAIL') resultCell.setBackground('#fde2e2').setFontColor('#8b1d1d');
     if (row[6] === 'INFO') resultCell.setBackground('#e8f1f5').setFontColor('#315668');
   });
+}
+
+function pmosAcceptanceRemoveExistingResultRows_(sheet, runId) {
+  const target = String(runId || '').trim();
+  if (!target || sheet.getLastRow() < 2) return;
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+  const rows = [];
+  values.forEach(function(row, index) {
+    if (String(row[0] || '').trim() === target) rows.push(index + 2);
+  });
+  rows.sort(function(left, right) { return right - left; }).forEach(function(rowNumber) {
+    sheet.deleteRow(rowNumber);
+  });
+}
+
+function pmosAcceptanceSpreadsheet_() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  if (!spreadsheet) {
+    throw new Error(
+      'Acceptance Test Bot could not find its bound spreadsheet. Open it from the PMOS menu in the development Google Sheet.'
+    );
+  }
+  return spreadsheet;
+}
+
+function pmosAcceptanceSheetUi_() {
+  pmosAcceptanceSpreadsheet_();
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (error) {
+    throw new Error(
+      'Acceptance Test Bot must be opened from PMOS → PMOS Settings inside the development Google Sheet. ' +
+      'The current execution does not have a spreadsheet UI context.'
+    );
+  }
 }
 
 function pmosAcceptanceReadJsonProperty_(key) {

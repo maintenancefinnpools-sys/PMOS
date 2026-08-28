@@ -3,6 +3,9 @@
 The **PMOS → PMOS Settings → Acceptance Test Bot** command runs a guarded integration
 suite inside the development spreadsheet.
 
+The dialog must be launched from that Sheet menu. The Apps Script editor and Web App
+do not have the spreadsheet UI context required to display a modeless Sheets dialog.
+
 ## Safety model
 
 The runner will not start unless all of these conditions are true:
@@ -25,7 +28,7 @@ payload used by Sheets and the Web App.
 ## Automated coverage
 
 - Customer creation and two-location account grouping
-- Primary, Account, and Service Location contact separation
+- Primary, Account, and Service Location contact separation, including contact notes
 - Service-location-scoped notes
 - Equipment, Shape, Volume, filter model, replacement-cartridge and actuator persistence
 - `Active`, `Paused`, and `Inactive` Water Maintenance persistence
