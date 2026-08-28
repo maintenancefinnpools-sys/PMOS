@@ -128,5 +128,7 @@ assert(profileContext.profileClientSource.includes('navigator.clipboard'), 'Clip
 assert(profileContext.profileClientSource.includes("document.execCommand('copy')"), 'Clipboard fallback is missing.');
 assert(profileContext.profileClientSource.includes('function rawNumber(value)'), 'Copied equipment numbers are not normalized.');
 assert(profileContext.profileClientSource.includes('data-pmos-adaptive-grid'), 'Equipment profiles do not opt into adaptive columns.');
+assert(profileContext.profileClientSource.indexOf('window.pmosRenderEquipmentProfile=renderBody') < profileContext.profileClientSource.indexOf('function watchProfiles()'), 'Equipment profile renderer is registered too late.');
+assert(profileContext.profileClientSource.includes("document.addEventListener('DOMContentLoaded',watchProfiles"), 'Equipment profile body observer is not safely deferred.');
 
 console.log('Shared customer equipment contract clean: catalogs, body overview, standalone spa, and chemistry safeguards present.');
