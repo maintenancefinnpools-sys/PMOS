@@ -48,6 +48,36 @@ require(CLIENT, "google.script.host.close()", "Opening results does not reveal t
 require(SERVER, "sheet.getRange('A1').activate()", "Results navigation does not activate a visible cell.")
 require(SERVER, "const routeState = getPmosWaterMaintenanceRouteState_(created.customerId);", "Maintenance Route Template assertions do not read the dedicated route state.")
 
+CREATE_TRANSACTION = (ROOT / "20-E_Add_Maintenance_Customer_Transaction.gs").read_text(encoding="utf-8")
+CUSTOMER_EDITOR = (ROOT / "24-E_Customer_Editor.gs").read_text(encoding="utf-8")
+MAINTENANCE_EDITOR = (ROOT / "24-S_Customer_Water_Maintenance_Editor.gs").read_text(encoding="utf-8")
+CUSTOMER_SYNC = (ROOT / "05_Customer_Sync.gs").read_text(encoding="utf-8")
+require(
+    CREATE_TRANSACTION,
+    "'Customer ID', 'Calendar Title', 'Layer', 'Stop Order', 'Status'",
+    "New maintenance clients do not provision a Route Template Status column.",
+)
+require(
+    CUSTOMER_EDITOR,
+    "ensureMaintenanceClientHeaders_(sheet, table, ['Status']);",
+    "Customer edits do not provision the Route Template Status column before updating it.",
+)
+require(
+    MAINTENANCE_EDITOR,
+    "'Status': String(request.status || 'Active').trim() || 'Active'",
+    "Newly enrolled service locations do not seed their status into Route Template rows.",
+)
+require(
+    CUSTOMER_SYNC,
+    "[statusCol, String(customer['Status'] || 'Active').trim() || 'Active']",
+    "Customer synchronization does not backfill status into existing Route Template rows.",
+)
+require(
+    CUSTOMER_SYNC,
+    "sheet.getRange(1, sheet.getLastColumn()).setValue('Status');",
+    "PMOS synchronization does not provision Status for existing Route Templates.",
+)
+
 for forbidden in ("CalendarApp.", "People.People", "createMaintenanceCustomerAndAutoSync"):
     if forbidden in SERVER:
         raise SystemExit(f"Acceptance bot must not invoke external mutation path: {forbidden}")

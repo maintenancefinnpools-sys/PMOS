@@ -85,7 +85,7 @@ function seedPmosExistingCustomerWaterMaintenanceRoutes_(request, placements) {
   if (!state.sheet || !state.table) throw new Error('4-Week Route Template was not found.');
   if (state.rows.length) return state.layers;
   ensureMaintenanceClientHeaders_(state.sheet, state.table, [
-    'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
+    'Customer ID', 'Calendar Title', 'Layer', 'Stop Order', 'Status'
   ]);
   const table = readPmosHeaderTable_(state.sheet);
   const title = String(request.calendarTitle || request.lastName || request.firstName || '').trim();
@@ -93,6 +93,7 @@ function seedPmosExistingCustomerWaterMaintenanceRoutes_(request, placements) {
     table.rows.push(mappedMaintenanceRow_(table.headers, {
       'Customer ID': id,
       'Calendar Title': title,
+      'Status': String(request.status || 'Active').trim() || 'Active',
       'Layer': placement.layer,
       'Route Layer': placement.layer,
       'Week': placement.week,

@@ -183,7 +183,11 @@ function parsePmosCustomerEditorDate_(value) {
 function preparePmosCustomerEditorRouteRows_(customerId, fields, recommendedPlacements) {
   const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [PMOS.ROUTES_SHEET, 'PMOS 4-Week Route Template', 'Route Template']);
   if (!sheet) return {layers: [], updates: [], fullTable: null};
-  const table = readPmosHeaderTable_(sheet);
+  let table = readPmosHeaderTable_(sheet);
+  if (findHeaderIndex_(table.headers, ['Status']) < 0) {
+    ensureMaintenanceClientHeaders_(sheet, table, ['Status']);
+    table = readPmosHeaderTable_(sheet);
+  }
   const originalRows = table.rows.map(function (row) { return row.slice(); });
   const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
   const layerIndex = findHeaderIndex_(table.headers, ['Layer', 'Route Layer']);

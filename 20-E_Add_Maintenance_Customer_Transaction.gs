@@ -56,7 +56,7 @@ function createMaintenanceCustomer(input) {
       'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
-      'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
+      'Customer ID', 'Calendar Title', 'Layer', 'Stop Order', 'Status'
     ]);
 
     customerTable = readPmosHeaderTable_(customersSheet);
