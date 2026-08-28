@@ -69,6 +69,8 @@ for (const partNumber of ['521357', '522621', '522622', '522472', '522473', '522
 }
 assert(context.clientSource.includes("fieldValue(body,'[data-body-field=\"sanitization\"]')!=='Chlorine'"), 'Chlorine chemistry default guard is missing.');
 assert(context.clientSource.includes("model.value='IntelliChem Chlorine Tank with Tank-Mounted Pump'"), 'Chlorine tank default is missing.');
+assert(!context.clientSource.includes('Choose the chemistry system above; its tanks, probes, flow cell, and dosing equipment appear together below.'), 'Obsolete chemistry helper message is still rendered.');
+assert(context.clientSource.includes('function configurePrimaryHeaterType'), 'Core Solar heater refresh hook is missing.');
 assert(context.clientSource.includes("data-body-field=\"shape\""), 'Body shape field is missing.');
 assert(context.clientSource.includes("data-body-field=\"volume\""), 'Body volume field is missing.');
 assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self-Contained Unit'"), 'Standalone hot-tub guard is missing.');
