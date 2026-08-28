@@ -11,6 +11,7 @@ const PMOS_ACCEPTANCE_MARKER_PREFIX_ = 'PMOS TEST BOT';
 const PMOS_ACCEPTANCE_ARMED_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_ARMED_V1';
 const PMOS_ACCEPTANCE_MANIFEST_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_FIXTURES_V1';
 const PMOS_ACCEPTANCE_LAST_RUN_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_LAST_RUN_V1';
+const PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_ = 3;
 
 function showPmosAcceptanceTestBot() {
   const html = HtmlService.createHtmlOutputFromFile('Sheets_Acceptance_Test_Bot')
@@ -130,9 +131,7 @@ function runPmosAcceptanceTestBot_(options) {
     pmosAcceptanceRecord_(results, 'Safety', 'Spreadsheet arm matches current file', true,
       environment.armed, environment.spreadsheetName);
 
-    pmosAcceptanceRunValidationTests_(results);
-    pmosAcceptanceRunAccountTests_(results, manifest);
-    pmosAcceptanceRunMaintenanceStatusTests_(results, manifest);
+    pmosAcceptanceRunCoreTestsWithSpreadsheetRetry_(results, manifest);
 
     const triggersAfter = pmosAcceptanceTriggerHandlers_();
     pmosAcceptanceRecord_(
@@ -149,14 +148,18 @@ function runPmosAcceptanceTestBot_(options) {
       'No fatal error', fatalError, fatalError);
   } finally {
     try {
-      pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
+      pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+        pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
+      });
     } catch (error) {
       pmosAcceptanceInfo_(results, 'Cleanup', 'Partial-run fixture discovery needs attention',
         String(error && error.message ? error.message : error));
     }
     if (!keepFixtures) {
       try {
-        cleanup = pmosAcceptanceCleanupManifest_(manifest);
+        cleanup = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+          return pmosAcceptanceCleanupManifest_(manifest);
+        });
         pmosAcceptanceRecord_(results, 'Cleanup', 'Disposable fixtures removed',
           manifest.customerIds.length, cleanup.removedCustomerIds.length,
           cleanup.skippedCustomerIds.length
@@ -181,6 +184,84 @@ function runPmosAcceptanceTestBot_(options) {
     properties.deleteProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_);
   }
   return summary;
+}
+
+function pmosAcceptanceRunCoreTestsWithSpreadsheetRetry_(results, manifest) {
+  const firstResultIndex = results.length;
+  for (let attempt = 1; attempt <= PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_; attempt++) {
+    try {
+      pmosAcceptanceRunValidationTests_(results);
+      pmosAcceptanceRunAccountTests_(results, manifest);
+      pmosAcceptanceRunMaintenanceStatusTests_(results, manifest);
+      return;
+    } catch (error) {
+      if (!pmosAcceptanceIsTransientSpreadsheetError_(error) ||
+          attempt >= PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_) {
+        throw error;
+      }
+
+      // A Spreadsheet service interruption can occur after a transaction has begun.
+      // Rediscover marker-owned rows and remove them before retrying the complete phase,
+      // so a retry cannot duplicate a customer, equipment row, or Route Template row.
+      pmosAcceptanceResetFixturesForRetry_(manifest);
+      results.splice(firstResultIndex, results.length - firstResultIndex);
+      pmosAcceptanceInfo_(
+        results,
+        'Runner',
+        'Transient Spreadsheet service interruption recovered',
+        'Retrying acceptance checks after attempt ' + attempt + ' of ' +
+          PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_ + ': ' +
+          String(error && error.message ? error.message : error)
+      );
+      Utilities.sleep(attempt * 1000);
+    }
+  }
+}
+
+function pmosAcceptanceResetFixturesForRetry_(manifest) {
+  pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+    pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
+  });
+  if (manifest.customerIds.length) {
+    const cleanup = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+      return pmosAcceptanceCleanupManifest_(manifest);
+    });
+    if (!cleanup.cleaned) {
+      throw new Error(
+        'Acceptance tests stopped after a temporary Spreadsheet service interruption because ' +
+        'partial fixtures could not be safely removed: ' + cleanup.skippedCustomerIds.join(', ')
+      );
+    }
+  }
+  manifest.customerIds = [];
+  PropertiesService.getDocumentProperties().setProperty(
+    PMOS_ACCEPTANCE_MANIFEST_PROPERTY_,
+    JSON.stringify(manifest)
+  );
+}
+
+function pmosAcceptanceRetryTransientSpreadsheetOperation_(callback) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_; attempt++) {
+    try {
+      return callback();
+    } catch (error) {
+      lastError = error;
+      if (!pmosAcceptanceIsTransientSpreadsheetError_(error) ||
+          attempt >= PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_) {
+        throw error;
+      }
+      Utilities.sleep(attempt * 1000);
+    }
+  }
+  throw lastError;
+}
+
+function pmosAcceptanceIsTransientSpreadsheetError_(error) {
+  const message = String(error && error.message ? error.message : error);
+  return /Service Spreadsheets failed while accessing document with id/i.test(message) ||
+    /Service timed out:\s*Spreadsheets/i.test(message) ||
+    /Internal error.*Spreadsheets/i.test(message);
 }
 
 function cleanupPmosAcceptanceTestFixtures() {
@@ -518,19 +599,31 @@ function pmosAcceptanceTrackFixture_(manifest, customerId) {
 function pmosAcceptanceDiscoverMarkedCustomerIds_(manifest) {
   if (!manifest || String(manifest.marker || '').indexOf(PMOS_ACCEPTANCE_MARKER_PREFIX_) !== 0) return;
   manifest.customerIds = Array.isArray(manifest.customerIds) ? manifest.customerIds : [];
-  const sheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
-    PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
-  ]);
-  if (!sheet) return;
-  const table = readPmosHeaderTable_(sheet);
-  const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
-  if (idIndex < 0) return;
-  table.rows.forEach(function(row) {
-    const rowText = row.map(function(value) { return String(value || ''); }).join(' | ');
-    const id = String(row[idIndex] || '').trim();
-    if (id && rowText.indexOf(manifest.marker) >= 0 && manifest.customerIds.indexOf(id) < 0) {
-      manifest.customerIds.push(id);
-    }
+  const spreadsheet = SpreadsheetApp.getActive();
+  const candidates = [
+    findFirstSheetByName_(spreadsheet, [
+      PMOS.CUSTOMERS_SHEET, 'Customers', 'Customer Database', 'Customer List'
+    ]),
+    findFirstSheetByName_(spreadsheet, [
+      PMOS.ROUTES_SHEET, '4-Week Route Template', 'PMOS 4-Week Route Template', 'Route Template'
+    ]),
+    spreadsheet.getSheetByName('PMOS Customer Equipment')
+  ];
+  const seenSheets = {};
+  candidates.filter(Boolean).forEach(function(sheet) {
+    const sheetId = String(sheet.getSheetId());
+    if (seenSheets[sheetId]) return;
+    seenSheets[sheetId] = true;
+    const table = readPmosHeaderTable_(sheet);
+    const idIndex = findHeaderIndex_(table.headers, ['Customer ID']);
+    if (idIndex < 0) return;
+    table.rows.forEach(function(row) {
+      const rowText = row.map(function(value) { return String(value || ''); }).join(' | ');
+      const id = String(row[idIndex] || '').trim();
+      if (id && rowText.indexOf(manifest.marker) >= 0 && manifest.customerIds.indexOf(id) < 0) {
+        manifest.customerIds.push(id);
+      }
+    });
   });
   PropertiesService.getDocumentProperties().setProperty(
     PMOS_ACCEPTANCE_MANIFEST_PROPERTY_,

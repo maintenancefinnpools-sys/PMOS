@@ -13,6 +13,11 @@ The runner will not start unless all of these conditions are true:
 4. Every row eligible for deletion has both a tracked Customer ID and the exact
    `PMOS TEST BOT <run id>` marker.
 
+If Google temporarily returns a Spreadsheet service access or timeout error, the bot
+retries the functional suite up to three times. Before each retry it searches Customers,
+the Route Template, and the equipment sheet for the exact run marker and removes only
+those partial fixtures. Permission, validation, and PMOS assertion errors are not retried.
+
 The suite does not call Google Contacts, Calendar APIs, or automatic Calendar Sync. It
 uses the real spreadsheet-domain customer transactions and the shared lifecycle profile
 payload used by Sheets and the Web App.
