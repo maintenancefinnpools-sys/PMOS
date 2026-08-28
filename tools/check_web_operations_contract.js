@@ -68,6 +68,13 @@ requireMatch(
 });
 requireMatch(server, /response\.ok\s*===\s*false[\s\S]*?throw new Error/, 'Web endpoint errors are not propagated');
 requireMatch(server, /readPmosCalendarAuditSnapshot_\(\)/, 'Opening Calendar Audit does not use the saved snapshot');
+requireMatch(server, /reviewState:\s*buildPmosWebCalendarReviewState_\(result\)/, 'Fresh audit does not return its review state');
+requireMatch(server, /auditOptions:\s*\{[\s\S]*?calendarName:/, 'Fresh audit does not return its selected Calendar');
+if (/result:\s*clonePmosWebValue_\(result/.test(server)) {
+  failures.push('Fresh audit still returns the oversized planner graph');
+}
+requireMatch(client, /state\.auditOptions=Object\.assign\(\{\},state\.auditOptions,options\)/, 'Client does not retain submitted audit options');
+requireMatch(client, /Audit results — /, 'Client does not render a persistent audit-results summary');
 requireMatch(repair, /data-cr-open=['"]repair['"]|dataset\.crOpen=['"]repair['"]/, 'Calendar Repair launch control is missing');
 requireMatch(repair, /data-cr-recovery|dataset\.crRecovery/, 'Transaction Recovery launch control is missing');
 
