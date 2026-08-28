@@ -77,7 +77,7 @@ function recommendMaintenanceClientRotations(input) {
   });
 
   const roadRefined = refineMaintenanceRecommendationsWithMatrix_(scored.slice(0, 3), target);
-  roadRefined.sort(compareMaintenanceRoadRecommendations_);
+  rankMaintenanceRoadRecommendations_(roadRefined);
 
   const recommendations = roadRefined.map(function (item) {
     item.label = item.secondDay ? item.day + ' + ' + item.secondDay : item.day;
@@ -114,13 +114,68 @@ function recommendMaintenanceClientRotations(input) {
 
 function compareMaintenanceRoadRecommendations_(a, b) {
   if (a.roadDataComplete !== b.roadDataComplete) return a.roadDataComplete ? -1 : 1;
-  const aDuration = a.addedDurationMinutes == null
-    ? Number.POSITIVE_INFINITY : Number(a.addedDurationMinutes);
-  const bDuration = b.addedDurationMinutes == null
-    ? Number.POSITIVE_INFINITY : Number(b.addedDurationMinutes);
-  return aDuration - bDuration ||
-    Number(a.addedDistanceKm || 0) - Number(b.addedDistanceKm || 0) ||
+  const balancedDifference = Number(a._balancedRouteCost || 0) -
+    Number(b._balancedRouteCost || 0);
+  if (Math.abs(balancedDifference) > 0.000001) return balancedDifference;
+
+  // When the complete recommendation is effectively tied, prefer the
+  // less-loaded route, then driving time, then driving distance.
+  return Number(a.customerCount || 0) - Number(b.customerCount || 0) ||
+    maintenanceRoadMetric_(a.addedDurationMinutes) -
+      maintenanceRoadMetric_(b.addedDurationMinutes) ||
+    maintenanceRoadMetric_(a.addedDistanceKm) -
+      maintenanceRoadMetric_(b.addedDistanceKm) ||
+    maintenanceRoadMetric_(a.estimatedRouteMinutes) -
+      maintenanceRoadMetric_(b.estimatedRouteMinutes) ||
     Number(b.score || 0) - Number(a.score || 0);
+}
+
+function rankMaintenanceRoadRecommendations_(items) {
+  const recommendations = items || [];
+  const complete = recommendations.filter(function (item) {
+    return item && item.roadDataComplete;
+  });
+  const ranges = {
+    route: maintenanceRoadRange_(complete, 'estimatedRouteMinutes'),
+    stops: maintenanceRoadRange_(complete, 'customerCount'),
+    addedTime: maintenanceRoadRange_(complete, 'addedDurationMinutes'),
+    addedDistance: maintenanceRoadRange_(complete, 'addedDistanceKm')
+  };
+  const weights = getPmosRieSettings_().rankingWeights;
+  complete.forEach(function (item) {
+    // Route-day selection uses the configured recommendation mix. Exact
+    // insertion positions remain independently optimized for added road time.
+    item._balancedRouteCost =
+      maintenanceNormalizedRoadCost_(item.estimatedRouteMinutes, ranges.route) * weights.route / 100 +
+      maintenanceNormalizedRoadCost_(item.customerCount, ranges.stops) * weights.stops / 100 +
+      maintenanceNormalizedRoadCost_(item.addedDurationMinutes, ranges.addedTime) * weights.addedTime / 100 +
+      maintenanceNormalizedRoadCost_(item.addedDistanceKm, ranges.addedDistance) * weights.addedDistance / 100;
+  });
+  recommendations.sort(compareMaintenanceRoadRecommendations_);
+  recommendations.forEach(function (item) { delete item._balancedRouteCost; });
+  return recommendations;
+}
+
+function maintenanceRoadRange_(items, propertyName) {
+  const values = (items || []).map(function (item) {
+    return Number(item[propertyName]);
+  }).filter(Number.isFinite);
+  return {
+    min: values.length ? Math.min.apply(null, values) : 0,
+    max: values.length ? Math.max.apply(null, values) : 0
+  };
+}
+
+function maintenanceNormalizedRoadCost_(value, range) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  const span = Number(range.max) - Number(range.min);
+  return span > 0 ? (number - Number(range.min)) / span : 0;
+}
+
+function maintenanceRoadMetric_(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : Number.POSITIVE_INFINITY;
 }
 
 function scoreMaintenanceRotationCandidate_(routes, resolvePoint, target, candidate) {
@@ -677,3 +732,4 @@ function nextMaintenanceStopForLayer_(routeTable, layer) {
   });
   return maximum + 1;
 }
+
