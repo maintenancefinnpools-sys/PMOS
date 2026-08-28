@@ -132,6 +132,8 @@ def main() -> None:
     require(location, "toggleMaintenanceSafely", "failure-contained added-location maintenance toggle", failures)
     require(location, "event.stopPropagation", "isolated added-location maintenance toggle", failures)
     require(location, "backdrop.classList.add('open')", "added-location form visibility recovery", failures)
+    require(profile, ".customer-primary-contact-badge.location", "blue service-location contact label", failures)
+    require(profile, ".customer-primary-contact-badge.additional", "additional-contact label color", failures)
     require(location, "this service-location form and its information are still intact", "maintenance-toggle recovery message", failures)
     require(location, "state.draft", "unsaved additional-location draft mode", failures)
     require(location, "Keep Service Location", "draft location completion control", failures)
