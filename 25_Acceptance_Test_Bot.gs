@@ -123,7 +123,7 @@ function runPmosAcceptanceTestBot_(options) {
   properties.setProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_, JSON.stringify(manifest));
 
   let fatalError = '';
-  let cleanup = {cleaned: false, removedCustomerIds: [], skippedCustomerIds: []};
+  let acceptanceCleanupResult = {cleaned: false, removedCustomerIds: [], skippedCustomerIds: []};
   const triggersBefore = pmosAcceptanceTriggerHandlers_();
   try {
     pmosAcceptanceRecord_(results, 'Safety', 'Development target', true,
@@ -157,15 +157,19 @@ function runPmosAcceptanceTestBot_(options) {
     }
     if (!keepFixtures) {
       try {
-        cleanup = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+        acceptanceCleanupResult = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
           return pmosAcceptanceCleanupManifest_(manifest);
         });
         pmosAcceptanceRecord_(results, 'Cleanup', 'Disposable fixtures removed',
-          manifest.customerIds.length, cleanup.removedCustomerIds.length,
-          cleanup.skippedCustomerIds.length
-            ? 'Skipped: ' + cleanup.skippedCustomerIds.join(', ') : '');
+          manifest.customerIds.length, acceptanceCleanupResult.removedCustomerIds.length,
+          acceptanceCleanupResult.skippedCustomerIds.length
+            ? 'Skipped: ' + acceptanceCleanupResult.skippedCustomerIds.join(', ') : '');
       } catch (error) {
-        cleanup = {cleaned: false, removedCustomerIds: [], skippedCustomerIds: manifest.customerIds.slice()};
+        acceptanceCleanupResult = {
+          cleaned: false,
+          removedCustomerIds: [],
+          skippedCustomerIds: manifest.customerIds.slice()
+        };
         pmosAcceptanceRecord_(results, 'Cleanup', 'Disposable fixtures removed',
           manifest.customerIds.length, 'Cleanup error',
           String(error && error.message ? error.message : error));
@@ -177,10 +181,18 @@ function runPmosAcceptanceTestBot_(options) {
   }
 
   const completed = new Date();
-  const summary = pmosAcceptanceSummarize_(runId, started, completed, results, manifest, cleanup, keepFixtures);
+  const summary = pmosAcceptanceSummarize_(
+    runId,
+    started,
+    completed,
+    results,
+    manifest,
+    acceptanceCleanupResult,
+    keepFixtures
+  );
   pmosAcceptanceWriteResults_(summary, results);
   properties.setProperty(PMOS_ACCEPTANCE_LAST_RUN_PROPERTY_, JSON.stringify(summary));
-  if (!keepFixtures && cleanup.cleaned) {
+  if (!keepFixtures && acceptanceCleanupResult.cleaned) {
     properties.deleteProperty(PMOS_ACCEPTANCE_MANIFEST_PROPERTY_);
   }
   return summary;
@@ -223,13 +235,13 @@ function pmosAcceptanceResetFixturesForRetry_(manifest) {
     pmosAcceptanceDiscoverMarkedCustomerIds_(manifest);
   });
   if (manifest.customerIds.length) {
-    const cleanup = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
+    const retryCleanupResult = pmosAcceptanceRetryTransientSpreadsheetOperation_(function() {
       return pmosAcceptanceCleanupManifest_(manifest);
     });
-    if (!cleanup.cleaned) {
+    if (!retryCleanupResult.cleaned) {
       throw new Error(
         'Acceptance tests stopped after a temporary Spreadsheet service interruption because ' +
-        'partial fixtures could not be safely removed: ' + cleanup.skippedCustomerIds.join(', ')
+        'partial fixtures could not be safely removed: ' + retryCleanupResult.skippedCustomerIds.join(', ')
       );
     }
   }
@@ -801,19 +813,19 @@ function pmosAcceptanceInfo_(results, area, test, details) {
 
 function pmosAcceptanceExpectError_(results, area, test, expectedPattern, callback) {
   let actual = 'No error';
-  let pass = false;
+  let errorMatched = false;
   try {
     callback();
   } catch (error) {
     actual = String(error && error.message ? error.message : error);
-    pass = expectedPattern.test(actual);
+    errorMatched = expectedPattern.test(actual);
   }
   results.push({
     area: area,
     test: test,
     expected: String(expectedPattern),
     actual: actual,
-    result: pass ? 'PASS' : 'FAIL',
+    result: errorMatched ? 'PASS' : 'FAIL',
     details: ''
   });
 }
@@ -841,21 +853,25 @@ function pmosAcceptanceSummarize_(runId, started, completed, results, manifest, 
 
 function pmosAcceptanceEnsureResultsSheet_() {
   const spreadsheet = SpreadsheetApp.getActive();
-  let sheet = spreadsheet.getSheetByName(PMOS_ACCEPTANCE_RESULTS_SHEET_);
-  if (!sheet) sheet = spreadsheet.insertSheet(PMOS_ACCEPTANCE_RESULTS_SHEET_);
+  let resultsSheet = spreadsheet.getSheetByName(PMOS_ACCEPTANCE_RESULTS_SHEET_);
+  if (!resultsSheet) {
+    resultsSheet = spreadsheet.insertSheet(PMOS_ACCEPTANCE_RESULTS_SHEET_);
+  }
   const headers = [
     'Run ID', 'Started At', 'Area', 'Test', 'Expected', 'Actual', 'Result', 'Details'
   ];
-  if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, headers.length)
+  if (resultsSheet.getLastRow() === 0) {
+    resultsSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  resultsSheet.setFrozenRows(1);
+  resultsSheet.getRange(1, 1, 1, headers.length)
     .setFontWeight('bold')
     .setBackground('#293944')
     .setFontColor('#ffffff');
   [130, 155, 150, 330, 180, 180, 80, 360].forEach(function(width, index) {
-    sheet.setColumnWidth(index + 1, width);
+    resultsSheet.setColumnWidth(index + 1, width);
   });
-  return sheet;
+  return resultsSheet;
 }
 
 function pmosAcceptanceWriteResults_(summary, results) {

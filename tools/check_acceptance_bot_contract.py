@@ -46,4 +46,11 @@ for forbidden in ("CalendarApp.", "People.People", "createMaintenanceCustomerAnd
     if forbidden in SERVER:
         raise SystemExit(f"Acceptance bot must not invoke external mutation path: {forbidden}")
 
+for conflicting_mutable in ("let cleanup =", "let sheet =", "let pass ="):
+    if conflicting_mutable in SERVER:
+        raise SystemExit(
+            "Acceptance bot reintroduced an Apps Script constant-reassignment diagnostic: "
+            + conflicting_mutable
+        )
+
 print("validated PMOS Acceptance Test Bot wiring and safety contract")
