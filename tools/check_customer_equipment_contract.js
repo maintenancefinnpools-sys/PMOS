@@ -78,6 +78,11 @@ assert(context.clientSource.includes('pmosFilterModelCode'), 'Filter model-numbe
 assert(context.clientSource.includes('pmosWatchDynamicFilterFields'), 'Dynamic service-location filter dropdown initialization is missing.');
 assert(context.clientSource.includes("data-body-field=\"shape\""), 'Body shape field is missing.');
 assert(context.clientSource.includes("data-body-field=\"volume\""), 'Body volume field is missing.');
+assert(context.clientSource.includes('function pmosFormatVolume'), 'Dual-unit volume formatter is missing.');
+assert(context.clientSource.includes("3.785411784"), 'Litre/gallon conversion is missing.');
+assert(context.clientSource.includes("+' L / '+"), 'Combined litre/gallon display is missing.');
+assert(context.clientSource.includes("replace(/Replacement\\s+Cartridge\\s+Set/i,'Cartridge Set')"), 'Compact Cartridge Set label is missing.');
+assert(context.clientSource.includes("shared||!chem||!chem.checked?'none':'block'"), 'Chemistry equipment visibility is not bound to its checkbox.');
 assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self-Contained Unit'"), 'Standalone hot-tub guard is missing.');
 assert(context.clientSource.includes("make.value='Floater'"), 'Standalone hot-tub floater default is missing.');
 assert(context.clientSource.includes("SD60 (22.5 in · 250 lb)"), 'Pentair SD60 size metadata is not corrected.');
