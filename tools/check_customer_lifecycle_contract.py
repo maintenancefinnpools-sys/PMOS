@@ -131,7 +131,7 @@ def main() -> None:
     require(location, "slMaintenanceNotesWrap", "conditional added-location Maintenance Notes", failures)
     require(location, "toggleMaintenanceSafely", "failure-contained added-location maintenance toggle", failures)
     require(location, "event.stopPropagation", "isolated added-location maintenance toggle", failures)
-    require(location, "for(const shard of shards)", "sequential added-location route search", failures)
+    require(location, "await Promise.all(shards.map", "parallel added-location route search", failures)
     require(location, "session!==state.openSession", "stale added-location request isolation", failures)
     require(profile, ".customer-primary-contact-badge.additional{background:#d9edf6", "blue additional-account-contact label", failures)
     require(profile, ".customer-primary-contact-badge.location{background:#f3ead2", "amber service-location-contact label", failures)
