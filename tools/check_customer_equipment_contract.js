@@ -54,7 +54,10 @@ assert(context.clientSource.includes("box.insertAdjacentElement('afterend',host)
 assert(context.clientSource.includes("host.style.display=checkbox.checked?'block':'none'"), 'Full-width Chemistry Automation equipment card does not follow its toggle.');
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(context.clientSource.includes('pmosConfigureSharedBody'), 'Shared Pool/Spa equipment inheritance is missing.');
-assert(context.clientSource.includes('Uses the same Pool equipment and automation'), 'Shared Pool/Spa automation summary is missing.');
+assert(context.clientSource.includes('All equipment shared with Pool'), 'Shared Pool/Spa equipment summary is missing.');
+assert(context.clientSource.includes("bodies[index].sanitization=''"), 'Shared spa sanitization is still stored as duplicate equipment data.');
+assert(context.clientSource.includes("item.type==='CHEMISTRY_AUTOMATION'||item.type==='EQUIPMENT_AUTOMATION'"), 'Shared spa automation duplication is not filtered from storage.');
+assert(context.clientSource.includes('value="VALVE_ACTUATOR">Valve Actuator'), 'Spa-specific Valve Actuator add option is missing.');
 assert(!context.clientSource.includes('prepareMainEquipmentPartNumbers'), 'Pump/filter/heater part-number fields should not be added.');
 assert(!context.clientSource.includes('automationPartNumber'), 'Equipment Automation should not show a blanket part-number field.');
 

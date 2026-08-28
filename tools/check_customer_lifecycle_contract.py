@@ -188,6 +188,8 @@ def main() -> None:
     require(equipment, "pmosHydrateSolarEquipmentDetails", "Solar equipment edit hydration", failures)
     require(equipment, "handleSolarHeaterEvent", "Solar Heater delegated Web App activation", failures)
     require(equipment_enhancements, "pmosConfigureSharedBody", "shared Pool/Spa automation inheritance", failures)
+    require(equipment_enhancements, "All equipment shared with Pool", "shared Pool/Spa equipment relationship summary", failures)
+    require(shared_equipment, "VALVE_ACTUATOR:'Valve Actuator'", "spa-specific Valve Actuator equipment card", failures)
     forbid(equipment_enhancements, "pmosInstallSolarPanel", "duplicate Solar Heating panel", failures)
     forbid(equipment_enhancements, "data-solar-enabled", "duplicate Solar Heating checkbox list", failures)
     require(customer_editor, "pmosHydrateSolarEquipmentDetails(card,item.type,details)", "editor Solar equipment hydration", failures)
