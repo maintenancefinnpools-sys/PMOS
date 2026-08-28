@@ -130,6 +130,8 @@ def main() -> None:
     require(location, "status:maintenance?$('slMaintenanceStatus').value:''", "Web added-location status payload", failures)
     require(location, "slMaintenanceNotesWrap", "conditional added-location Maintenance Notes", failures)
     require(location, "toggleMaintenanceSafely", "failure-contained added-location maintenance toggle", failures)
+    require(location, "event.stopPropagation", "isolated added-location maintenance toggle", failures)
+    require(location, "backdrop.classList.add('open')", "added-location form visibility recovery", failures)
     require(location, "this service-location form and its information are still intact", "maintenance-toggle recovery message", failures)
     require(location, "state.draft", "unsaved additional-location draft mode", failures)
     require(location, "Keep Service Location", "draft location completion control", failures)
