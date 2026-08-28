@@ -108,13 +108,20 @@ function buildPmosWebCalendarReviewState_(audit) {
 }
 
 function runFreshPmosWebCalendarAudit(options) {
-  const result = runFreshPmosCalendarAuditFromJobCenter(options || {});
+  const submitted = options || {};
+  const result = runFreshPmosCalendarAuditFromJobCenter(submitted);
   return {
-    result: clonePmosWebValue_(result || {}),
     // The fresh audit already produced the authoritative result and Review
-    // Session. Re-running the audit here doubled Calendar reads and could
-    // exhaust a Web App request before the response reached the browser.
-    reviewState: buildPmosWebCalendarReviewState_(result)
+    // Session. Return only the compact Web review state: returning the entire
+    // planner graph as well made large audits exceed the practical HTML-service
+    // response size before the browser could display their results.
+    reviewState: buildPmosWebCalendarReviewState_(result),
+    auditOptions: {
+      calendarName: String(result && result.calendarName || submitted.calendarName || ''),
+      startDate: String(submitted.startDate || ''),
+      endDate: String(submitted.endDate || ''),
+      includeStartedToday: Boolean(submitted.includeStartedToday)
+    }
   };
 }
 
