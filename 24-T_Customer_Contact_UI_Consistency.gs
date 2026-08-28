@@ -18,7 +18,7 @@
         '.account-contact-primary{background:#e7ecef;border-color:#b8c7ce}' +
         '.account-contact-primary .account-contact-remove{display:none}' +
         '.account-contact-primary-badge,.account-contact-secondary-badge,.location-contact-badge{position:absolute;left:34px;top:6px;padding:2px 7px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}' +
-        '.account-contact-primary-badge{background:#dcefdc;color:#356443}.account-contact-secondary-badge{background:#f3ead2;color:#6f5718}.location-contact-badge{background:#d9edf6;color:#0f5470}' +
+        '.account-contact-primary-badge{background:#dcefdc;color:#356443}.account-contact-secondary-badge{background:#d9edf6;color:#0f5470}.location-contact-badge{background:#f3ead2;color:#6f5718}' +
         '.account-contact-role select,.account-contact-role input{width:100%}';
     };
   }
@@ -27,7 +27,7 @@
     const baseLocationContactStyles = pmosServiceLocationContactStyles_;
     pmosServiceLocationContactStyles_ = function () {
       return baseLocationContactStyles() +
-        '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}.location-contact-badge{position:absolute;left:10px;top:6px;padding:2px 7px;border-radius:999px;background:#d9edf6;color:#0f5470;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}';
+        '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}.location-contact-badge{position:absolute;left:10px;top:6px;padding:2px 7px;border-radius:999px;background:#f3ead2;color:#6f5718;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}';
     };
   }
 
