@@ -75,6 +75,7 @@ assert(context.clientSource.includes("'name','modelNumber','pumpMake'"), 'Water-
 assert(context.clientSource.includes('ensureWaterFeatureActuatorFields(card);var label'), 'Water-feature valve actuator details are missing.');
 assert(context.clientSource.includes('function pmosSyncFilterModelNumber'), 'Filter model-number dropdown synchronization is missing.');
 assert(context.clientSource.includes('pmosFilterModelCode'), 'Filter model-number extraction is missing.');
+assert(context.clientSource.includes('pmosWatchDynamicFilterFields'), 'Dynamic service-location filter dropdown initialization is missing.');
 assert(context.clientSource.includes("data-body-field=\"shape\""), 'Body shape field is missing.');
 assert(context.clientSource.includes("data-body-field=\"volume\""), 'Body volume field is missing.');
 assert(context.clientSource.includes("standalone=bodyType==='spa'&&setup==='Self-Contained Unit'"), 'Standalone hot-tub guard is missing.');
