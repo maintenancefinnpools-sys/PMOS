@@ -120,8 +120,10 @@ function createPmosAdditionalServiceLocationForAccount(input) {
     const result = createPmosAdditionalServiceLocation(request);
     if (primary && result && result.customerId) {
       copyPmosAccountGoogleContactLinks_(primary.customerId, result.customerId);
-      applyPmosAccountContactInput_(result.customerId, request);
-      syncPmosAccountSharedCustomerFields_(result.customerId);
+      // Additional-location forms do not collect account identity. Copy the
+      // existing primary account fields outward; never promote the new row's
+      // intentionally empty location request into the shared account record.
+      syncPmosAccountSharedCustomerFields_(primary.customerId);
       result.account = getPmosCustomerAccount_(result.customerId);
     }
     return pmosAccountTerminologyState_(result);
