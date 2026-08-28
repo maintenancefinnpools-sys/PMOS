@@ -17,7 +17,8 @@
         '.account-contact-drag{position:absolute;left:9px;top:7px;border:0;background:transparent;color:#667780;font-size:14px;cursor:grab;line-height:1}' +
         '.account-contact-primary{background:#e7ecef;border-color:#b8c7ce}' +
         '.account-contact-primary .account-contact-remove{display:none}' +
-        '.account-contact-primary-badge{position:absolute;left:34px;top:6px;padding:2px 7px;border-radius:999px;background:#d3dee3;color:#344c58;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}' +
+        '.account-contact-primary-badge,.account-contact-secondary-badge,.location-contact-badge{position:absolute;left:34px;top:6px;padding:2px 7px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}' +
+        '.account-contact-primary-badge{background:#dcefdc;color:#356443}.account-contact-secondary-badge{background:#f3ead2;color:#6f5718}.location-contact-badge{background:#d9edf6;color:#0f5470}' +
         '.account-contact-role select,.account-contact-role input{width:100%}';
     };
   }
@@ -26,7 +27,7 @@
     const baseLocationContactStyles = pmosServiceLocationContactStyles_;
     pmosServiceLocationContactStyles_ = function () {
       return baseLocationContactStyles() +
-        '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}';
+        '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}.location-contact-badge{position:absolute;left:10px;top:6px;padding:2px 7px;border-radius:999px;background:#d9edf6;color:#0f5470;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}';
     };
   }
 
@@ -100,6 +101,7 @@
   var basePmosAccountContactRow=pmosAccountContactRow;
   pmosAccountContactRow=function(contact){
     var row=basePmosAccountContactRow(contact);pmosAccountReorderNameFields(row);pmosConfigureAccountRole(row);pmosBindAccountRowDrag(row);
+    if(!row.querySelector('.account-contact-secondary-badge')){var badge=document.createElement('span');badge.className='account-contact-secondary-badge';badge.textContent='Additional Contact';row.insertBefore(badge,row.firstChild)}
     var first=row.querySelector('[data-account-contact="firstName"]'),last=row.querySelector('[data-account-contact="lastName"]'),phone=row.querySelector('[data-account-contact="phone"]');
     [first,last].forEach(function(input){if(input)input.addEventListener('input',function(){window.pmosTitleCaseInput(input)})});
     if(phone)phone.addEventListener('input',function(){if(typeof formatPmosPhoneInput==='function')formatPmosPhoneInput(phone)});
@@ -164,6 +166,7 @@
   var baseLocationContactRow=pmosLocationContactRow;
   pmosLocationContactRow=function(contact){
     var row=baseLocationContactRow(contact),grid=row.querySelector('.location-contact-grid'),first=row.querySelector('[data-location-contact="firstName"]'),last=row.querySelector('[data-location-contact="lastName"]'),phone=row.querySelector('[data-location-contact="phone"]');
+    if(!row.querySelector('.location-contact-badge')){var badge=document.createElement('span');badge.className='location-contact-badge';badge.textContent='Service Location Contact';row.insertBefore(badge,row.firstChild)}
     var firstWrap=first&&(first.closest('.field')||first.parentElement),lastWrap=last&&(last.closest('.field')||last.parentElement);if(grid&&firstWrap&&lastWrap)grid.insertBefore(lastWrap,firstWrap);
     [first,last].forEach(function(input){if(input)input.addEventListener('input',function(){if(window.pmosTitleCaseInput)window.pmosTitleCaseInput(input)})});
     if(phone)phone.addEventListener('input',function(){if(typeof formatPmosPhoneInput==='function')formatPmosPhoneInput(phone)});
