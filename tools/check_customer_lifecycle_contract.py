@@ -139,6 +139,8 @@ def main() -> None:
     require(profile, "customer-contact-note", "expandable contact notes", failures)
     require(profile, ".customer-contact-card,.customer-contact-card.primary", "uniform contact-card background override", failures)
     require(location, "state.routeRequest++", "maintenance-toggle route cancellation", failures)
+    require(location, ".sl-context-grid label", "service-location note card layout", failures)
+    require(location, ".sl-context-grid textarea", "service-location note textarea layout", failures)
     require(location, "state.draft", "unsaved additional-location draft mode", failures)
     require(location, "Keep Service Location", "draft location completion control", failures)
     require(location, "sl-invalid-marker", "added-location invalid-entry feedback", failures)
