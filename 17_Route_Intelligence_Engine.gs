@@ -11,14 +11,27 @@ const PMOS_RIE_PROPERTIES = Object.freeze({
   FINISH_MODE: 'PMOS_RIE_FINISH_MODE',
   FINISH_ADDRESS: 'PMOS_RIE_FINISH_ADDRESS',
   OPTIMIZATION: 'PMOS_RIE_OPTIMIZATION',
+  WEIGHT_ROUTE: 'PMOS_RIE_WEIGHT_ROUTE',
+  WEIGHT_STOPS: 'PMOS_RIE_WEIGHT_STOPS',
+  WEIGHT_ADDED_TIME: 'PMOS_RIE_WEIGHT_ADDED_TIME',
+  WEIGHT_ADDED_DISTANCE: 'PMOS_RIE_WEIGHT_ADDED_DISTANCE',
   SERVICE_MINUTES: 'PMOS_RIE_SERVICE_MINUTES'
 });
 
 var PMOS_RIE_MEMORY_CACHE = {};
 
+const PMOS_RIE_WEIGHT_PRESETS = Object.freeze({
+  BALANCED: Object.freeze({route: 50, stops: 40, addedTime: 6, addedDistance: 4}),
+  TIME: Object.freeze({route: 55, stops: 10, addedTime: 30, addedDistance: 5}),
+  DISTANCE: Object.freeze({route: 20, stops: 5, addedTime: 5, addedDistance: 70})
+});
+
 function getPmosRieSettings_() {
   const properties = PropertiesService.getScriptProperties();
   const key = String(properties.getProperty(PMOS_RIE_PROPERTIES.GRAPHHOPPER_KEY) || '');
+  const optimization = normalizePmosRiePreference_(
+    properties.getProperty(PMOS_RIE_PROPERTIES.OPTIMIZATION) || 'BALANCED'
+  );
   return {
     provider: normalizePmosRieProvider_(properties.getProperty(PMOS_RIE_PROPERTIES.PROVIDER) || 'GRAPHHOPPER'),
     profile: 'car',
@@ -29,7 +42,9 @@ function getPmosRieSettings_() {
     startAddress: String(properties.getProperty(PMOS_RIE_PROPERTIES.START_ADDRESS) || ''),
     finishMode: normalizePmosRieEndpointMode_(properties.getProperty(PMOS_RIE_PROPERTIES.FINISH_MODE) || 'SHOP'),
     finishAddress: String(properties.getProperty(PMOS_RIE_PROPERTIES.FINISH_ADDRESS) || ''),
-    optimization: normalizePmosRiePreference_(properties.getProperty(PMOS_RIE_PROPERTIES.OPTIMIZATION) || 'BALANCED'),
+    optimization: optimization,
+    rankingWeights: getPmosRieRankingWeights_(properties, optimization),
+    weightPresets: PMOS_RIE_WEIGHT_PRESETS,
     serviceMinutes: clampPmosRieNumber_(properties.getProperty(PMOS_RIE_PROPERTIES.SERVICE_MINUTES), 0, 240, 20),
     automaticFallback: true
   };
@@ -231,11 +246,42 @@ function normalizePmosRieEndpointMode_(value) {
 
 function normalizePmosRiePreference_(value) {
   const preference = String(value || '').trim().toUpperCase();
-  if (['BALANCED', 'TIME', 'DISTANCE'].indexOf(preference) < 0) throw new Error('Choose Balanced, Time, or Distance optimization.');
+  if (['BALANCED', 'TIME', 'DISTANCE', 'CUSTOM'].indexOf(preference) < 0) {
+    throw new Error('Choose Balanced, Time, Distance, or Custom optimization.');
+  }
   return preference;
+}
+
+function getPmosRieRankingWeights_(properties, optimization) {
+  const preset = PMOS_RIE_WEIGHT_PRESETS[optimization] || PMOS_RIE_WEIGHT_PRESETS.BALANCED;
+  const stored = {
+    route: properties.getProperty(PMOS_RIE_PROPERTIES.WEIGHT_ROUTE),
+    stops: properties.getProperty(PMOS_RIE_PROPERTIES.WEIGHT_STOPS),
+    addedTime: properties.getProperty(PMOS_RIE_PROPERTIES.WEIGHT_ADDED_TIME),
+    addedDistance: properties.getProperty(PMOS_RIE_PROPERTIES.WEIGHT_ADDED_DISTANCE)
+  };
+  const hasStored = Object.keys(stored).every(function (key) {
+    return stored[key] !== null && stored[key] !== '';
+  });
+  if (!hasStored) return Object.assign({}, preset);
+  return normalizePmosRieRankingWeights_(stored, preset);
+}
+
+function normalizePmosRieRankingWeights_(weights, fallback) {
+  const source = weights || fallback || PMOS_RIE_WEIGHT_PRESETS.BALANCED;
+  const normalized = {
+    route: Math.round(clampPmosRieNumber_(source.route, 0, 100, fallback.route)),
+    stops: Math.round(clampPmosRieNumber_(source.stops, 0, 100, fallback.stops)),
+    addedTime: Math.round(clampPmosRieNumber_(source.addedTime, 0, 100, fallback.addedTime)),
+    addedDistance: Math.round(clampPmosRieNumber_(source.addedDistance, 0, 100, fallback.addedDistance))
+  };
+  const total = normalized.route + normalized.stops + normalized.addedTime + normalized.addedDistance;
+  if (total !== 100) throw new Error('Routing recommendation percentages must total 100%.');
+  return normalized;
 }
 
 function clampPmosRieNumber_(value, minimum, maximum, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
 }
+
