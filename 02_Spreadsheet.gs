@@ -10,7 +10,7 @@ function initializePmos() {
     'Initialize PMOS?',
     [
       'PMOS will configure protected calculated columns, route-change detection,',
-      'hidden support sheets, version history, Update Center, and Feature Lab.',
+      'hidden support sheets, version history, and Update Center.',
       '',
       'Your customer and route data will be preserved.'
     ].join('\n'),
@@ -21,7 +21,6 @@ function initializePmos() {
 
   createMigrationBackup_('Before PMOS initialization');
   ensureUpdateCenterSheet_();
-  ensureFeatureLabSheet_();
   ensureSupportSheets_();
   installOrRefreshTriggers_();
   protectCalculatedColumns_();
@@ -114,7 +113,6 @@ function updatePmos() {
 
 function runPmosMigrations_() {
   ensureUpdateCenterSheet_();
-  ensureFeatureLabSheet_();
   ensureSupportSheets_();
 
   const props = PropertiesService.getDocumentProperties();
@@ -122,10 +120,6 @@ function runPmosMigrations_() {
 
   if (schema < 1) {
     ensureSupportSheets_();
-  }
-
-  if (schema < 2) {
-    ensureFeatureLabSheet_();
   }
 
   if (schema < 3) {
@@ -207,7 +201,7 @@ function ensureUpdateCenterSheet_() {
     ['Initialization Status', isPmosInitialized_() ? 'Initialized' : 'Not initialized', ''],
     ['Last Successful Update', '', ''],
     ['Backup Before Updates', 'Enabled', ''],
-    ['Current Release', `PMOS v${PMOS_VERSION}`, 'Update Center and Feature Lab'],
+    ['Current Release', `PMOS v${PMOS_VERSION}`, 'Update Center'],
     ['Update Channel', 'Stable', ''],
     ['Pending Migration', 'None', ''],
     ['App Deployment URL', ScriptApp.getService().getUrl() || '', ''],
@@ -218,45 +212,6 @@ function ensureUpdateCenterSheet_() {
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, 3);
-}
-
-function ensureFeatureLabSheet_() {
-  const ss = SpreadsheetApp.getActive();
-  const sheet =
-    ss.getSheetByName('Feature Lab') ||
-    ss.insertSheet('Feature Lab');
-
-  if (sheet.getLastRow() > 1) {
-    const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(4, sheet.getLastColumn())).getValues();
-    values.forEach(function(row, index) {
-      if (String(row[0] || '').trim() !== 'Direct Calendar Sync') return;
-      const targetRow = index + 2;
-      sheet.getRange(targetRow, 1).setValue('Reviewed Calendar Sync');
-      sheet.getRange(targetRow, 3).setValue('Approved Calendar changes execute only through the reviewed queue.');
-      sheet.getRange(targetRow, 4).setValue('Stable');
-    });
-    return;
-  }
-
-  const rows = [
-    ['Feature', 'Status', 'Description', 'Risk Level'],
-    ['Smart Chemistry Suggestions', 'Off', 'Guidance based on visit history', 'Preview'],
-    ['Route Optimizer Suggestions', 'Off', 'Suggestions only; never automatic', 'Preview'],
-    ['Technician Training Mode', 'Off', 'Additional prompts for newer technicians', 'Preview'],
-    ['SpinLab Import', 'Off', 'Future WaterLink/SpinLab testing', 'Experimental'],
-    ['Built-in Route Map', 'Off', 'Future planning and tracking map', 'Experimental'],
-    ['Reviewed Calendar Sync', 'On', 'Approved Calendar changes execute only through the reviewed queue.', 'Stable'],
-    ['Spreadsheet Route Detection', 'On', 'Detect row moves and insertions', 'Stable'],
-    ['Route Version History', 'On', 'Restorable route snapshots', 'Stable']
-  ];
-
-  sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.setFrozenRows(1);
-}
-
-function setFeatureLabStatus(row, status) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName('Feature Lab');
-  sheet.getRange(Number(row), 2).setValue(status);
 }
 
 function writeUpdateCenterValue_(label, value) {

@@ -29,13 +29,19 @@ jobs:
       - name: Check Web navigation and customer lookup behavior
         run: node tools/check_web_navigation_lookup_contract.js
 
+      - name: Check Web operations behavior
+        run: node tools/check_web_operations_contract.js
+
+      - name: Check cleanup boundaries
+        run: python3 tools/check_cleanup_contract.py
+
       - name: Check Acceptance Test Bot safety contract
         run: python3 tools/check_acceptance_bot_contract.py
 
       - name: Execute Acceptance Test Bot functional checks
         run: node tools/check_acceptance_bot_functional.js
 
-      - name: Report self-only global candidates
+      - name: Reject self-only global candidates
         run: python3 tools/report_unused_apps_script_globals.py
 
       - name: Check combined Apps Script syntax

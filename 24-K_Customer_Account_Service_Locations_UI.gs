@@ -42,24 +42,6 @@ function listPmosCustomerAccountsForServiceLocations(query) {
   });
 }
 
-function showPmosServiceLocationSearch() {
-  const html = HtmlService.createHtmlOutput(`<!doctype html><html><head><base target="_top"><style>
-*{box-sizing:border-box}body{margin:0;padding:18px;background:#edf1f3;color:#293944;font-family:Arial,sans-serif}h2{margin:0 0 4px}.muted{color:#6d7c84;font-size:12px}.search{width:100%;margin-top:15px;padding:11px 12px;border:1px solid #b8c6cc;border-radius:8px;background:#fff;font:inherit;outline:none}.search:focus{border-color:#1a6b8e;box-shadow:0 0 0 3px rgba(26,107,142,.12)}.list{margin-top:10px;max-height:475px;overflow:auto;border:1px solid #d1dade;border-radius:9px;background:#fff}.row{display:block;width:100%;padding:11px 12px;border:0;border-bottom:1px solid #e2e8ea;background:#fff;color:#293944;text-align:left;cursor:pointer}.row:last-child{border-bottom:0}.row:hover{background:#eaf4f8}.name{font-weight:700}.meta{margin-top:3px;color:#6d7c84;font-size:11px}.count{float:right;color:#1a6b8e;font-size:10px;font-weight:700}
-</style></head><body><h2>Service Locations</h2><div class="muted">Choose the customer account whose service locations you want to manage.</div><input id="q" class="search" autocomplete="off" placeholder="Search by customer name"><div id="list" class="list"></div><script>
-var rows=[];function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}function render(){var q=document.getElementById('q').value;google.script.run.withSuccessHandler(function(items){rows=items||[];var box=document.getElementById('list');box.innerHTML=rows.map(function(r){return '<button type="button" class="row" data-id="'+esc(r.customerId)+'"><span class="count">'+r.serviceLocationCount+' location'+(r.serviceLocationCount===1?'':'s')+'</span><div class="name">'+esc(r.listName||r.displayName)+'</div><div class="meta">'+esc([r.address,r.phone].filter(Boolean).join(' · '))+'</div></button>'}).join('')||'<div class="muted" style="padding:14px">No customer accounts found.</div>';Array.prototype.forEach.call(box.querySelectorAll('.row'),function(button){button.onclick=function(){google.script.run.showPmosServiceLocationManager(this.dataset.id);setTimeout(function(){google.script.host.close()},250)}})}).listPmosCustomerAccountsForServiceLocations(q)}var timer;document.getElementById('q').oninput=function(){clearTimeout(timer);timer=setTimeout(render,120)};render();document.getElementById('q').focus();
-</script></body></html>`).setWidth(570).setHeight(640);
-  SpreadsheetApp.getUi().showModelessDialog(html, 'Service Locations');
-}
-
-function showPmosServiceLocationManager(customerId) {
-  const id = String(customerId || '').trim();
-  if (!id) throw new Error('Select a customer account first.');
-  migrateMaintenanceCustomerEquipmentStorage_();
-  const html = HtmlService.createHtmlOutput(buildPmosServiceLocationManagerHtml_(id))
-    .setWidth(1060).setHeight(860);
-  SpreadsheetApp.getUi().showModelessDialog(html, 'Service Locations');
-}
-
 function buildPmosServiceLocationManagerHtml_(customerId) {
   const idJson = JSON.stringify(customerId);
   const today = Utilities.formatDate(new Date(), PMOS.TIMEZONE, 'yyyy-MM-dd');

@@ -153,7 +153,3 @@ setConnectionState(true);renderJobs();renderReady();if(definition().mode==='runt
 
   SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Operations');
 }
-
-function openPmosCalendarAuditInJobCenter() {
-  return openPmosJobEngine('CALENDAR_AUDIT');
-}

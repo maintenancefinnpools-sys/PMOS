@@ -49,7 +49,3 @@ function suggestTemporaryVisitPlacement(payload) {
 function recommendTemporaryVisitDates(payload) {
   return recommendTemporaryVisitDates_(payload);
 }
-
-function scheduleTemporaryVisits(payload) {
-  return scheduleTemporaryVisits_(payload);
-}

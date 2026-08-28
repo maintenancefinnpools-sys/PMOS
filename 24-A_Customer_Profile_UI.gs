@@ -1,5 +1,4 @@
 /** Customer Lookup and future direct Edit Customer search entry points. */
-function showCustomerLookup(){showPmosCustomerSearchWindow_('LOOKUP')}
 function showEditCustomerInformationSearch(){showPmosCustomerSearchWindow_('EDIT_SEARCH')}
 function showPmosCustomerSearchWindow_(mode,initialCustomerId){const safeMode=mode==='EDIT_SEARCH'?'EDIT_SEARCH':'LOOKUP';const title=safeMode==='LOOKUP'?'Customer Lookup':'Edit Customer Information';const html=HtmlService.createHtmlOutput(buildPmosCustomerLookupHtml_(safeMode,initialCustomerId)).setWidth(1180).setHeight(780);SpreadsheetApp.getUi().showModelessDialog(html,title)}
 function buildPmosCustomerLookupHtml_(mode,initialCustomerId){const modeJson=JSON.stringify(mode),initialJson=JSON.stringify(String(initialCustomerId||''));return `<!doctype html><html><head><base target="_top"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;700;900&display=swap" rel="stylesheet"><style>

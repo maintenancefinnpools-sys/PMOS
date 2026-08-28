@@ -13,10 +13,6 @@ const PMOS_ACCEPTANCE_MANIFEST_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_FIXTURES_V1';
 const PMOS_ACCEPTANCE_LAST_RUN_PROPERTY_ = 'PMOS_ACCEPTANCE_TEST_LAST_RUN_V1';
 const PMOS_ACCEPTANCE_SPREADSHEET_RETRY_ATTEMPTS_ = 3;
 
-function showPmosAcceptanceTestBot() {
-  return showPmosAcceptanceTestBotFromMenu();
-}
-
 function showPmosAcceptanceTestBotFromMenu() {
   const ui = pmosAcceptanceSheetUi_();
   const html = HtmlService.createHtmlOutputFromFile('Sheets_Acceptance_Test_Bot')

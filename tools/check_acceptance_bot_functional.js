@@ -93,7 +93,6 @@ const context = {
 vm.createContext(context);
 vm.runInContext(source + `
   globalThis.__bot = {
-    showPmosAcceptanceTestBot,
     showPmosAcceptanceTestBotFromMenu,
     getPmosAcceptanceTestBotState,
     armPmosAcceptanceTestBot,
@@ -123,10 +122,6 @@ assert.strictEqual(dialogCalls[0].title, 'PMOS Acceptance Test Bot');
 assert.strictEqual(dialogCalls[0].html.fileName, 'Sheets_Acceptance_Test_Bot');
 assert.strictEqual(dialogCalls[0].html.width, 760);
 assert.strictEqual(dialogCalls[0].html.height, 700);
-
-// The legacy public endpoint must remain compatible and use the same dialog path.
-bot.showPmosAcceptanceTestBot();
-assert.strictEqual(dialogCalls.length, 2);
 
 // A wrong host must fail with a useful instruction instead of the raw getUi exception.
 context.SpreadsheetApp.getUi = () => { throw new Error('Cannot call getUi from this context.'); };

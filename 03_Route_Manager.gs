@@ -104,23 +104,6 @@ function getStoredRouteSignatures_() {
   }
 }
 
-function showRouteManagerLink() {
-  const url = ScriptApp.getService().getUrl();
-  if (!url) {
-    SpreadsheetApp.getUi().alert(
-      'Deploy the project as a web app first: Deploy → New deployment → Web app.'
-    );
-    return;
-  }
-  const html = HtmlService.createHtmlOutput(
-    '<div style="font-family:Arial;padding:16px">' +
-      '<h3>PMOS Route Manager</h3>' +
-      '<p><a href="' + url + '" target="_blank">Open Route Manager</a></p>' +
-    '</div>'
-  ).setWidth(360).setHeight(160);
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Route Manager');
-}
-
 function exportAffectedMapLayers() {
   const pending = getPendingChanges_();
   if (!Array.isArray(pending) || pending.length === 0) {

@@ -15,15 +15,6 @@ function pmosPrimaryAccountGoogleResourceName_(customerId) {
   }
 }
 
-function pmosAnnotateAccountContactPrimaryLink_(customerId, contacts) {
-  const primaryResourceName = pmosPrimaryAccountGoogleResourceName_(customerId);
-  return (contacts || []).map(function(contact) {
-    const row = Object.assign({}, contact || {});
-    row.__pmosPrimaryResourceName = primaryResourceName;
-    return row;
-  });
-}
-
 function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResourceName) {
   const requested = String(requestedPrimaryResourceName || '').trim();
   if (!requested) return {changed: false, resourceName: ''};

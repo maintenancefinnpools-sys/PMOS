@@ -1,11 +1,4 @@
-/**
- * Modern Temporary Visit dialog. Reuses PMOS address and route intelligence,
- * while keeping the legacy scheduler available during development testing.
- */
-function showTemporaryVisitSchedulerV2() {
-  return showTemporaryVisitSchedulerV3();
-}
-
+/** Active Temporary Maintenance backend used by the V3 Sheets UI. */
 function scheduleTemporaryVisitsV2(payload) {
   payload = payload || {};
   const title = String(payload.title || '').trim();

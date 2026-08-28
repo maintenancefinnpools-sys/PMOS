@@ -105,10 +105,6 @@ function savePmosCustomerContextNotes_(customerId, input) {
   return getPmosCustomerContextNotes_(customerId);
 }
 
-function savePmosCustomerContextNotes(customerId, input) {
-  return savePmosCustomerContextNotes_(customerId, input);
-}
-
 function normalizePmosProfileEquipmentForContext_(profile) {
   const output = profile || {};
   const bodies = Array.isArray(output.bodiesOfWater) ? output.bodiesOfWater : [];

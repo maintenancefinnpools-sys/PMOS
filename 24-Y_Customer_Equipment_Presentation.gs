@@ -29,13 +29,6 @@ const PMOS_EQUIPMENT_DISPLAY_LABELS_ = {
   HEATER: 'Heater'
 };
 
-function pmosEquipmentDisplayLabel_(type) {
-  const key = String(type || '').trim();
-  return PMOS_EQUIPMENT_DISPLAY_LABELS_[key] || key.replace(/_/g, ' ').replace(/\b\w/g, function(letter) {
-    return letter.toUpperCase();
-  });
-}
-
 function pmosEquipmentDisplayLabelClientScript_() {
   const labels = JSON.stringify(PMOS_EQUIPMENT_DISPLAY_LABELS_);
   return String.raw`

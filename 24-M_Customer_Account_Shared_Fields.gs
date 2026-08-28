@@ -52,22 +52,6 @@ function copyPmosAccountGoogleContactLinks_(sourceCustomerId, targetCustomerId) 
   SpreadsheetApp.flush();
 }
 
-function applyPmosAccountContactInput_(customerId, request) {
-  const record = getPmosCustomerEditorRow_(customerId);
-  const values = record.values.slice();
-  const firstName = String(request && request.firstName || '').trim();
-  const lastName = String(request && request.lastName || '').trim();
-  const phone = String(request && request.phone || '').trim();
-  const email = String(request && request.email || '').trim();
-  pmosCustomerEditorSetAliases_(record.headers, values, ['First Name'], firstName);
-  pmosCustomerEditorSetAliases_(record.headers, values, ['Last Name', 'Customer Name', 'Name', 'Customer'], lastName);
-  pmosCustomerEditorSetAliases_(record.headers, values, ['Full Name(s)', 'Full Name'], [firstName, lastName].filter(Boolean).join(' '));
-  pmosCustomerEditorSetAliases_(record.headers, values, ['Primary Phone', 'Phone Number', 'Phone'], phone);
-  pmosCustomerEditorSetAliases_(record.headers, values, ['Email', 'Email Address'], email);
-  record.sheet.getRange(record.rowNumber, 1, 1, values.length).setValues([values]);
-  SpreadsheetApp.flush();
-}
-
 function validatePmosAccountServiceLocationName_(customerId, requestedName) {
   const account = getPmosCustomerAccount_(customerId);
   const name = String(requestedName || '').trim();

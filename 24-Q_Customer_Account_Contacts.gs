@@ -72,10 +72,6 @@ function getPmosAccountContacts_(customerId) {
   }
 }
 
-function getPmosAccountContacts(customerId) {
-  return getPmosAccountContacts_(customerId);
-}
-
 function savePmosAccountContacts_(customerId, contacts) {
   const normalized = normalizePmosAccountContacts_(contacts);
   const account = getPmosCustomerAccount_(customerId);
