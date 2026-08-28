@@ -18,7 +18,7 @@ function getPmosWebOperationsBootstrap() {
       {type:'CALENDAR_REPAIR', label:'Calendar Repair', description:'Inspect repair/recovery status separately from normal Calendar Sync.', mode:'repair'}
     ],
     selectedType: String(PropertiesService.getUserProperties().getProperty('PMOS_LAST_JOB_TYPE') || 'CALENDAR_STATUS'),
-    syncStatus: getReviewedCalendarSyncJobCenterStatus(),
+    syncStatus: unwrapPmosWebOperationEndpoint_(getReviewedCalendarSyncJobCenterStatus()),
     auditOptions: getPmosCalendarAuditJobCenterOptions(),
     jobHistory: getPmosWebJobHistory(30)
   };
@@ -161,24 +161,40 @@ function performPmosWebCalendarIssueResolution(resolutionType, issue) {
 }
 
 function getPmosWebCalendarSyncStatus() {
-  return getReviewedCalendarSyncJobCenterStatus();
+  return unwrapPmosWebOperationEndpoint_(getReviewedCalendarSyncJobCenterStatus());
 }
 
 function startPmosWebCalendarSync() {
   rememberPmosJobType('CALENDAR_SYNC');
-  return startReviewedCalendarSyncJobCenterExecution();
+  return unwrapPmosWebOperationEndpoint_(startReviewedCalendarSyncJobCenterExecution());
 }
 
 function resumePmosWebCalendarSync() {
-  return resumeReviewedCalendarSyncJobCenterExecution();
+  return unwrapPmosWebOperationEndpoint_(resumeReviewedCalendarSyncJobCenterExecution());
 }
 
 function retryPmosWebCalendarSync() {
-  return retryReviewedCalendarSyncJobCenterExecution();
+  return unwrapPmosWebOperationEndpoint_(retryReviewedCalendarSyncJobCenterExecution());
 }
 
 function pausePmosWebCalendarSync() {
-  return pauseReviewedCalendarSyncJobCenterExecution();
+  return unwrapPmosWebOperationEndpoint_(pauseReviewedCalendarSyncJobCenterExecution());
+}
+
+/**
+ * The reviewed Calendar adapter is also used by the Sheet-side Job Center and
+ * deliberately returns an {ok, result/error} transport envelope. Web App
+ * callers need the status object itself so their controls can read status,
+ * remaining, processedItems, and lastError directly.
+ */
+function unwrapPmosWebOperationEndpoint_(response) {
+  if (response && response.ok === false) {
+    throw new Error(String(response.error || 'The PMOS operation failed.'));
+  }
+  if (response && response.ok === true && Object.prototype.hasOwnProperty.call(response, 'result')) {
+    return response.result;
+  }
+  return response;
 }
 
 function getPmosWebJobHistory(limit) {
