@@ -47,6 +47,7 @@
     };
     Object.keys(icons).forEach(function(view){var node=document.querySelector('.nav-item[data-view="'+view+'"] .nav-icon');if(node)node.innerHTML=icons[view];});
   }
+  window.pmosInstallNavigationIcons=installVisualizedIcons;
   function hideReveal(button){
     clearRevealTimer();clearHideTimer();
     var target=button||revealedButton;
@@ -130,6 +131,7 @@
   });
 
   document.addEventListener('pmos:viewchange',function(){
+    installVisualizedIcons();
     hideReveal();
     if(mobile())setTimeout(function(){var side=sidebar();if(side)side.classList.remove('open');setCollapsed(true);},0);
   });
@@ -137,5 +139,6 @@
     hideReveal();
     if(mobile())setCollapsed(true);
   });
+  window.addEventListener('load',installVisualizedIcons);
 })();
 </script>
