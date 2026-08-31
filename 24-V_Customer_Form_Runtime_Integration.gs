@@ -42,11 +42,10 @@ function pmosNormalizeSolarEquipmentRuntime_(input) {
       make: String(source.make || '').trim().slice(0, 160),
       model: String(source.model || '').trim().slice(0, 180),
       modelNumber: String(source.modelNumber || '').trim().slice(0, 160),
-      quantity: String(source.quantity || '').trim().slice(0, 40),
-      notes: String(source.notes || '').trim().slice(0, 1000)
+      quantity: String(source.quantity || '').trim().slice(0, 40)
     };
   }).filter(function(item) {
-    return item.type || item.make || item.model || item.modelNumber || item.quantity || item.notes;
+    return item.make || item.model || item.modelNumber || item.quantity;
   });
 }
 
@@ -186,8 +185,10 @@ function savePmosCustomerAccountEditorDataRuntime(input) {
   pmosEnsureCategorizedNotesRuntime_();
   const result = savePmosCustomerAccountEditorDataWithWaterMaintenance(request);
   const id = String(result.customerId || request.customerId || '').trim();
-  pmosSaveCategorizedNotesRuntime_(id, request);
-  result.profile = getPmosCustomerAccountProfileRuntime(id);
+  if (request._pmosFastLifecycle !== true) {
+    pmosSaveCategorizedNotesRuntime_(id, request);
+    result.profile = getPmosCustomerAccountProfileRuntime(id);
+  }
   return result;
 }
 

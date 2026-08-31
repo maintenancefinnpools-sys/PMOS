@@ -486,6 +486,73 @@ function pmosAcceptanceRunAccountTests_(results, manifest) {
   const actuator = pmosAcceptanceFindEquipment_(body, 'WATER_FEATURE');
   pmosAcceptanceRecord_(results, 'Equipment', 'Water Feature actuator identifier persists',
     '263045', actuator && actuator.details && actuator.details.actuatorModelNumber);
+
+  // Exercise the same transaction used by the Web and Sheets Edit Customer
+  // surfaces, then open a brand-new editor snapshot. This catches a successful
+  // response that silently loses location or equipment values.
+  const editedBodies = JSON.parse(JSON.stringify(primaryEditor.bodiesOfWater || []));
+  editedBodies[0].filter = Object.assign({}, editedBodies[0].filter || {}, {
+    type: 'Sand', make: 'Pentair', model: 'SD60', modelNumber: 'SD60',
+    partNumber: '145322', cartridgeSetNumber: 'SHOULD-NOT-PERSIST'
+  });
+  editedBodies[0].heater = {
+    type: 'Solar', connectedToEquipmentAutomation: true,
+    solarEquipment: [{
+      type: 'CONTROLLER', make: 'Pentair', model: 'SolarTouch', modelNumber: '521590'
+    }]
+  };
+  const saved = savePmosCustomerLifecycleEditorData({
+    customerId: primary.customerId,
+    editToken: primaryEditor.editToken,
+    firstName: primaryEditor.firstName,
+    lastName: primaryEditor.lastName,
+    phone: primaryEditor.phone,
+    email: primaryEditor.email,
+    serviceLocationName: 'Primary Test Pool Verified',
+    calendarTitle: primaryEditor.calendarTitle,
+    address: primaryEditor.address,
+    addressVerified: true,
+    addressDetails: null,
+    waterMaintenance: false,
+    maintenanceRemovalConfirmed: false,
+    routeChangeRequested: false,
+    recommendedPlacements: [],
+    status: '',
+    frequency: '',
+    serviceStartDate: '',
+    yearRound: '',
+    entryInformation: primaryEditor.entryInformation,
+    notes: primaryEditor.generalNotes || primaryEditor.notes,
+    generalNotes: primaryEditor.generalNotes || primaryEditor.notes,
+    equipmentNotes: primaryEditor.equipmentNotes,
+    maintenanceNotes: primaryEditor.maintenanceNotes,
+    openingNotes: primaryEditor.openingNotes,
+    closingNotes: primaryEditor.closingNotes,
+    bodiesOfWater: editedBodies,
+    accountContacts: primaryEditor.accountContacts || [],
+    serviceLocationContacts: primaryEditor.serviceLocationContacts || [],
+    accountBillingAddress: primaryEditor.accountBillingAddress || {enabled: false}
+  });
+  const reopened = getPmosCustomerLifecycleEditorData(primary.customerId);
+  const reopenedBody = reopened.bodiesOfWater && reopened.bodiesOfWater[0] || {};
+  const reopenedSanitizer = pmosAcceptanceFindEquipment_(reopenedBody, 'CHLORINE_FEEDER');
+  const reopenedAutomation = pmosAcceptanceFindEquipment_(reopenedBody, 'EQUIPMENT_AUTOMATION');
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Save transaction reports verified persistence',
+    true, !!(saved && saved.saved && saved.verified));
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Service Location Name survives save and reopen',
+    'Primary Test Pool Verified', reopened.serviceLocationName || reopened.locationName);
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Primary Sanitization survives save and reopen',
+    'Chlorine', reopenedBody.sanitization);
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Primary Sanitizer survives save and reopen',
+    'Pentair 300', [reopenedSanitizer && reopenedSanitizer.details && reopenedSanitizer.details.make, reopenedSanitizer && reopenedSanitizer.details && reopenedSanitizer.details.model].filter(Boolean).join(' '));
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Equipment Automation survives save and reopen',
+    'Pentair IntelliCenter', [reopenedAutomation && reopenedAutomation.details && (reopenedAutomation.details.manufacturer || reopenedAutomation.details.make), reopenedAutomation && reopenedAutomation.details && reopenedAutomation.details.model].filter(Boolean).join(' '));
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Sand filter does not retain a cartridge set number',
+    '', reopenedBody.filter && reopenedBody.filter.cartridgeSetNumber || '');
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Solar-specific controller survives save and reopen',
+    'Pentair SolarTouch 521590', [reopenedBody.heater && reopenedBody.heater.solarEquipment && reopenedBody.heater.solarEquipment[0] && reopenedBody.heater.solarEquipment[0].make, reopenedBody.heater && reopenedBody.heater.solarEquipment && reopenedBody.heater.solarEquipment[0] && reopenedBody.heater.solarEquipment[0].model, reopenedBody.heater && reopenedBody.heater.solarEquipment && reopenedBody.heater.solarEquipment[0] && reopenedBody.heater.solarEquipment[0].modelNumber].filter(Boolean).join(' '));
+  pmosAcceptanceRecord_(results, 'Edit save/reopen', 'Solar connection to Equipment Automation survives save and reopen',
+    true, !!(reopenedBody.heater && reopenedBody.heater.connectedToEquipmentAutomation));
 }
 
 function pmosAcceptanceRunMaintenanceStatusTests_(results, manifest) {

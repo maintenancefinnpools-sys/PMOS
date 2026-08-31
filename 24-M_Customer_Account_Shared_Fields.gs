@@ -66,7 +66,8 @@ function validatePmosAccountServiceLocationName_(customerId, requestedName) {
 
 function savePmosCustomerAccountEditorData(input) {
   try {
-    const request = input || {};
+    const request = Object.assign({}, input || {});
+    if (request._pmosFastLifecycle === true) request._pmosSkipResultProfile = true;
     const validation = validatePmosAccountServiceLocationName_(request.customerId, request.serviceLocationName);
     const selected = validation.account.locations.filter(function(location) {
       return String(location.customerId) === String(request.customerId);
@@ -78,8 +79,13 @@ function savePmosCustomerAccountEditorData(input) {
       validation.name,
       selected ? selected.primary : true
     );
+    const persistedIdentity = getPmosCustomerEditorRow_(result.customerId);
+    const persistedLocationIndex = findHeaderIndex_(persistedIdentity.headers, ['Service Location Name']);
+    if (persistedLocationIndex < 0 || String(persistedIdentity.values[persistedLocationIndex] || '').trim() !== validation.name) {
+      throw new Error('PMOS could not verify the saved Service Location Name. No success response was returned.');
+    }
     result.account = syncPmosAccountSharedCustomerFields_(result.customerId);
-    result.profile = getPmosCustomerAccountProfile(result.customerId);
+    if (request._pmosFastLifecycle !== true) result.profile = getPmosCustomerAccountProfile(result.customerId);
     return pmosAccountTerminologyState_(result);
   } catch (error) {
     if (error && error.message) error.message = pmosAccountTerminologyText_(error.message);

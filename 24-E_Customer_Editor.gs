@@ -25,6 +25,9 @@ function savePmosCustomerEditorData(input) {
   const firstName = String(request.firstName || '').trim();
   const lastName = String(request.lastName || '').trim();
   if (!firstName && !lastName) throw new Error('Enter at least one customer or household name.');
+  if (!Array.isArray(request.bodiesOfWater)) {
+    throw new Error('Equipment data was not received. Reload the editor; no changes were saved.');
+  }
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   let changedCalendarFields = false;
@@ -114,6 +117,7 @@ function savePmosCustomerEditorData(input) {
       if (routePlan.fullTable) writeMaintenanceRouteTable_(routePlan.fullTable.sheet, routePlan.fullTable.after);
       if (equipmentPlan) equipmentPlan.sheet.getRange(equipmentPlan.rowNumber, 1, 1, equipmentPlan.after.length).setValues([equipmentPlan.after]);
       SpreadsheetApp.flush();
+      assertPmosCustomerEditorPersistence_(record, values, fields, equipmentPlan, equipmentValues);
     } catch (error) {
       record.sheet.getRange(record.rowNumber, 1, 1, before.length).setValues([before]);
       routePlan.updates.forEach(function (update) {
@@ -138,7 +142,27 @@ function savePmosCustomerEditorData(input) {
     try { createPmosCustomerEditorHouseholdContacts_(customerId, contactsToCreate); contactStatus = contactsToCreate.length + ' household contact(s) created'; }
     catch (error) { contactStatus = 'Customer saved, but household contacts could not be created: ' + (error && error.message ? error.message : String(error)); }
   }
-  return {saved: true, customerId: customerId, profile: getPmosCustomerProfile(customerId), calendarStatus: calendarStatus, contactStatus: contactStatus};
+  const result = {saved: true, customerId: customerId, calendarStatus: calendarStatus, contactStatus: contactStatus};
+  if (request._pmosSkipResultProfile !== true) result.profile = getPmosCustomerProfile(customerId);
+  return result;
+}
+
+function assertPmosCustomerEditorPersistence_(record, expectedValues, fields, equipmentPlan, equipmentValues) {
+  const storedCustomer = record.sheet.getRange(record.rowNumber, 1, 1, expectedValues.length).getValues()[0];
+  ['firstName', 'lastName', 'calendarTitle', 'address', 'phone', 'email', 'entryInformation'].forEach(function(key) {
+    const indexes = pmosCustomerEditorAliasIndexes_(record.headers, fields[key].aliases);
+    indexes.forEach(function(index) {
+      const expected = String(expectedValues[index] == null ? '' : expectedValues[index]);
+      const actual = String(storedCustomer[index] == null ? '' : storedCustomer[index]);
+      if (actual !== expected) throw new Error('PMOS could not verify the saved ' + key + ' value. No success response was returned.');
+    });
+  });
+  if (!equipmentPlan) throw new Error('PMOS could not prepare the equipment record. No success response was returned.');
+  const storedEquipment = equipmentPlan.sheet.getRange(equipmentPlan.rowNumber, 1, 1, equipmentPlan.after.length).getValues()[0];
+  if (String(storedEquipment[0] || '').trim() !== String(equipmentPlan.after[0] || '').trim() ||
+      String(storedEquipment[3] || '') !== String(equipmentValues.detailsJson || '')) {
+    throw new Error('PMOS could not verify the saved equipment details. No success response was returned.');
+  }
 }
 
 function getPmosCustomerEditorRow_(customerId) {
@@ -300,6 +324,8 @@ function normalizePmosCustomerEditorBodies_(input) {
   return (Array.isArray(input) ? input : []).map(function (body, index) {
     const clean = body || {};
     const copyUnit = function(unit) { return Object.assign({}, unit || {}); };
+    const filter = copyUnit(clean.filter);
+    if (!/^cartridge$/i.test(String(filter.type || '').trim())) filter.cartridgeSetNumber = '';
     const heater = copyUnit(clean.heater);
     if (Array.isArray(clean.heater && clean.heater.solarEquipment)) {
       heater.solarEquipment = clean.heater.solarEquipment.map(function(item) {
@@ -319,7 +345,7 @@ function normalizePmosCustomerEditorBodies_(input) {
       sanitization: String(clean.sanitization || '').trim(),
       equipmentNotes: String(clean.equipmentNotes || '').trim().slice(0, 5000),
       pump: copyUnit(clean.pump),
-      filter: copyUnit(clean.filter),
+      filter: filter,
       heater: heater,
       cover: copyUnit(clean.cover),
       equipment: (Array.isArray(clean.equipment) ? clean.equipment : []).map(function(item) {

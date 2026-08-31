@@ -192,8 +192,10 @@ function savePmosCustomerAccountEditorDataWithWaterMaintenance(input) {
         request.originalFrequency = '';
         const result = savePmosCustomerAccountEditorDataWithLocationContactsAndBilling(request);
         result.maintenanceTransition = 'ENROLLED';
-        result.waterMaintenance = getPmosWaterMaintenanceEditorState_(customerId);
-        result.profile = getPmosCustomerAccountProfile(customerId);
+        result.waterMaintenance = request._pmosFastLifecycle === true
+          ? {enabled: true, status: request.status, frequency: request.frequency, serviceStartDate: request.serviceStartDate || '', yearRound: request.yearRound || 'Seasonal'}
+          : getPmosWaterMaintenanceEditorState_(customerId);
+        if (request._pmosFastLifecycle !== true) result.profile = getPmosCustomerAccountProfile(customerId);
         return pmosAccountTerminologyState_(result);
       } catch (error) {
         if (snapshot) rollbackMaintenanceSheetSnapshots_([snapshot]);
@@ -201,7 +203,9 @@ function savePmosCustomerAccountEditorDataWithWaterMaintenance(input) {
       }
     }
     const result = savePmosCustomerAccountEditorDataWithLocationContactsAndBilling(request);
-    result.waterMaintenance = getPmosWaterMaintenanceEditorState_(customerId);
+    result.waterMaintenance = request._pmosFastLifecycle === true
+      ? {enabled: true, status: request.status, frequency: request.frequency, serviceStartDate: request.serviceStartDate || '', yearRound: request.yearRound || 'Seasonal'}
+      : getPmosWaterMaintenanceEditorState_(customerId);
     return pmosAccountTerminologyState_(result);
   }
 
@@ -238,10 +242,10 @@ function savePmosCustomerAccountEditorDataWithWaterMaintenance(input) {
   try {
     const result = savePmosCustomerAccountEditorDataWithLocationContactsAndBilling(baseRequest);
     writePmosNonMaintenanceLocationFields_(request);
-    if (typeof saveAndSyncPmosServiceLocationContacts_ === 'function') {
+    if (request._pmosFastLifecycle !== true && typeof saveAndSyncPmosServiceLocationContacts_ === 'function') {
       try { saveAndSyncPmosServiceLocationContacts_(customerId, request.serviceLocationContacts || []); } catch (ignored) {}
     }
-    if (typeof syncPmosAccountHolderGoogleAddress_ === 'function') {
+    if (request._pmosFastLifecycle !== true && typeof syncPmosAccountHolderGoogleAddress_ === 'function') {
       try { syncPmosAccountHolderGoogleAddress_(customerId); } catch (ignored) {}
     }
     if (typeof clearPmosCalendarAuditSnapshot_ === 'function') clearPmosCalendarAuditSnapshot_();
@@ -253,8 +257,10 @@ function savePmosCustomerAccountEditorDataWithWaterMaintenance(input) {
       result.calendarStatus = 'NOT_REQUIRED';
       result.maintenanceTransition = 'UNCHANGED';
     }
-    result.waterMaintenance = getPmosWaterMaintenanceEditorState_(customerId);
-    result.profile = getPmosCustomerAccountProfile(customerId);
+    result.waterMaintenance = request._pmosFastLifecycle === true
+      ? {enabled: false, status: '', frequency: '', serviceStartDate: '', yearRound: ''}
+      : getPmosWaterMaintenanceEditorState_(customerId);
+    if (request._pmosFastLifecycle !== true) result.profile = getPmosCustomerAccountProfile(customerId);
     return pmosAccountTerminologyState_(result);
   } catch (error) {
     if (routeSnapshot) rollbackMaintenanceSheetSnapshots_([routeSnapshot]);

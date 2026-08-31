@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, '..');
 const source = [
   '24-F_Customer_Equipment_Editor_Component.gs',
   '24-U_Customer_Equipment_Enhancements.gs',
+  '24-T_Customer_Form_Enhancements.gs',
 ].map((name) => fs.readFileSync(path.join(root, name), 'utf8')).join('\n');
 const context = {
   console,
@@ -34,13 +35,14 @@ vm.createContext(serverContext);
 vm.runInContext([
   '24-E_Customer_Editor.gs',
   '24-V_Customer_Form_Runtime_Integration.gs',
+  '24-T_Customer_Form_Enhancements.gs',
 ].map((name) => fs.readFileSync(path.join(root, name), 'utf8')).join('\n'), serverContext);
 const completeBody = {
   name: 'Pool', type: 'Pool', location: 'Outdoor', shape: 'Rectangle', volume: '75,000 L',
   sanitization: 'Chlorine', equipmentNotes: 'Body-specific equipment note',
   pump: {make: 'Pentair', model: 'SuperFlo VST', modelNumber: '342002', partNumber: '342002'},
   filter: {type: 'Cartridge', make: 'Pentair', model: 'Clean & Clear Plus 420', modelNumber: 'CCP420', partNumber: '160301', cartridgeSetNumber: 'R173576'},
-  heater: {type: 'Solar', solarEquipment: [{type: 'CONTROLLER', make: 'Pentair', model: 'IntelliCenter'}]},
+  heater: {type: 'Solar', connectedToEquipmentAutomation: true, solarEquipment: [{type: 'CONTROLLER', make: 'Pentair', model: 'SolarTouch', modelNumber: '521590'}]},
   cover: {type: 'Auto Cover', winterType: 'Safety Cover'},
   equipment: [
     {type: 'CHLORINE_FEEDER', details: {make: 'Pentair', model: '300', modelNumber: 'R171016', partNumber: 'R171016'}},
@@ -51,9 +53,14 @@ const normalizedBody = serverContext.pmosNormalizeBodiesWithRuntimeEnhancements_
 assert(normalizedBody.sanitization === 'Chlorine', 'Primary Sanitization is lost during server normalization.');
 assert(normalizedBody.equipmentNotes === completeBody.equipmentNotes, 'Body Equipment Notes are lost during server normalization.');
 assert(normalizedBody.filter.cartridgeSetNumber === 'R173576', 'Replacement cartridge number is lost during server normalization.');
-assert(normalizedBody.heater.solarEquipment[0].model === 'IntelliCenter', 'Solar equipment is lost during server normalization.');
+assert(normalizedBody.heater.solarEquipment[0].model === 'SolarTouch', 'Solar equipment is lost during server normalization.');
+assert(normalizedBody.heater.connectedToEquipmentAutomation === true, 'Solar Equipment Automation connection is lost during server normalization.');
 assert(normalizedBody.equipment[0].details.model === '300', 'Primary sanitizer make/model is lost during server normalization.');
 assert(normalizedBody.equipment[1].details.model === 'IntelliCenter', 'Equipment Automation is lost during server normalization.');
+const normalizedSand = serverContext.normalizePmosCustomerEditorBodies_([{
+  name: 'Pool', filter: {type: 'Sand', make: 'Pentair', model: 'SD60', cartridgeSetNumber: 'STALE'}
+}])[0];
+assert(normalizedSand.filter.cartridgeSetNumber === '', 'Sand filter retained a cartridge-set number.');
 completeBody.equipment[0].details.model = 'mutated after normalization';
 assert(normalizedBody.equipment[0].details.model === '300', 'Normalized equipment still aliases mutable editor input.');
 
@@ -84,6 +91,9 @@ assert(context.clientSource.includes("host.style.display=checkbox.checked?'block
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(context.clientSource.includes('pmosEnsureCustomerBodyEnhancements'), 'Core equipment renderer does not invoke the shared body enhancements.');
 assert(context.clientSource.includes('pmosConfigureSolarHeating'), 'Core equipment renderer does not wire Solar Heating changes.');
+assert(context.clientSource.includes('data-solar-connected'), 'Solar Heating connection-to-automation checkbox is missing.');
+assert(context.clientSource.includes('AquaSolar GL-235'), 'Solar-specific controller catalog is missing AquaSolar GL-235.');
+assert(!context.clientSource.includes('data-solar-field="notes"'), 'Solar components still render individual Notes fields.');
 assert(context.clientSource.includes('pmosConfigureSharedBody'), 'Shared Pool/Spa equipment inheritance is missing.');
 assert(context.clientSource.includes('All equipment shared with Pool'), 'Shared Pool/Spa equipment summary is missing.');
 assert(context.clientSource.includes("bodies[index].sanitization=''"), 'Shared spa sanitization is still stored as duplicate equipment data.');

@@ -147,10 +147,44 @@ function getPmosCustomerLifecycleProfile(customerId) {
 function getPmosCustomerLifecycleEditorData(customerId) {
   const id = String(customerId || '').trim();
   if (!id) throw new Error('Customer ID is required.');
-  const data = typeof getPmosCustomerAccountEditorDataRuntime === 'function'
-    ? getPmosCustomerAccountEditorDataRuntime(id)
-    : getPmosCustomerAccountEditorDataWithWaterMaintenance(id);
-  return pmosAttachCustomerLifecycleEditorData_(data, id);
+  // Build the editor snapshot once. The older compatibility chain repeatedly
+  // re-read Customers, Routes, contacts, billing and notes before returning the
+  // same values, which made a cold Web App load prone to the 45-second timeout.
+  const data = getPmosCustomerAccountEditorData(id);
+  data.serviceLocationName = String(data.serviceLocationName || data.locationName || data.calendarTitle || '').trim();
+  data.locationName = data.serviceLocationName;
+  const routes = Array.isArray(data.routes) ? data.routes : [];
+  const frequency = String(data.frequency || '').trim();
+  data.waterMaintenance = {
+    enabled: routes.length > 0 || /^(weekly|twice weekly|bi-?weekly|monthly)$/i.test(frequency),
+    routeCount: routes.length,
+    layers: routes.map(function(route) { return String(route.layer || '').trim(); }).filter(function(layer, index, all) { return layer && all.indexOf(layer) === index; }),
+    status: String(data.status || 'Active').trim() || 'Active',
+    frequency: frequency,
+    serviceStartDate: String(data.serviceStartDate || '').trim(),
+    yearRound: /yes|year round/i.test(String(data.yearRound || '')) ? 'Year Round' : 'Seasonal'
+  };
+  data.accountContacts = typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(id) : [];
+  data.orderedAccountContacts = [{
+    primary: true,
+    firstName: String(data.firstName || '').trim(),
+    lastName: String(data.lastName || '').trim(),
+    role: 'Primary Account Contact',
+    phone: String(data.phone || '').trim(),
+    email: String(data.email || '').trim(),
+    notes: '',
+    resourceName: ''
+  }].concat(data.accountContacts.map(function(contact) { return Object.assign({primary: false}, contact || {}); }));
+  const notes = pmosCustomerLifecycleVisibleNotes_(data, {});
+  data.generalNotes = notes.generalNotes;
+  data.notes = notes.generalNotes;
+  data.equipmentNotes = notes.equipmentNotes;
+  data.maintenanceNotes = notes.maintenanceNotes;
+  data.openingNotes = notes.openingNotes;
+  data.closingNotes = notes.closingNotes;
+  data._pmosLifecycleComplete = true;
+  return typeof normalizePmosProfileEquipmentForContext_ === 'function'
+    ? normalizePmosProfileEquipmentForContext_(data) : data;
 }
 
 function savePmosCustomerLifecycleEditorData(input) {
@@ -183,6 +217,10 @@ function savePmosCustomerLifecycleEditorData(input) {
   const accountContacts = typeof normalizePmosAccountContacts_ === 'function'
     ? normalizePmosAccountContacts_(request.accountContacts || []) : [];
   request.accountContacts = accountContacts;
+  const priorAccountContacts = typeof getPmosAccountContacts_ === 'function'
+    ? getPmosAccountContacts_(customerId) : [];
+  request._pmosFastLifecycle = true;
+  request._pmosSkipResultProfile = true;
 
   let result = typeof savePmosCustomerAccountEditorDataRuntime === 'function'
     ? savePmosCustomerAccountEditorDataRuntime(request)
@@ -191,24 +229,33 @@ function savePmosCustomerLifecycleEditorData(input) {
 
   // Account-wide primary fields are already synchronized by the core account editor.
   // Preserve the exact ordered additional-contact list and mirror it to Google Contacts.
-  try {
-    const accountResult = syncPmosAccountContactsToGoogle_(customerId, accountContacts);
-    result.accountContacts = accountResult.contacts || accountContacts;
-    (accountResult.warnings || []).forEach(function(warning) { warnings.push(String(warning)); });
-  } catch (error) {
-    warnings.push('Customer changes were saved, but Account Contacts could not be synchronized: ' +
-      String(error && error.message ? error.message : error));
+  if (JSON.stringify(priorAccountContacts) !== JSON.stringify(accountContacts)) {
+    try {
+      const accountResult = syncPmosAccountContactsToGoogle_(customerId, accountContacts);
+      result.accountContacts = accountResult.contacts || accountContacts;
+      (accountResult.warnings || []).forEach(function(warning) { warnings.push(String(warning)); });
+    } catch (error) {
+      warnings.push('Customer changes were saved, but Account Contacts could not be synchronized: ' +
+        String(error && error.message ? error.message : error));
+    }
+  } else {
+    result.accountContacts = priorAccountContacts;
   }
 
   if (request.equipmentNotes != null && typeof savePmosCustomerContextNotes_ === 'function') {
     try {
-      savePmosCustomerContextNotes_(customerId, {
+      const requestedNotes = {
         generalNotes: request.generalNotes != null ? request.generalNotes : request.notes,
         equipmentNotes: request.equipmentNotes,
         maintenanceNotes: request.maintenanceNotes,
         openingNotes: request.openingNotes,
         closingNotes: request.closingNotes
-      });
+      };
+      const priorNotes = pmosCustomerLifecycleVisibleNotes_(pmosCustomerLifecycleNotes_(customerId), {});
+      const normalizedRequestedNotes = pmosCustomerLifecycleVisibleNotes_(requestedNotes, {});
+      if (JSON.stringify(priorNotes) !== JSON.stringify(normalizedRequestedNotes)) {
+        savePmosCustomerContextNotes_(customerId, requestedNotes);
+      }
     } catch (error) {
       warnings.push('Customer changes were saved, but contextual notes could not be fully updated: ' +
         String(error && error.message ? error.message : error));
@@ -218,8 +265,7 @@ function savePmosCustomerLifecycleEditorData(input) {
   if (result.contactStatus) warnings.push(String(result.contactStatus));
   if (result.contextNoteWarning) warnings.push(String(result.contextNoteWarning));
   result.warnings = (result.warnings || []).concat(warnings).filter(Boolean);
-  result.profile = getPmosCustomerLifecycleProfile(customerId);
-  result.waterMaintenance = getPmosWaterMaintenanceEditorState_(customerId);
+  result.verified = true;
   return result;
 }
 

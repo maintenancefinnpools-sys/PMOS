@@ -278,12 +278,16 @@ function savePmosCustomerAccountEditorDataWithLocationContactsAndBilling(input) 
   const request = input || {};
   const hasBilling = Object.prototype.hasOwnProperty.call(request, 'accountBillingAddress');
   const billing = hasBilling ? normalizePmosAccountBillingAddress_(request.accountBillingAddress) : null;
+  const priorBilling = hasBilling ? getPmosAccountBillingAddress_(request.customerId) : null;
+  const billingChanged = hasBilling && JSON.stringify(priorBilling) !== JSON.stringify(billing);
   const result = savePmosCustomerAccountEditorDataWithLocationContacts(request);
-  if (hasBilling) savePmosAccountBillingAddress_(result.customerId, billing);
-  const sync = syncPmosAccountHolderGoogleAddress_(result.customerId);
-  if (sync.error) result.contactStatus = [result.contactStatus, 'Account holder Google Contact address could not be updated: ' + sync.error].filter(Boolean).join(' · ');
-  result.accountBillingAddress = getPmosAccountBillingAddress_(result.customerId);
-  result.profile = getPmosCustomerAccountProfile(result.customerId);
+  if (billingChanged) savePmosAccountBillingAddress_(result.customerId, billing);
+  if (billingChanged) {
+    const sync = syncPmosAccountHolderGoogleAddress_(result.customerId);
+    if (sync.error) result.contactStatus = [result.contactStatus, 'Account holder Google Contact address could not be updated: ' + sync.error].filter(Boolean).join(' · ');
+  }
+  result.accountBillingAddress = hasBilling ? billing : getPmosAccountBillingAddress_(result.customerId);
+  if (request._pmosFastLifecycle !== true) result.profile = getPmosCustomerAccountProfile(result.customerId);
   return result;
 }
 

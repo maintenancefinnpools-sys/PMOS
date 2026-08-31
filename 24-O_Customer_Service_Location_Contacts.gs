@@ -185,13 +185,17 @@ function createPmosAdditionalServiceLocationForAccountWithLocationContacts(input
 function savePmosCustomerAccountEditorDataWithLocationContacts(input) {
   const request = input || {};
   const contacts = normalizePmosServiceLocationContacts_(request.serviceLocationContacts);
+  const priorContacts = getPmosServiceLocationContacts_(request.customerId);
+  const contactsChanged = JSON.stringify(priorContacts) !== JSON.stringify(contacts);
   const result = savePmosCustomerAccountEditorData(request);
-  const contactResult = saveAndSyncPmosServiceLocationContacts_(result.customerId, contacts);
+  const contactResult = contactsChanged
+    ? saveAndSyncPmosServiceLocationContacts_(result.customerId, contacts)
+    : {contacts: priorContacts, errors: []};
   result.serviceLocationContacts = contactResult.contacts;
   if (contactResult.errors.length) {
     result.contactStatus = [result.contactStatus, contactResult.errors.length + ' service-location Google Contact update(s) could not be completed.'].filter(Boolean).join(' · ');
   }
-  result.profile = getPmosCustomerAccountProfile(result.customerId);
+  if (request._pmosFastLifecycle !== true) result.profile = getPmosCustomerAccountProfile(result.customerId);
   return result;
 }
 
