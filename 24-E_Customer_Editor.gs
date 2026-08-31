@@ -299,7 +299,33 @@ function preparePmosCustomerEditorEquipment_(customerId, calendarTitle, equipmen
 function normalizePmosCustomerEditorBodies_(input) {
   return (Array.isArray(input) ? input : []).map(function (body, index) {
     const clean = body || {};
-    return {name: String(clean.name || clean.type || (index ? 'Body ' + (index + 1) : 'Pool')).trim(), type: String(clean.type || clean.name || '').trim(), spaType: String(clean.spaType || '').trim(), equipmentSetup: String(clean.equipmentSetup || '').trim(), unitMake: String(clean.unitMake || '').trim(), unitModel: String(clean.unitModel || '').trim(), location: String(clean.location || '').trim(), shape: String(clean.shape || '').trim(), volume: String(clean.volume || '').trim(), sanitization: String(clean.sanitization || '').trim(), pump: clean.pump || {}, filter: clean.filter || {}, heater: clean.heater || {}, cover: clean.cover || {}, equipment: Array.isArray(clean.equipment) ? clean.equipment : []};
+    const copyUnit = function(unit) { return Object.assign({}, unit || {}); };
+    const heater = copyUnit(clean.heater);
+    if (Array.isArray(clean.heater && clean.heater.solarEquipment)) {
+      heater.solarEquipment = clean.heater.solarEquipment.map(function(item) {
+        return Object.assign({}, item || {});
+      });
+    }
+    return {
+      name: String(clean.name || clean.type || (index ? 'Body ' + (index + 1) : 'Pool')).trim(),
+      type: String(clean.type || clean.name || '').trim(),
+      spaType: String(clean.spaType || '').trim(),
+      equipmentSetup: String(clean.equipmentSetup || '').trim(),
+      unitMake: String(clean.unitMake || '').trim(),
+      unitModel: String(clean.unitModel || '').trim(),
+      location: String(clean.location || '').trim(),
+      shape: String(clean.shape || '').trim(),
+      volume: String(clean.volume || '').trim(),
+      sanitization: String(clean.sanitization || '').trim(),
+      equipmentNotes: String(clean.equipmentNotes || '').trim().slice(0, 5000),
+      pump: copyUnit(clean.pump),
+      filter: copyUnit(clean.filter),
+      heater: heater,
+      cover: copyUnit(clean.cover),
+      equipment: (Array.isArray(clean.equipment) ? clean.equipment : []).map(function(item) {
+        return Object.assign({}, item || {}, {details: Object.assign({}, item && item.details || {})});
+      })
+    };
   });
 }
 

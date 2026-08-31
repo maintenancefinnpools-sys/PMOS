@@ -57,6 +57,7 @@ def main() -> None:
     sheets_add_customer_server = read("24-R1_Add_Customer_Sheets_Parity.gs")
     lifecycle = read("24-Z_Customer_Profile_Editor_Lifecycle.gs")
     lifecycle_runtime = read("24-ZZZ_Customer_Lifecycle_Runtime_Bridge.gs")
+    customer_runtime = read("24-V_Customer_Form_Runtime_Integration.gs")
     sheets_editor_lifecycle = read("24-ZZZZZZ_Sheets_Account_Contact_Lifecycle_UI.gs")
     legacy_contact_bridge = read("24-ZZZZZZZ_Legacy_Account_Contact_Bridge.gs")
 
@@ -121,6 +122,9 @@ def main() -> None:
     require(editor, "inlineHostId:'ceAdditionalLocationHost'", "inline editor location form", failures)
     require(editor, "classList.add('ce-loading')", "Web editor loading gate", failures)
     require(editor, "finishLoading()", "Web editor reveal after complete hydration", failures)
+    require(editor, "data.serviceLocationName||data.locationName||data.calendarTitle", "authoritative Service Location Name hydration", failures)
+    ordered(editor, ["addWaterBody(body.name||body.type||'Pool')", "prepareWaterBodyOptions(root)", "set('[data-body-field=\"sanitization\"]',body.sanitization)", "renderPrimarySanitizer(sanitizer)"], "Web body controls before sanitizer hydration", failures)
+    ordered(editor, ["prepareWaterBodyOptions(root)", "[data-body-field=\"automationEnabled\"]", "toggleEquipmentAutomation(check)", "[data-body-field=\"automationMake\"]", "[data-body-field=\"automationModel\"]"], "Web Equipment Automation hydration", failures)
     require(editor, "<label class=\"ce-full\">Maintenance Notes<textarea id=\"ceMaintenanceNotes\"", "Maintenance Notes in maintenance section", failures)
     require(editor, ".ce-context-grid label", "Web editor note-label layout", failures)
     require(editor, ".ce-context-grid textarea", "Web editor note-textarea layout", failures)
@@ -231,6 +235,10 @@ def main() -> None:
     require(lifecycle, "_pmosLifecycleComplete", "lifecycle payload completion marker", failures)
     require(lifecycle, "pmosAttachCustomerLifecycleEditorData_", "single lifecycle editor enrichment helper", failures)
     require(lifecycle_runtime, "pmosAttachCustomerLifecycleEditorData_(baseEditorRuntime(customerId), customerId)", "shared Sheets/Web lifecycle enrichment", failures)
+    require(customer_runtime, "data.locationName = data.serviceLocationName", "runtime Service Location Name compatibility alias", failures)
+    require(customer_runtime, "request.bodiesOfWater = pmosNormalizeBodiesWithRuntimeEnhancements_", "single normalized editor equipment request", failures)
+    save_runtime = customer_runtime[customer_runtime.find("function savePmosCustomerAccountEditorDataRuntime"):customer_runtime.find("function returnFromPmosCustomerAccountEditorRuntime")]
+    forbid(save_runtime, "pmosPersistBodyEnhancementsRuntime_", "redundant second editor equipment write", failures)
     require(sheets_editor_lifecycle, "pmos-sheets-editor-loading", "Sheets editor loading gate", failures)
     require(sheets_editor_lifecycle, "requestAnimationFrame(function(){requestAnimationFrame(revealEditor)})", "Sheets editor reveal after complete contact hydration", failures)
     require(sheets_editor_lifecycle, "validateEditor()", "Sheets editor exact-field validation", failures)

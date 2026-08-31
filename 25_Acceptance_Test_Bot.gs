@@ -461,6 +461,18 @@ function pmosAcceptanceRunAccountTests_(results, manifest) {
     1, (primaryEditor.accountContacts || []).length);
   pmosAcceptanceRecord_(results, 'Editor hydration', 'Bodies of Water reach the complete editor payload',
     1, (primaryEditor.bodiesOfWater || []).length);
+  pmosAcceptanceRecord_(results, 'Editor hydration', 'Service Location Name reaches the complete editor payload',
+    'Primary Test Pool', primaryEditor.serviceLocationName || primaryEditor.locationName);
+
+  const editorBody = primaryEditor.bodiesOfWater && primaryEditor.bodiesOfWater[0] || {};
+  const editorSanitizer = pmosAcceptanceFindEquipment_(editorBody, 'CHLORINE_FEEDER');
+  const editorAutomation = pmosAcceptanceFindEquipment_(editorBody, 'EQUIPMENT_AUTOMATION');
+  pmosAcceptanceRecord_(results, 'Editor hydration', 'Primary Sanitization reaches the complete editor payload',
+    'Chlorine', editorBody.sanitization);
+  pmosAcceptanceRecord_(results, 'Editor hydration', 'Primary Sanitizer make and model reach the editor payload',
+    'Pentair 300', [editorSanitizer && editorSanitizer.details && editorSanitizer.details.make, editorSanitizer && editorSanitizer.details && editorSanitizer.details.model].filter(Boolean).join(' '));
+  pmosAcceptanceRecord_(results, 'Editor hydration', 'Equipment Automation reaches the complete editor payload',
+    'Pentair IntelliCenter', [editorAutomation && editorAutomation.details && (editorAutomation.details.manufacturer || editorAutomation.details.make), editorAutomation && editorAutomation.details && editorAutomation.details.model].filter(Boolean).join(' '));
 
   const body = primaryProfile.bodiesOfWater && primaryProfile.bodiesOfWater[0] || {};
   pmosAcceptanceRecord_(results, 'Equipment', 'Shape persists into shared profile payload',
@@ -588,6 +600,12 @@ function pmosAcceptanceEquipmentFixture_() {
     },
     cover: {type: 'Auto Cover', winterType: 'Safety Cover'},
     equipment: [{
+      type: 'CHLORINE_FEEDER',
+      details: {make: 'Pentair', model: '300', modelNumber: 'R171016', partNumber: 'R171016'}
+    }, {
+      type: 'EQUIPMENT_AUTOMATION',
+      details: {manufacturer: 'Pentair', model: 'IntelliCenter'}
+    }, {
       type: 'CHEMISTRY_AUTOMATION',
       details: {manufacturer: 'Pentair', model: 'IntelliChem', modelNumber: '521357'}
     }, {

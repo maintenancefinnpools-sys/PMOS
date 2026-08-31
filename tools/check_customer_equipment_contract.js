@@ -29,6 +29,34 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+const serverContext = {console};
+vm.createContext(serverContext);
+vm.runInContext([
+  '24-E_Customer_Editor.gs',
+  '24-V_Customer_Form_Runtime_Integration.gs',
+].map((name) => fs.readFileSync(path.join(root, name), 'utf8')).join('\n'), serverContext);
+const completeBody = {
+  name: 'Pool', type: 'Pool', location: 'Outdoor', shape: 'Rectangle', volume: '75,000 L',
+  sanitization: 'Chlorine', equipmentNotes: 'Body-specific equipment note',
+  pump: {make: 'Pentair', model: 'SuperFlo VST', modelNumber: '342002', partNumber: '342002'},
+  filter: {type: 'Cartridge', make: 'Pentair', model: 'Clean & Clear Plus 420', modelNumber: 'CCP420', partNumber: '160301', cartridgeSetNumber: 'R173576'},
+  heater: {type: 'Solar', solarEquipment: [{type: 'CONTROLLER', make: 'Pentair', model: 'IntelliCenter'}]},
+  cover: {type: 'Auto Cover', winterType: 'Safety Cover'},
+  equipment: [
+    {type: 'CHLORINE_FEEDER', details: {make: 'Pentair', model: '300', modelNumber: 'R171016', partNumber: 'R171016'}},
+    {type: 'EQUIPMENT_AUTOMATION', details: {manufacturer: 'Pentair', model: 'IntelliCenter'}},
+  ],
+};
+const normalizedBody = serverContext.pmosNormalizeBodiesWithRuntimeEnhancements_([completeBody])[0];
+assert(normalizedBody.sanitization === 'Chlorine', 'Primary Sanitization is lost during server normalization.');
+assert(normalizedBody.equipmentNotes === completeBody.equipmentNotes, 'Body Equipment Notes are lost during server normalization.');
+assert(normalizedBody.filter.cartridgeSetNumber === 'R173576', 'Replacement cartridge number is lost during server normalization.');
+assert(normalizedBody.heater.solarEquipment[0].model === 'IntelliCenter', 'Solar equipment is lost during server normalization.');
+assert(normalizedBody.equipment[0].details.model === '300', 'Primary sanitizer make/model is lost during server normalization.');
+assert(normalizedBody.equipment[1].details.model === 'IntelliCenter', 'Equipment Automation is lost during server normalization.');
+completeBody.equipment[0].details.model = 'mutated after normalization';
+assert(normalizedBody.equipment[0].details.model === '300', 'Normalized equipment still aliases mutable editor input.');
+
 const saltNature2 = context.PMOS_SANITIZER_CATALOG.SALT_SYSTEM.Nature2 || [];
 const chlorineNature2 = context.PMOS_SANITIZER_CATALOG.CHLORINE_FEEDER.Nature2 || [];
 const pentairFeeders = context.PMOS_SANITIZER_CATALOG.CHLORINE_FEEDER.Pentair || [];

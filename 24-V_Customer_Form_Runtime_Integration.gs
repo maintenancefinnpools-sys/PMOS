@@ -132,7 +132,10 @@ function getPmosCustomerAccountProfileRuntime(customerId) {
 }
 
 function getPmosCustomerAccountEditorDataRuntime(customerId) {
-  return pmosAttachRuntimeCustomerDetails_(getPmosCustomerAccountEditorDataWithWaterMaintenance(customerId), customerId);
+  const data = pmosAttachRuntimeCustomerDetails_(getPmosCustomerAccountEditorDataWithWaterMaintenance(customerId), customerId);
+  data.serviceLocationName = String(data.serviceLocationName || data.locationName || data.calendarTitle || '').trim();
+  data.locationName = data.serviceLocationName;
+  return data;
 }
 
 function createPmosCustomerAccountRuntime(input) {
@@ -177,11 +180,13 @@ function createPmosAdditionalServiceLocationRuntime(input) {
 function savePmosCustomerAccountEditorDataRuntime(input) {
   const request = Object.assign({}, input || {});
   if (Object.prototype.hasOwnProperty.call(request, 'generalNotes')) request.notes = request.generalNotes;
+  if (Array.isArray(request.bodiesOfWater)) {
+    request.bodiesOfWater = pmosNormalizeBodiesWithRuntimeEnhancements_(request.bodiesOfWater);
+  }
   pmosEnsureCategorizedNotesRuntime_();
   const result = savePmosCustomerAccountEditorDataWithWaterMaintenance(request);
   const id = String(result.customerId || request.customerId || '').trim();
   pmosSaveCategorizedNotesRuntime_(id, request);
-  pmosPersistBodyEnhancementsRuntime_(id, request);
   result.profile = getPmosCustomerAccountProfileRuntime(id);
   return result;
 }
