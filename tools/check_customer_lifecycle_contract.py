@@ -122,6 +122,12 @@ def main() -> None:
     require(editor, "classList.add('ce-loading')", "Web editor loading gate", failures)
     require(editor, "finishLoading()", "Web editor reveal after complete hydration", failures)
     require(editor, "<label class=\"ce-full\">Maintenance Notes<textarea id=\"ceMaintenanceNotes\"", "Maintenance Notes in maintenance section", failures)
+    require(editor, ".ce-context-grid label", "Web editor note-label layout", failures)
+    require(editor, ".ce-context-grid textarea", "Web editor note-textarea layout", failures)
+    require(editor, "<label class=\"ce-full\">General Notes<textarea id=\"ceNotes\"", "full-width Web General Notes", failures)
+    require(editor, 'id="ceLegacyEquipmentNotes" class="ce-grid ce-hidden"', "hidden empty legacy Equipment Notes", failures)
+    require(editor, "$('ceLegacyEquipmentNotes').classList.toggle('ce-hidden'", "legacy Equipment Notes visibility guard", failures)
+    require(editor, "Unassigned Equipment Notes", "legacy Equipment Notes migration label", failures)
     for form in (maintenance, editor, location):
         require(form, "pmosRouteRecommendationHtml", "shared detailed route cards", failures)
 
