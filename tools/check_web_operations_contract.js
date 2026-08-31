@@ -29,6 +29,7 @@ function requireMatch(source, pattern, message) {
 expected.forEach(type => {
   requireMatch(client, new RegExp("type:'" + type + "'"), 'Client menu is missing ' + type);
   requireMatch(server, new RegExp("type:'" + type + "'"), 'Server bootstrap is missing ' + type);
+  requireMatch(client, new RegExp(type + ":'<svg"), 'Web Operations SVG icon is missing ' + type);
 });
 
 ['CALENDAR_STATUS', 'VERIFY_CALENDAR', 'CUSTOMER_SYNC', 'MAP_EXPORT'].forEach(type => {
@@ -75,6 +76,9 @@ if (/result:\s*clonePmosWebValue_\(result/.test(server)) {
 }
 requireMatch(client, /state\.auditOptions=Object\.assign\(\{\},state\.auditOptions,options\)/, 'Client does not retain submitted audit options');
 requireMatch(client, /Audit results — /, 'Client does not render a persistent audit-results summary');
+if (/op-job-icon[^\n]+esc\(item\.icon/.test(client)) {
+  failures.push('Web Operations still renders legacy Unicode operation icons');
+}
 requireMatch(repair, /data-cr-open=['"]repair['"]|dataset\.crOpen=['"]repair['"]/, 'Calendar Repair launch control is missing');
 requireMatch(repair, /data-cr-recovery|dataset\.crRecovery/, 'Transaction Recovery launch control is missing');
 
