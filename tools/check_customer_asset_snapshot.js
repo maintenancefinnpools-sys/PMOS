@@ -38,12 +38,12 @@ function assertHash(label, value, expected) {
 assertHash(
   'Customer equipment styles',
   context.pmosCustomerEquipmentEditorStyles_(),
-  'e70a2f5ac56ba5b81e30a0ef8b6f14c637b9e67df2615b2d2804aa641851c36e',
+  'be5a2e653934932e79786be5d5c8cf70d050a9e1f2c2dcaa4abada13f02df44a',
 );
 assertHash(
   'Customer equipment script',
   context.pmosCustomerEquipmentEditorScript_(),
-  '9e4516e574a22a3332172cca4ac800b6c0d05bb09bef1d74e2a157548e5bc7e8',
+  '1d309085109871cb19ae0ca9d4855d5da6f02eef96c17d3d7be78c4e2905f0d1',
 );
 assertHash(
   'Account-contact styles',
@@ -67,10 +67,10 @@ assertHash(
 );
 
 const runtimeHashes = {
-  ADD_CUSTOMER: 'c5acbc93c7b917c461974090429304ee1047cc729a13336acd5f955c59e8d5e3',
-  ADD_MAINTENANCE: '48c28d0aaf3e283b0de02d32b488c1687262b121db9bd4ff8a735300353ff390',
-  EDITOR: 'e734fa0b593c660e5b2ffe53642385d04a79254d569dc90c2edeb0136ca5bd24',
-  LOOKUP: 'e734fa0b593c660e5b2ffe53642385d04a79254d569dc90c2edeb0136ca5bd24',
+  ADD_CUSTOMER: 'c360ccb906eb53921a349df8923dace9ffec90b6990699728d72865b806bf868',
+  ADD_MAINTENANCE: '898a4d42cc0fb9e896e3fcc3b95f3bc156afb8d6f7172d148edd38e82285b4e2',
+  EDITOR: '5b53435f0ee0bd1d086ed42aa9a52ddf095868ef66bc7c87fdacfa184e1c903d',
+  LOOKUP: '5b53435f0ee0bd1d086ed42aa9a52ddf095868ef66bc7c87fdacfa184e1c903d',
 };
 for (const [runtimeContext, expected] of Object.entries(runtimeHashes)) {
   const assets = context.pmosWithRuntimeCustomerFormAssets_(runtimeContext, function() {
@@ -80,7 +80,7 @@ for (const [runtimeContext, expected] of Object.entries(runtimeHashes)) {
     };
   });
   assertHash(`${runtimeContext} runtime styles`, assets.css,
-    'e70a2f5ac56ba5b81e30a0ef8b6f14c637b9e67df2615b2d2804aa641851c36e');
+    'be5a2e653934932e79786be5d5c8cf70d050a9e1f2c2dcaa4abada13f02df44a');
   assertHash(`${runtimeContext} runtime script`, assets.script, expected);
 }
 
