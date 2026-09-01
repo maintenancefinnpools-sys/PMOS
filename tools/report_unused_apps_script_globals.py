@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Report top-level PMOS Apps Script declarations with no textual callers.
+"""Reject top-level PMOS Apps Script declarations with no textual callers.
 
-This is intentionally advisory. A declaration is reported only when its name
+A declaration is reported only when its name
 appears exactly once across root .gs/.html/.json project files: its declaration.
 That avoids deleting browser/menu/trigger callbacks whose names occur in strings.
 Apps Script special entry points and intentionally retained public APIs are
@@ -37,6 +37,9 @@ INTENTIONAL_PUBLIC_APIS = {
     "previewChemicalDose",
     "saveChemicalUsage",
     "addChemicalProduct",
+    # Manual administrator endpoint used to bind each deployment environment
+    # to its Web App URL. It is intentionally not exposed in a normal UI.
+    "setPmosWebAppDeploymentId_",
 }
 
 
@@ -76,11 +79,11 @@ def main() -> int:
         print("No self-only Apps Script global declarations found.")
         return 0
 
-    print("Self-only Apps Script globals — review before deletion:")
+    print("Unexpected self-only Apps Script globals:")
     for name, filename, line, kind in sorted(candidates, key=lambda item: (item[1], item[2])):
         print(f"  {filename}:{line}  {kind}  {name}")
-    print(f"\n{len(candidates)} candidate(s). This report is advisory only.")
-    return 0
+    print(f"\n{len(candidates)} unexpected candidate(s).")
+    return 1
 
 
 if __name__ == "__main__":

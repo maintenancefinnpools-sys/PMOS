@@ -17,7 +17,34 @@ jobs:
       - name: Check Apps Script global namespace
         run: python3 tools/check_apps_script_globals.py
 
-      - name: Report self-only global candidates
+      - name: Check customer lifecycle contract
+        run: python3 tools/check_customer_lifecycle_contract.py
+
+      - name: Check Add Customer input formatting behavior
+        run: node tools/check_customer_input_formatters.js
+
+      - name: Check shared customer equipment behavior
+        run: node tools/check_customer_equipment_contract.js
+
+      - name: Check recurring Calendar reminder policy
+        run: node tools/check_calendar_reminder_contract.js
+
+      - name: Check Web navigation and customer lookup behavior
+        run: node tools/check_web_navigation_lookup_contract.js
+
+      - name: Check Web operations behavior
+        run: node tools/check_web_operations_contract.js
+
+      - name: Check cleanup boundaries
+        run: python3 tools/check_cleanup_contract.py
+
+      - name: Check Acceptance Test Bot safety contract
+        run: python3 tools/check_acceptance_bot_contract.py
+
+      - name: Execute Acceptance Test Bot functional checks
+        run: node tools/check_acceptance_bot_functional.js
+
+      - name: Reject self-only global candidates
         run: python3 tools/report_unused_apps_script_globals.py
 
       - name: Check combined Apps Script syntax
@@ -31,3 +58,109 @@ jobs:
             printf '\n' >> /tmp/pmos-combined.js
           done < <(find . -maxdepth 1 -type f -name '*.gs' -print0 | sort -z)
           node --check /tmp/pmos-combined.js
+
+      - name: Check browser client JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          paths = sorted(Path('.').glob('Web_*.html')) + sorted(Path('.').glob('Sheets_*.html'))
+          client = Path('Client.html')
+          if client.exists():
+              paths.append(client)
+
+          checked = 0
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              scripts = re.findall(r'<script\b[^>]*>(.*?)</script>', text, flags=re.IGNORECASE | re.DOTALL)
+              scripts = [script for script in scripts if '<?' not in script]
+              if not scripts:
+                  continue
+              target = Path('/tmp') / ('pmos-browser-' + re.sub(r'[^A-Za-z0-9_.-]+', '-', path.name) + '.js')
+              target.write_text('\n\n'.join(scripts), encoding='utf-8')
+              subprocess.run(['node', '--check', str(target)], check=True)
+              print('checked', path)
+              checked += 1
+
+          if not checked:
+              raise SystemExit('No browser client scripts were found to validate.')
+          PY
+
+      - name: Check browser Apps Script endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gs_text = '\n'.join(path.read_text(encoding='utf-8') for path in sorted(Path('.').glob('*.gs')))
+          declared = set(re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(', gs_text))
+
+          paths = sorted(Path('.').glob('Web_*.html')) + sorted(Path('.').glob('Sheets_*.html'))
+          client = Path('Client.html')
+          if client.exists():
+              paths.append(client)
+
+          calls = {}
+          pattern = re.compile(r'\b(?:call|server)\s*\(\s*[\'\"]([A-Za-z_$][\w$]*)[\'\"]')
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              for name in pattern.findall(text):
+                  calls.setdefault(name, set()).add(path.name)
+
+          missing = {name: files for name, files in calls.items() if name not in declared}
+          if missing:
+              for name in sorted(missing):
+                  print(f'Missing Apps Script endpoint {name}: {", ".join(sorted(missing[name]))}')
+              raise SystemExit(f'{len(missing)} browser Apps Script endpoint(s) are missing.')
+
+          print(f'validated {len(calls)} browser Apps Script endpoint(s)')
+          PY
+
+      - name: Check Web App view and template structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import defaultdict
+          from pathlib import Path
+          import re
+
+          index = Path('Index.html')
+          if not index.exists():
+              raise SystemExit('Index.html is missing.')
+          index_text = index.read_text(encoding='utf-8')
+
+          include_names = re.findall(r"include\(\s*['\"]([^'\"]+)['\"]\s*\)", index_text)
+          missing_includes = [name for name in include_names if not Path(name + '.html').exists()]
+          if missing_includes:
+              raise SystemExit('Missing Web App include file(s): ' + ', '.join(sorted(set(missing_includes))))
+
+          source_paths = [index] + sorted(Path('.').glob('Web_*.html'))
+          view_locations = defaultdict(list)
+          for path in source_paths:
+              text = path.read_text(encoding='utf-8')
+              static_text = re.sub(r'<script\b[^>]*>.*?</script>', '', text, flags=re.IGNORECASE | re.DOTALL)
+              static_text = re.sub(r'<style\b[^>]*>.*?</style>', '', static_text, flags=re.IGNORECASE | re.DOTALL)
+              for value in re.findall(r'\bid\s*=\s*[\'\"]view-([^\'\"]+)[\'\"]', static_text, flags=re.IGNORECASE):
+                  view_locations[value].append(path.name)
+
+          duplicate_views = {value: files for value, files in view_locations.items() if len(files) > 1}
+          if duplicate_views:
+              for value in sorted(duplicate_views):
+                  print(f'Duplicate Web view view-{value}: {", ".join(duplicate_views[value])}')
+              raise SystemExit(f'{len(duplicate_views)} duplicate Web view id(s) found.')
+
+          nav_views = set(re.findall(r'\bdata-view\s*=\s*[\'\"]([^\'\"]+)[\'\"]', index_text, flags=re.IGNORECASE))
+          view_ids = set(view_locations)
+          missing_views = sorted(nav_views - view_ids)
+          if missing_views:
+              raise SystemExit('Sidebar route(s) without Web view: ' + ', '.join(missing_views))
+
+          print(f'validated {len(include_names)} template include(s), {len(nav_views)} sidebar route(s), and {len(view_ids)} unique Web view(s)')
+          PY

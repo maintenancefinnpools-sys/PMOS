@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:18px;background:#e7ecef;color:#293944;font-family:Mulish,Arial,sans-serif}.shell{max-width:720px;margin:0 auto}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:13px}.head h2{margin:0;font-size:22px;font-weight:900}.head p{margin:5px 0 0;color:#687880;font-size:11px;line-height:1.5}.badge{padding:5px 9px;border-radius:999px;background:#edf2f4;color:#53656e;font-size:10px;font-weight:900;white-space:nowrap}.badge.safe{background:#dff3e4;color:#245b36}.badge.blocked{background:#fde2e2;color:#8b1d1d}.card{margin-top:11px;padding:14px;border:1px solid #ccd8dd;border-radius:10px;background:#fff;box-shadow:0 4px 14px rgba(46,56,66,.04)}.card h3{margin:0 0 8px;font-size:13px;font-weight:900}.env{display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px 12px;font-size:11px}.env b{color:#687880}.notice{margin-top:10px;padding:10px 11px;border-left:4px solid #e9a23b;border-radius:7px;background:#fff7e9;color:#76501c;font-size:11px;line-height:1.5}.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}.button{padding:9px 12px;border:1px solid #155b79;border-radius:7px;background:#fff;color:#155b79;font:inherit;font-size:11px;font-weight:900;cursor:pointer}.button.primary{background:#155b79;color:#fff}.button.danger{border-color:#9b3030;color:#9b3030}.button:disabled{opacity:.55;cursor:not-allowed}.keep{display:flex;align-items:center;gap:7px;margin-left:auto;color:#687880;font-size:10px}.keep input{margin:0}.list{margin:0;padding-left:18px;color:#53656e;font-size:11px;line-height:1.65}.status{min-height:72px;margin-top:11px;padding:11px;border-radius:8px;background:#eef3f5;color:#53656e;font-size:11px;line-height:1.55;white-space:pre-wrap}.status.working{background:#fff7e9;color:#76501c}.status.success{background:#dff3e4;color:#245b36}.status.error{background:#fde2e2;color:#8b1d1d}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{padding:10px;border:1px solid #d5e0e4;border-radius:8px;background:#f8fafb;text-align:center}.metric b{display:block;font-size:18px}.metric span{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#687880}@media(max-width:620px){.head{display:block}.badge{display:inline-block;margin-top:8px}.env{grid-template-columns:1fr}.keep{width:100%;margin-left:0}.summary{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="head">
+      <div><h2>Acceptance Test Bot</h2><p>Runs disposable development-only fixtures through the shared PMOS customer lifecycle.</p></div>
+      <div id="targetBadge" class="badge">Checking…</div>
+    </div>
+
+    <div class="card">
+      <h3>Safety Target</h3>
+      <div class="env"><b>Spreadsheet</b><span id="spreadsheetName">—</span><b>Calendar</b><span id="calendarName">—</span><b>Bot state</b><span id="armedState">—</span><b>Tracked fixtures</b><span id="fixtureState">—</span></div>
+      <div class="notice">The bot does not call Google Contacts or execute Calendar changes. It tests spreadsheet transactions and the shared profile payload. Calendar mutations still require the normal reviewed development workflow.</div>
+      <div class="actions">
+        <button id="arm" class="button" type="button">Arm This Development Sheet</button>
+        <button id="run" class="button primary" type="button">Run Acceptance Tests</button>
+        <button id="cleanup" class="button danger" type="button">Clean Up Test Fixtures</button>
+        <button id="results" class="button" type="button">Open Results</button>
+        <label class="keep"><input id="keep" type="checkbox"> Keep fixtures for profile review</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Automated Coverage</h3>
+      <ul id="coverage" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Still Needs a Quick Human Check</h3>
+      <ul id="manual" class="list"></ul>
+    </div>
+
+    <div id="summary" class="summary" style="display:none"></div>
+    <div id="status" class="status">Loading the development safety state…</div>
+  </div>
+  <script>
+    (function(){
+      'use strict';
+      const byId=id=>document.getElementById(id);
+      let state=null;
+      function esc(value){return String(value==null?'':value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+      function call(name,arg){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message?error.message:String(error))));if(arguments.length>1)runner[name](arg);else runner[name]();});}
+      function setStatus(message,kind){const box=byId('status');box.textContent=message||'';box.className='status'+(kind?' '+kind:'');}
+      function busy(value){['arm','run','cleanup','results'].forEach(id=>byId(id).disabled=!!value);}
+      function renderList(id,items){byId(id).innerHTML=(items||[]).map(item=>'<li>'+esc(item)+'</li>').join('');}
+      function render(next){state=next||{};byId('spreadsheetName').textContent=state.spreadsheetName||'—';byId('calendarName').textContent=state.calendarName||'(blank)';byId('armedState').textContent=state.armed?'Armed for this exact development target':'Not armed';byId('fixtureState').textContent=state.pendingFixtureCount?state.pendingFixtureCount+' pending · Run '+state.pendingRunId:'None';const badge=byId('targetBadge');badge.textContent=state.developmentTarget?'Development Target':'Blocked Target';badge.className='badge '+(state.developmentTarget?'safe':'blocked');byId('arm').textContent=state.armed?'Disarm Bot':'Arm This Development Sheet';byId('run').disabled=!state.armed||!!state.pendingFixtureCount;byId('cleanup').disabled=!state.armed||!state.pendingFixtureCount;renderList('coverage',state.coverage);renderList('manual',state.manualChecks);if(state.lastRun)renderSummary(state.lastRun);}
+      function renderSummary(summary){const box=byId('summary');box.style.display='grid';box.innerHTML='<div class="metric"><b>'+esc(summary.passed||0)+'</b><span>Passed</span></div><div class="metric"><b>'+esc(summary.failed||0)+'</b><span>Failed</span></div><div class="metric"><b>'+esc(summary.durationSeconds||0)+'s</b><span>Duration</span></div>';}
+      async function refresh(message,kind){try{render(await call('getPmosAcceptanceTestBotState'));if(message)setStatus(message,kind||'success');else if(state.lastRun)setStatus(state.lastRun.message,state.lastRun.failed?'error':'success');else setStatus(state.developmentTarget?'Ready. Arm the bot, then run the suite.':'Blocked until App Settings targets a Development, Test, or Sandbox Calendar.',state.developmentTarget?'':'error');}catch(error){setStatus(error.message,'error');}}
+      byId('arm').onclick=async()=>{busy(true);setStatus(state&&state.armed?'Disarming…':'Verifying and arming this development spreadsheet…','working');try{render(await call(state&&state.armed?'disarmPmosAcceptanceTestBot':'armPmosAcceptanceTestBot'));setStatus(state.armed?'Acceptance Test Bot armed.':'Acceptance Test Bot disarmed.','success');}catch(error){setStatus(error.message,'error');}finally{busy(false);render(state);}};
+      byId('run').onclick=async()=>{busy(true);setStatus('Running customer, Service Location, contact, note, equipment, maintenance-status and route checks…\nDo not edit PMOS until this finishes.','working');try{const summary=await call('runPmosAcceptanceTestBot',{keepFixtures:byId('keep').checked});renderSummary(summary);await refresh(summary.message+(summary.fixturesRetained?'\nFixtures retained: '+summary.fixtureCustomerIds.join(', '):'\nAll disposable fixtures were removed.'),summary.failed?'error':'success');}catch(error){await refresh(error.message,'error');}finally{busy(false);render(state);}};
+      byId('cleanup').onclick=async()=>{busy(true);setStatus('Removing only the Customer IDs in the signed PMOS TEST BOT fixture manifest…','working');try{const result=await call('cleanupPmosAcceptanceTestFixtures');await refresh(result.message);}catch(error){setStatus(error.message,'error');}finally{busy(false);render(state);}};
+      byId('results').onclick=async()=>{try{await call('openPmosAcceptanceTestResults');setStatus('Opening the results sheet…','success');setTimeout(()=>google.script.host.close(),120);}catch(error){setStatus(error.message,'error');}};
+      refresh();
+    })();
+  </script>
+</body>
+</html>

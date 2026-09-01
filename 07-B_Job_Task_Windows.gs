@@ -54,6 +54,61 @@ function runPmosTask_(taskType) {
   }, 'running ' + taskType);
 }
 
+/**
+ * Read-only Calendar verification for PMOS Operations.
+ * Uses the same canonical planner as Calendar Status / Plan Audit so verification
+ * cannot drift into a second interpretation of expected Calendar state.
+ */
+function executeVerifyCalendarJob_() {
+  const preview = previewPmosCalendarSyncPlan();
+  const validation = preview.validation || {};
+  const hasDiscrepancy = [
+    preview.creates,
+    preview.updates,
+    preview.deletes,
+    preview.warnings,
+    preview.plannerErrors,
+    preview.validationErrors,
+    preview.registeredMissing,
+    preview.unclassifiedEvents,
+    preview.reviewResolutionErrors
+  ].some(function(value) {
+    return Number(value || 0) > 0;
+  });
+
+  const lines = [
+    'Verification: ' + (hasDiscrepancy ? 'REVIEW REQUIRED' : 'PASS'),
+    'Calendar: ' + String(preview.calendarName || ''),
+    'Expected recurring series: ' + Number(preview.totalSeries || 0),
+    'Registered series present: ' + Number(preview.registeredPresent || 0),
+    'Registered series missing: ' + Number(preview.registeredMissing || 0),
+    'Creates needed: ' + Number(preview.creates || 0),
+    'Updates needed: ' + Number(preview.updates || 0),
+    'Deletes proposed/reviewed: ' + Number(preview.deletes || 0),
+    'Unclassified events: ' + Number(preview.unclassifiedEvents || 0),
+    'Temporary visits: ' + Number(preview.temporaryVisits || 0),
+    'Repair visits: ' + Number(preview.repairVisits || 0),
+    'Planner warnings: ' + Number(preview.warnings || 0),
+    'Planner errors: ' + Number(preview.plannerErrors || 0),
+    'Validation warnings: ' + Number(validation.warningCount || preview.validationWarnings || 0),
+    'Validation errors: ' + Number(validation.errorCount || preview.validationErrors || 0),
+    'Identity reconciliations: ' + Number(preview.identityReconciliations || 0)
+  ];
+
+  lines.push('');
+  lines.push(
+    hasDiscrepancy
+      ? 'Discrepancies were found. Run Calendar Plan Audit to review them. Verify Calendar made no Calendar changes.'
+      : 'No schedule, registry, or Calendar discrepancies were detected. Verify Calendar made no Calendar changes.'
+  );
+
+  return {
+    ok: !hasDiscrepancy,
+    summary: lines.join('\n'),
+    preview: preview
+  };
+}
+
 function withSpreadsheetServiceRetry_(operation, operationName) {
   const delays = [0, 600, 1500, 3000];
   let lastError = null;

@@ -65,7 +65,7 @@ No Route Manager, legacy task window, compatibility pathway, or alternate reconc
 - Restricted `showIntegratedPmosJobEngine` to Calendar Repair only. It now rejects any non-Repair operation instead of forwarding into the Job Center, so it can no longer serve as an alternate Operations pathway.
 - Removed obsolete Calendar Audit/Sync compatibility redirect files and redundant Audit wrappers.
 - Reduced generic task windows to the immediate Operations dispatcher actually used by the current Job Center.
-- Updated spreadsheet lifecycle/update messaging and Feature Lab terminology so they no longer advertise retired direct Sync/Rebuild paths.
+- Updated spreadsheet lifecycle/update messaging so it no longer advertises retired direct Sync/Rebuild paths.
 - Removed the alternate Smart Customer Database Sync engine that generated a competing `CUS-...` identity format.
 - Removed unused prototype data-normalization and generic diff-engine modules that had no current callers.
 - Integrated the authoritative reviewed recurring-series worker with Calendar Registry Transaction History and recovery.

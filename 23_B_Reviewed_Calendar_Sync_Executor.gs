@@ -691,6 +691,9 @@ function verifyReviewedRecurringOperationApplied_(
   ) {
     throw new Error('Calendar registry signature does not match the reviewed plan for ' + seriesKey + '.');
   }
+  if (!verifyPmosRecurringReminderPolicy_(series, desired || {})) {
+    throw new Error('Calendar reminder policy could not be verified for ' + seriesKey + '.');
+  }
 
   return {verified:true, seriesId:String(record.seriesId || '')};
 }

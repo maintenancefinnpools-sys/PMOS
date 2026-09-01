@@ -4,47 +4,77 @@
 
 function onOpen() {
   const initialized = isPmosInitialized_();
-  const menu = SpreadsheetApp.getUi().createMenu('PMOS');
+  const ui = SpreadsheetApp.getUi();
+  const menu = ui.createMenu('PMOS');
 
   if (!initialized) {
     menu.addItem('Initialize PMOS', 'initializePmos');
   } else {
     menu
       .addSubMenu(
-        SpreadsheetApp.getUi().createMenu('Customers')
-          .addItem('Customer Lookup', 'showCustomerLookup')
-          .addItem('Edit Customer Information', 'showEditCustomerInformationSearch')
+        ui.createMenu('Customers')
+          .addItem('Customer Lookup', 'showPmosCustomerAccountLookupRuntime')
+          .addItem('Add Customer', 'showPmosAddCustomerRuntime')
+          .addItem('Add Maintenance Customer', 'showAddMaintenanceCustomerRuntime')
       )
       .addSeparator()
       .addSubMenu(
-        SpreadsheetApp.getUi().createMenu('Calendar')
-          .addItem('Add Maintenance Client', 'showAddMaintenanceClientV2')
-          .addItem('Schedule Temporary Visit', 'showTemporaryVisitSchedulerV3')
-          .addSeparator()
-          .addItem('Calendar Plan Audit', 'openPmosCalendarAuditInJobCenter')
-          .addItem('PMOS Job Center', 'openPmosJobEngine')
-          .addSeparator()
-          .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
+        ui.createMenu('Scheduling')
+          .addItem('Temporary Maintenance', 'showPmosTemporaryMaintenanceRuntime')
+          .addItem('Service Call', 'showPmosServiceCallScheduler')
+          .addItem('Opening / Closing', 'showPmosOpeningClosingScheduler')
       )
       .addSeparator()
-      .addItem('Route History', 'showRouteHistoryDialog')
-      .addItem('Chemistry Catalog', 'showChemistryCatalog')
-      .addItem('Feature Lab', 'showFeatureLab')
+      .addItem('PMOS Operations', 'openPmosJobEngine')
       .addSubMenu(
-        SpreadsheetApp.getUi().createMenu('PMOS Settings')
+        ui.createMenu('PMOS Settings')
           .addItem('App Settings', 'openPmosAppSettings')
           .addItem('Routing Settings', 'showPmosRoutingSettings')
-          .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
           .addSeparator()
-          .addItem('Update Permissions', 'updatePmosPermissions')
+          .addItem('Acceptance Test Bot', 'showPmosAcceptanceTestBotFromMenu')
+          .addSeparator()
+          .addItem('Chemical Catalog', 'showChemistryCatalog')
+          .addSeparator()
+          .addItem('Google Contacts Mass Sync', 'showPmosGoogleContactsMassSync')
       )
-      .addItem('Update Center', 'showUpdateCenter')
-      .addItem('Update PMOS', 'updatePmos')
       .addSeparator()
-      .addItem('Open Route Manager', 'showRouteManagerLink');
+      .addSubMenu(
+        ui.createMenu('Activity & History')
+          .addItem('Job History', 'showPmosJobHistoryWindow')
+          .addItem('Route History', 'showRouteHistoryDialog')
+          .addItem('Transaction Recovery Review', 'showCalendarTransactionRecoveryReview')
+      )
+      .addSubMenu(
+        ui.createMenu('Updates')
+          .addItem('Update Permissions', 'updatePmosPermissions')
+          .addSeparator()
+          .addItem('Update PMOS', 'updatePmos')
+          .addItem('Update Center', 'showUpdateCenter')
+      )
+      .addSeparator()
+      .addItem('Open PMOS Web App', 'showPmosWebAppLink');
   }
 
   menu.addToUi();
+}
+
+/** Menu-safe placeholders for scheduling workflows that are not implemented yet. */
+function showPmosServiceCallScheduler() {
+  showPmosPlannedMenuFeature_(
+    'Service Call',
+    'The dedicated Service Call scheduler is not implemented yet.'
+  );
+}
+
+function showPmosOpeningClosingScheduler() {
+  showPmosPlannedMenuFeature_(
+    'Opening / Closing',
+    'The dedicated Opening / Closing scheduler is not implemented yet.'
+  );
+}
+
+function showPmosPlannedMenuFeature_(title, message) {
+  SpreadsheetApp.getUi().alert(title, message, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function showUpdateCenter() {
@@ -58,56 +88,28 @@ function showUpdateCenter() {
       <h2>PMOS Update Center</h2>
       <p><b>Installed:</b> ${escapeHtml_(installed)}</p>
       <p><b>Status:</b> ${escapeHtml_(initialized)}</p>
-      <p><b>Current release:</b> ${PMOS_VERSION}</p>
+      <p><b>Current code version:</b> ${PMOS_VERSION}</p>
       <hr>
-      <h3>What’s new</h3>
+      <p style="font-size:13px;line-height:1.5">
+        <b>Update PMOS</b> applies PMOS migrations, refreshes triggers, support sheets,
+        permissions-related setup, and version records after new script code has already
+        been pulled or deployed into this Apps Script project.
+      </p>
+      <p style="font-size:13px;line-height:1.5">
+        It does <b>not</b> currently pull source code directly from the PMOS GitHub
+        <code>main</code> branch.
+      </p>
+      <hr>
+      <h3>Update maintenance</h3>
       <ul>
-        <li>One-time Initialize PMOS workflow</li>
-        <li>Update PMOS with automatic backup</li>
-        <li>Feature Lab switches</li>
+        <li>Automatic backup before migrations</li>
         <li>Schema migrations that preserve existing data</li>
+        <li>Trigger and support-sheet refresh</li>
+        <li>Version and initialization-state refresh</li>
       </ul>
-      <button onclick="google.script.run.withSuccessHandler(function(){google.script.host.close();}).updatePmos()">Install / Repair Update</button>
+      <button onclick="google.script.run.withSuccessHandler(function(){google.script.host.close();}).updatePmos()">Update PMOS</button>
     </div>`
-  ).setWidth(480).setHeight(420);
+  ).setWidth(500).setHeight(500);
 
   SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Update Center');
-}
-
-function showFeatureLab() {
-  ensureFeatureLabSheet_();
-
-  const sheet = SpreadsheetApp.getActive().getSheetByName('Feature Lab');
-  const rows = sheet.getDataRange().getValues().slice(1);
-
-  const htmlRows = rows.map((row, index) => {
-    const checked = String(row[1]).toLowerCase() === 'on' ? 'checked' : '';
-    const disabled = String(row[3]).toLowerCase() === 'stable' ? 'disabled' : '';
-
-    return `<div style="border-bottom:1px solid #ddd;padding:10px 0">
-      <label style="display:flex;gap:10px;align-items:flex-start">
-        <input type="checkbox" ${checked} ${disabled}
-          onchange="toggleFeature(${index + 2}, this.checked)">
-        <span>
-          <b>${escapeHtml_(row[0])}</b><br>
-          <small>${escapeHtml_(row[2])} — ${escapeHtml_(row[3])}</small>
-        </span>
-      </label>
-    </div>`;
-  }).join('');
-
-  const html = HtmlService.createHtmlOutput(
-    `<div style="font-family:Arial;padding:18px">
-      <h2>PMOS Feature Lab</h2>
-      <p>Optional features can be tested without affecting the stable PMOS core.</p>
-      ${htmlRows}
-      <script>
-        function toggleFeature(row, enabled) {
-          google.script.run.setFeatureLabStatus(row, enabled ? 'On' : 'Off');
-        }
-      </script>
-    </div>`
-  ).setWidth(560).setHeight(560);
-
-  SpreadsheetApp.getUi().showModelessDialog(html, 'PMOS Feature Lab');
 }

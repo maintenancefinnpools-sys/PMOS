@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;700;900&display=swap" rel="stylesheet">
+    <?!= include('Stylesheet'); ?>
+    <?!= include('Web_App_Shell'); ?>
+    <style><?!= pmosEquipmentEditorStyles ?></style>
+    <style><?!= pmosServiceLocationContactStyles ?></style>
+    <style><?!= pmosAccountBillingStyles ?></style>
+    <style><?!= pmosAccountContactStyles ?></style>
+    <style><?!= pmosRouteRecommendationCardStyles_() ?></style>
+    <style>
+      html,body{height:auto;min-height:100%;overflow:auto}
+      body{padding:18px}
+      .sheets-add-customer{max-width:1120px;margin:0 auto}
+      #view-addcustomer{display:block}
+      #view-addcustomer .ac-panel{max-width:none}
+      #view-addcustomer .ac-actions{max-width:none}
+      @media(max-width:780px){body{padding:10px}}
+    </style>
+    <script>
+      window.pmosActivateEquipmentScope=function(storeId){
+        var current=document.getElementById('waterBodies');
+        var inferStore=function(node){
+          if(!node)return'';
+          var explicit=node.getAttribute('data-pmos-store-id');
+          if(explicit)return explicit;
+          if(node.closest&&node.closest('#view-addcustomer'))return'acWaterBodiesStore';
+          if(node.closest&&node.closest('#slBackdrop'))return'slWaterBodiesStore';
+          return'';
+        };
+        if(current){
+          var currentStore=inferStore(current);
+          if(currentStore===storeId){
+            current.setAttribute('data-pmos-store-id',storeId);
+            Array.prototype.forEach.call(current.querySelectorAll('.pmos-water-body-inactive'),function(node){node.classList.remove('pmos-water-body-inactive');node.classList.add('water-body');});
+            return current;
+          }
+          Array.prototype.forEach.call(current.querySelectorAll('.water-body'),function(node){node.classList.remove('water-body');node.classList.add('pmos-water-body-inactive');});
+          current.setAttribute('data-pmos-store-id',currentStore||('pmosWaterBodiesStore_'+Date.now()));
+          current.id=current.getAttribute('data-pmos-store-id');
+        }
+        var target=document.getElementById(storeId)||document.querySelector('[data-pmos-store-id="'+storeId+'"]');
+        if(!target)return null;
+        target.setAttribute('data-pmos-store-id',storeId);
+        target.id='waterBodies';
+        Array.prototype.forEach.call(target.querySelectorAll('.pmos-water-body-inactive'),function(node){node.classList.remove('pmos-water-body-inactive');node.classList.add('water-body');});
+        return target;
+      };
+    </script>
+    <script><?!= pmosEquipmentEditorScript ?></script>
+    <script><?!= pmosServiceLocationContactScript ?></script>
+    <script><?!= pmosAccountBillingScript ?></script>
+    <script><?!= pmosAccountContactScript ?></script>
+    <script><?!= pmosRouteRecommendationCardScript_() ?></script>
+  </head>
+  <body>
+    <main class="sheets-add-customer">
+      <?!= include('Web_Add_Customer'); ?>
+      <?!= include('Web_Add_Service_Location'); ?>
+    </main>
+    <script>
+      document.addEventListener('pmos:open-customer',function(event){
+        var customerId=event.detail&&event.detail.customerId;
+        if(!customerId)return;
+        google.script.run
+          .withSuccessHandler(function(){google.script.host.close();})
+          .showPmosCustomerAccountLookupRuntime(customerId);
+      });
+    </script>
+  </body>
+</html>

@@ -21,6 +21,7 @@ function synchronizeCustomerDatabase_(markPending) {
   const fullNameCol = headers.indexOf('Full Name(s)');
   const addressCol = headers.indexOf('Full Address');
   const frequencyCol = headers.indexOf('Frequency');
+  const statusCol = headers.indexOf('Status');
   const entryCol = headers.indexOf('Entry Information');
   const notesCol = headers.indexOf('Customer Notes');
 
@@ -90,6 +91,7 @@ function synchronizeCustomerDatabase_(markPending) {
       [fullNameCol, customer['Full Name(s)']],
       [addressCol, customer['Full Address']],
       [frequencyCol, customer['Frequency']],
+      [statusCol, String(customer['Status'] || 'Active').trim() || 'Active'],
       [entryCol, buildCustomerEntryInformation_(customer)],
       [notesCol, customer['Customer Notes']]
     ].filter(item => item[0] >= 0);
@@ -415,6 +417,13 @@ function ensureRouteCustomerIdColumn_() {
   if (!headers.includes('Customer ID')) {
     sheet.insertColumnAfter(titleCol + 1);
     sheet.getRange(1, titleCol + 2).setValue('Customer ID');
+    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+      .getValues()[0].map(v => String(v).trim());
+  }
+
+  if (!headers.includes('Status')) {
+    sheet.insertColumnAfter(sheet.getLastColumn());
+    sheet.getRange(1, sheet.getLastColumn()).setValue('Status');
   }
 }
 

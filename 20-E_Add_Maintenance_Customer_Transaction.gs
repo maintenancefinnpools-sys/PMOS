@@ -5,7 +5,7 @@
  * customer and route assignments, refreshes derived customer data, and marks
  * Calendar planning stale. It never mutates Calendar or starts Calendar Sync.
  */
-function createMaintenanceCustomer(input) {
+function createMaintenanceCustomerCore_(input) {
   const request = normalizeMaintenanceCustomerRequest_(input || {});
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)) {
@@ -50,13 +50,13 @@ function createMaintenanceCustomer(input) {
 
     ensureMaintenanceClientHeaders_(customersSheet, customerTable, [
       'Customer ID', 'First Name', 'Last Name', 'Calendar Title', 'Full Address', 'Primary Phone',
-      'Email', 'Frequency', 'Service Start Date', 'Entry Information',
+      'Email', 'Status', 'Frequency', 'Service Start Date', 'Entry Information',
       'Customer Notes', 'Sanitization Type(s)', 'Automation', 'Pump',
       'Filter', 'Heater', 'Robot(s)', 'Cover', 'Bodies of Water',
       'Year Round'
     ]);
     ensureMaintenanceClientHeaders_(routeSheet, routeTable, [
-      'Customer ID', 'Calendar Title', 'Layer', 'Stop Order'
+      'Customer ID', 'Calendar Title', 'Layer', 'Stop Order', 'Status'
     ]);
 
     customerTable = readPmosHeaderTable_(customersSheet);
@@ -138,6 +138,49 @@ function createMaintenanceCustomer(input) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Canonical Add Maintenance Customer pipeline.
+ *
+ * Legacy envelopes are decoded before validation. The authoritative spreadsheet
+ * transaction runs once, followed by explicit account, note, billing and contact
+ * persistence stages. No load-time function replacement is involved.
+ */
+function createMaintenanceCustomer(input) {
+  let request = Object.assign({}, input || {});
+  if (typeof unpackPmosMaintenanceContactsEnvelope_ === 'function') {
+    request = unpackPmosMaintenanceContactsEnvelope_(request);
+  } else if (typeof unpackPmosContextNotesEnvelope_ === 'function') {
+    request = unpackPmosContextNotesEnvelope_(request);
+  }
+  if (typeof pmosCustomerNotesRequest_ === 'function') {
+    request = pmosCustomerNotesRequest_(request);
+  }
+  if (typeof ensurePmosCustomerCategorizedNotes_ === 'function') {
+    ensurePmosCustomerCategorizedNotes_();
+  }
+
+  let result = createMaintenanceCustomerCore_(request);
+  if (typeof applyPmosMaintenanceAccountIdentity_ === 'function') {
+    result = applyPmosMaintenanceAccountIdentity_(result, request);
+  }
+  if (typeof savePmosCustomerCategorizedNotes_ === 'function') {
+    savePmosCustomerCategorizedNotes_(result.customerId, request);
+  }
+  if (typeof savePmosCustomerContextNotes_ === 'function') {
+    try {
+      result.contextNotes = savePmosCustomerContextNotes_(result.customerId, request);
+    } catch (error) {
+      result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
+      result.warnings.push('Maintenance customer created, but contextual notes could not be saved: ' +
+        String(error && error.message ? error.message : error));
+    }
+  }
+  if (typeof completePmosMaintenanceCustomerContacts_ === 'function') {
+    result = completePmosMaintenanceCustomerContacts_(result, request);
+  }
+  return result;
 }
 
 function ensureMaintenanceCustomerEquipmentSheet_(spreadsheet) {
@@ -627,7 +670,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
   };
   const equipmentFields = [
     'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
-    'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
+    'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel', 'filterModelNumber',
     'cartridgeSetNumber',
     'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
     'robotType', 'sanitizerType', 'connectedToAutomation', 'actuatorMake',
@@ -651,17 +694,19 @@ function normalizeMaintenanceCustomerRequest_(input) {
             : cleanEquipmentText(rawDetails[field]);
           if (value) details[field] = value;
         });
-        if (type === 'WATER_FEATURE' && details.featureEquipmentJson) {
+        if (type === 'WATER_FEATURE' && (details.featureEquipmentJson || Array.isArray(rawDetails.featureEquipment))) {
           try {
             const componentTypes = {PUMP: true, FILTER: true, HEATER: true, OTHER: true};
             const componentFields = [
               'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake',
-              'filterType', 'filterModel', 'filterSize', 'cartridgeSetNumber',
+              'filterType', 'filterModel', 'filterModelNumber', 'filterSize', 'cartridgeSetNumber',
               'heaterType', 'heaterMake',
               'heaterModel', 'heaterModelNumber', 'featureEquipmentType',
               'featureEquipmentMake', 'featureEquipmentModel'
             ];
-            const parsedComponents = JSON.parse(details.featureEquipmentJson);
+            const parsedComponents = Array.isArray(rawDetails.featureEquipment)
+              ? rawDetails.featureEquipment
+              : JSON.parse(details.featureEquipmentJson);
             details.featureEquipment = (Array.isArray(parsedComponents) ? parsedComponents : [])
               .slice(0, 12).map(function (component) {
                 const componentType = cleanEquipmentText(component && component.type).toUpperCase();
@@ -772,6 +817,10 @@ function normalizeMaintenanceCustomerRequest_(input) {
   }).filter(Boolean).join('; ') || mainBody.cleaner || cleanEquipmentText(input.robots || input.cleaner);
   const cover = [mainBody.cover.type, mainBody.cover.winterType].filter(Boolean).join(' · ');
   const yearRound = String(input.yearRound || '').trim().toLowerCase() === 'yes';
+  const statusMatch = /^(active|inactive|paused)$/i.exec(String(input.status || 'Active').trim());
+  const status = statusMatch
+    ? statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1).toLowerCase()
+    : 'Active';
   const frequency = normalizeMaintenanceFrequency_(input.frequency || 'Weekly');
   const day = normalizeMaintenanceDay_(input.day || 'Monday');
   const secondDay = frequency === 'Twice Weekly'
@@ -844,6 +893,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
     robots: robots,
     cover: cover,
     bodiesOfWater: bodiesOfWater,
+    status: status,
     yearRound: yearRound,
     frequency: frequency,
     day: day,
@@ -973,7 +1023,7 @@ function buildMaintenanceCustomerSharedValues_(request, customerId) {
     'Equipment Details JSON': JSON.stringify({version: 1, bodies: request.bodiesOfWater}),
     'Year Round': request.yearRound ? 'Yes' : 'No',
     'Season': request.yearRound ? 'Year Round' : 'Seasonal',
-    'Status': 'Active'
+    'Status': request.status
   };
 }
 
