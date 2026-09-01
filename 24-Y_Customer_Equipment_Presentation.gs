@@ -70,11 +70,8 @@ function pmosEquipmentDisplayLabelClientScript_() {
 `;
 }
 
-(function () {
-  if (typeof pmosCustomerEquipmentEditorScript_ === 'function') {
-    const baseScript = pmosCustomerEquipmentEditorScript_;
-    pmosCustomerEquipmentEditorScript_ = function() {
-      return baseScript() + String.raw`
+function pmosCustomerEquipmentPresentationScript_() {
+  return String.raw`
 (function(){
   function setSolarField(panel,kind,key,value){
     var option=panel&&panel.querySelector('[data-solar-kind="'+kind+'"]');
@@ -122,9 +119,9 @@ function pmosEquipmentDisplayLabelClientScript_() {
   document.addEventListener('pmos:viewchange',function(){setTimeout(function(){refreshSolarPanels(document)},0)});
 })();
 ` + pmosEquipmentDisplayLabelClientScript_();
-    };
-  }
+}
 
+(function () {
   if (typeof buildPmosCustomerAccountLookupHtml_ === 'function') {
     const baseBuildLookup = buildPmosCustomerAccountLookupHtml_;
     buildPmosCustomerAccountLookupHtml_ = function(mode, initialCustomerId) {

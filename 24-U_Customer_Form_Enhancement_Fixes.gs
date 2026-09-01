@@ -24,10 +24,10 @@
     };
   }
 
-  if (typeof pmosCustomerEquipmentEditorScript_ === 'function') {
-    const baseCustomerEquipmentEditorScript = pmosCustomerEquipmentEditorScript_;
-    pmosCustomerEquipmentEditorScript_ = function() {
-      return baseCustomerEquipmentEditorScript() + String.raw`
+})();
+
+function pmosCustomerFormEnhancementFixScript_() {
+  return String.raw`
 (function(){
   if(window.__pmosLateMaintenanceNotesFix)return;window.__pmosLateMaintenanceNotesFix=true;
   function byIdLocal(id){return document.getElementById(id)}
@@ -55,7 +55,4 @@
   new MutationObserver(refresh).observe(document.documentElement,{childList:true,subtree:true});
 })();
 `;
-    };
-  }
-
-})();
+}

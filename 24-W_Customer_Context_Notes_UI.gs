@@ -71,24 +71,22 @@ function packPmosContextNotesEnvelope_(notes) {
     };
   }
 
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function() {
-      return baseStyles() +
+})();
+
+function pmosCustomerContextNotesUiStyles_() {
+  return (
         '.pmos-context-note-field{display:grid;gap:5px;margin-top:9px;color:#6f7d84;font-size:10px;font-weight:900;letter-spacing:.05em;text-transform:uppercase}' +
         '.pmos-context-note-field textarea{width:100%;min-height:68px;padding:8px 9px;border:1px solid #bfcbd1;border-radius:7px;background:#fff;color:#293944;font:inherit;resize:vertical}' +
         '.pmos-context-note-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:9px}' +
         '.pmos-context-profile-notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}' +
         '.pmos-context-profile-note{padding:10px;border:1px solid #d2dade;border-radius:8px;background:#f7fafb}' +
         '.pmos-context-profile-note b{display:block;color:#6f7d84;font-size:9px;text-transform:uppercase}.pmos-context-profile-note div{margin-top:4px;white-space:pre-wrap;font-size:11px;line-height:1.45}' +
-        '@media(max-width:760px){.pmos-context-note-grid,.pmos-context-profile-notes{grid-template-columns:1fr}}';
-    };
-  }
+        '@media(max-width:760px){.pmos-context-note-grid,.pmos-context-profile-notes{grid-template-columns:1fr}}'
+  );
+}
 
-  if (typeof pmosCustomerEquipmentEditorScript_ === 'function') {
-    const baseScript = pmosCustomerEquipmentEditorScript_;
-    pmosCustomerEquipmentEditorScript_ = function() {
-      return baseScript() + String.raw`
+function pmosCustomerContextNotesUiScript_() {
+  return String.raw`
 (function(){
   var CONTEXT_PREFIX='PMOS_CONTEXT_NOTES_V1:';
   var PMOS_NOTE_IDS=['notes','acNotes','amNotes','ceNotes','slNotes'];
@@ -128,6 +126,4 @@ function packPmosContextNotesEnvelope_(notes) {
   document.addEventListener('pmos:viewchange',function(event){if(event.detail&&event.detail.name==='customers')setTimeout(enhanceWebProfile,100)});
 })();
 `;
-    };
-  }
-})();
+}

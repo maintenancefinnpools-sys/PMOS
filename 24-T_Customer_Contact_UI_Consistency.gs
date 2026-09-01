@@ -179,24 +179,22 @@
     };
   }
 
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseEquipmentStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function () {
-      return baseEquipmentStyles() +
+})();
+
+function pmosCustomerContactConsistencyEquipmentStyles_() {
+  return (
         '.check-row input[type="checkbox"],[data-automation-connection] input[type="checkbox"]{width:16px!important;height:16px!important;min-width:16px!important;min-height:16px!important;max-width:16px!important;max-height:16px!important;padding:0!important;margin:0!important;flex:0 0 16px!important;appearance:auto!important}' +
         '.chemistry-option,.automation-option{align-self:start}' +
         '.equipment-actions{display:flex!important;flex-direction:row!important;align-items:center!important;gap:7px!important;flex-wrap:wrap!important}' +
         '.equipment-actions select.inline-button{display:inline-block!important;width:auto!important;min-width:0!important;max-width:185px!important;min-height:30px!important;padding:5px 24px 5px 8px!important;font-size:10px!important;flex:0 0 auto!important}' +
         '.pmos-address-search-hint{margin-top:5px;color:#68747a;font-size:9px;font-weight:700;line-height:1.35;min-height:12px}' +
         '.pmos-address-search-hint.searching{color:#0f5470}' +
-        '.pmos-address-search-hint.ready{color:#356443}';
-    };
-  }
+        '.pmos-address-search-hint.ready{color:#356443}'
+  );
+}
 
-  if (typeof pmosCustomerEquipmentEditorScript_ === 'function') {
-    const baseEquipmentScript = pmosCustomerEquipmentEditorScript_;
-    pmosCustomerEquipmentEditorScript_ = function () {
-      return baseEquipmentScript() + String.raw`
+function pmosCustomerContactConsistencyEquipmentScript_() {
+  return String.raw`
 (function(){
   function pmosCapitalizeSharedInput(input){if(window.pmosTitleCaseInput)window.pmosTitleCaseInput(input);else{var value=String(input.value||''),formatted=value.replace(/(^|[\s'’-])([a-zà-öø-ÿ])/g,function(m,p,l){return p+l.toUpperCase()});if(formatted!==value)input.value=formatted}}
   function isPmosTitleField(input){
@@ -222,6 +220,4 @@
   if(typeof MutationObserver!=='undefined')new MutationObserver(function(){installAddressHints(document)}).observe(document.documentElement||document.body,{childList:true,subtree:true});
 })();
 `;
-    };
-  }
-})();
+}

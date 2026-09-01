@@ -252,20 +252,6 @@ function pmosCustomerProfileEnhancementScript_() {
     };
   }
 
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseEquipmentStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function() {
-      return baseEquipmentStyles() + pmosCustomerFormEnhancementStyles_();
-    };
-  }
-
-  if (typeof pmosCustomerEquipmentEditorScript_ === 'function') {
-    const baseEquipmentScript = pmosCustomerEquipmentEditorScript_;
-    pmosCustomerEquipmentEditorScript_ = function() {
-      return baseEquipmentScript() + pmosCustomerFormEnhancementScript_();
-    };
-  }
-
   if (typeof pmosRouteRecommendationCardStyles_ === 'function') {
     const baseRouteStyles = pmosRouteRecommendationCardStyles_;
     pmosRouteRecommendationCardStyles_ = function() {

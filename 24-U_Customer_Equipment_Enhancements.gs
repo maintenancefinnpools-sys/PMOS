@@ -75,11 +75,8 @@ function pmosCustomerEquipmentCatalogScript_() {
 }
 
 /** Shared body overview and standalone-spa behavior used by every customer form. */
-(function () {
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function () {
-      return baseStyles() + pmosCustomerEquipmentCatalogStyles_() +
+function pmosCustomerEquipmentOverviewStyles_() {
+  return (
         '.body-grid{grid-template-columns:repeat(5,minmax(0,1fr))}' +
         '.body-overview-field select,.body-overview-field input{min-width:0}' +
         '.pmos-volume-field{grid-column:span 2}.pmos-volume-control{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:7px}.pmos-volume-unit{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;overflow:hidden;border:1px solid #bfcbd1;border-radius:7px;background:#fff}.pmos-volume-unit:focus-within{border-color:#017db1;box-shadow:0 0 0 3px rgba(1,125,177,.13)}.pmos-volume-unit input{width:100%;border:0!important;box-shadow:none!important;background:transparent!important}.pmos-volume-suffix{padding-right:9px;color:#64737b;font-size:11px;font-weight:900;white-space:nowrap}.pmos-volume-divider{color:#64737b;font-weight:900}' +
@@ -88,14 +85,12 @@ function pmosCustomerEquipmentCatalogScript_() {
         '.body-grid input,.body-grid select,.equipment-grid input,.equipment-grid select,.chemistry-fields input,.automation-fields input,.automation-fields select,.spa-details input,.spa-details select,.spa-unit-fields input,.pmos-solar-equipment-grid input,.pmos-solar-equipment-grid textarea{font-size:13px}' +
         '.inline-button,.remove-button,.pmos-solar-add{font-size:12px}.pmos-shared-equipment-summary{display:none;grid-column:1/-1;padding:10px 12px;border:1px solid #bae6fd;border-radius:8px;background:#f0f9ff;color:#34515f;font-size:12px;line-height:1.45}.pmos-shared-equipment-summary.open{display:block}.pmos-shared-equipment-summary strong{color:#0f5470}' +
         '@media(max-width:960px){.body-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}' +
-        '@media(max-width:760px){.body-grid{grid-template-columns:1fr}.pmos-volume-field{grid-column:auto}}';
-    };
-  }
+        '@media(max-width:760px){.body-grid{grid-template-columns:1fr}.pmos-volume-field{grid-column:auto}}'
+  );
+}
 
-  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
-  const baseScript = pmosCustomerEquipmentEditorScript_;
-  pmosCustomerEquipmentEditorScript_ = function () {
-    return baseScript() + pmosCustomerEquipmentCatalogScript_() + String.raw`
+function pmosCustomerEquipmentOverviewScript_() {
+  return String.raw`
 (function(){
   var PMOS_BODY_SHAPES=['Rectangle','Round','Oval','Kidney','L-Shaped','Roman','Grecian','Lazy L','Figure Eight','Coffin','Free Form','Other'];
   var PMOS_MAKE_ORDER=['Pentair','Hayward','Jandy','Sta-Rite','Nature2'];
@@ -146,5 +141,4 @@ function pmosCustomerEquipmentCatalogScript_() {
   if(typeof hydrateBodies==='function'){var baseHydrate=hydrateBodies;hydrateBodies=function(bodies){var result=baseHydrate.apply(this,arguments),rows=bodies||[],cards=document.querySelectorAll('.water-body');Array.prototype.forEach.call(cards,function(card,index){pmosInstallBodyOverview(card);pmosInstallSpaOptions(card);pmosInstallFilterModelNumber(card);var body=rows[index]||{},shape=card.querySelector('[data-body-field="shape"]'),volume=card.querySelector('[data-body-field="volume"]'),filterModel=card.querySelector('[data-body-field="filterModel"]'),filterModelNumber=card.querySelector('[data-body-field="filterModelNumber"]');if(shape)shape.value=body.shape||'';if(volume)pmosSetVolumeValue(volume,body.volume||'');if(filterModelNumber)filterModelNumber.value=body.filter&&body.filter.modelNumber||'';if(filterModel)pmosSyncFilterPartNumber(filterModel,body.filter&&body.filter.partNumber);pmosConfigureStandaloneBody(card);pmosTitleCaseHeadings(card)});return result}}
 })();
 `;
-  };
-})();
+}

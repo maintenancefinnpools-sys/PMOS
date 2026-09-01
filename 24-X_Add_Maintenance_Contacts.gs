@@ -91,10 +91,10 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
     };
   }
 
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function() {
-      return baseStyles() +
+})();
+
+function pmosAddMaintenanceContactsStyles_() {
+  return (
         '.pmos-maint-contact-section{grid-column:1/-1;display:grid;gap:9px;margin-top:4px;padding-top:12px;border-top:1px solid #d9e1e5}' +
         '.pmos-maint-contact-section h3{margin:0;color:#293944;font-size:13px;font-weight:900}' +
         '.pmos-maint-contact-section p{margin:0;color:#68747a;font-size:10px;line-height:1.45}' +
@@ -111,14 +111,12 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
         '.pmos-maint-contact-remove{position:absolute;right:8px;top:5px;border:0;background:transparent;color:#7a878d;font-size:17px;cursor:pointer}' +
         '.pmos-maint-contact-add{justify-self:start;width:auto!important;min-height:30px!important;padding:6px 9px!important;border:1px solid #9db6c1!important;border-radius:7px!important;background:#fff!important;color:#0f5470!important;font:inherit!important;font-size:10px!important;font-weight:900!important;cursor:pointer}' +
         '.pmos-maint-contact-card.pmos-dragging{opacity:.52}' +
-        '@media(max-width:760px){.pmos-maint-contact-grid{grid-template-columns:1fr}.pmos-maint-contact-grid .wide{grid-column:1}}';
-    };
-  }
+        '@media(max-width:760px){.pmos-maint-contact-grid{grid-template-columns:1fr}.pmos-maint-contact-grid .wide{grid-column:1}}'
+  );
+}
 
-  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
-  const baseScript = pmosCustomerEquipmentEditorScript_;
-  pmosCustomerEquipmentEditorScript_ = function() {
-    return baseScript() + String.raw`
+function pmosAddMaintenanceContactsScript_() {
+  return String.raw`
 (function(){
   var MAINT_CONTACT_PREFIX='PMOS_MAINT_CONTACTS_V1:';
   var draggedMaintAccountCard=null;
@@ -151,5 +149,4 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sweep);else sweep();document.addEventListener('pmos:viewchange',function(event){if(!event.detail||event.detail.name==='addmaintenance')setTimeout(sweep,0)});setInterval(sweep,500);
 })();
 `;
-  };
-})();
+}
