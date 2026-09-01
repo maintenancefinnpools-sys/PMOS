@@ -26,7 +26,8 @@ function pmosCustomerPrimaryAccountContact_(customerId) {
     phone: read(['Primary Phone', 'Phone Number', 'Phone']),
     email: read(['Email', 'Email Address']),
     notes: '',
-    resourceName: ''
+    resourceName: typeof pmosPrimaryAccountGoogleResourceName_ === 'function'
+      ? pmosPrimaryAccountGoogleResourceName_(customerId) : ''
   };
 }
 
@@ -191,6 +192,19 @@ function savePmosCustomerLifecycleEditorData(input) {
   const request = Object.assign({}, input || {});
   const customerId = String(request.customerId || '').trim();
   if (!customerId) throw new Error('Customer ID is required.');
+  const rawAccountContacts = Array.isArray(request.accountContacts) ? request.accountContacts : [];
+  let requestedPrimaryResourceName = String(request.primaryAccountContactResourceName || '').trim();
+  if (!requestedPrimaryResourceName && rawAccountContacts.length) {
+    requestedPrimaryResourceName = String(rawAccountContacts[0] && rawAccountContacts[0].__pmosPrimaryResourceName || '').trim();
+  }
+  let removedAccountContactResources = [];
+  rawAccountContacts.forEach(function(contact) {
+    const values = contact && contact.__pmosRemovedResourceNames;
+    if (Array.isArray(values)) removedAccountContactResources = removedAccountContactResources.concat(values);
+  });
+  removedAccountContactResources = removedAccountContactResources
+    .map(function(value) { return String(value || '').trim(); })
+    .filter(function(value, index, all) { return value && all.indexOf(value) === index; });
   const locationName = String(request.serviceLocationName || '').trim();
   if (!locationName) throw new Error('Service Location Name is required.');
 
@@ -264,7 +278,37 @@ function savePmosCustomerLifecycleEditorData(input) {
 
   if (result.contactStatus) warnings.push(String(result.contactStatus));
   if (result.contextNoteWarning) warnings.push(String(result.contextNoteWarning));
+
+  // Google Contact link integrity is part of the lifecycle transaction. Keep the
+  // same non-destructive behavior formerly supplied by load-order wrappers: first
+  // promote the requested primary link, then detach links for removed contacts.
+  if (requestedPrimaryResourceName && typeof pmosReorderAccountGoogleResources_ === 'function') {
+    try {
+      const reorder = pmosReorderAccountGoogleResources_(result.customerId || customerId, requestedPrimaryResourceName);
+      if (reorder.warning) warnings.push(reorder.warning);
+    } catch (error) {
+      warnings.push('Account Contact order was saved in PMOS, but the Google Contact primary-link order could not be updated: ' +
+        String(error && error.message ? error.message : error));
+    }
+  }
+  if (removedAccountContactResources.length && typeof pmosUnlinkRemovedAccountGoogleResources_ === 'function') {
+    const keepResources = rawAccountContacts
+      .map(function(contact) { return String(contact && contact.resourceName || '').trim(); })
+      .filter(Boolean);
+    rawAccountContacts.forEach(function(contact) {
+      const primary = String(contact && contact.__pmosPrimaryResourceName || '').trim();
+      if (primary && keepResources.indexOf(primary) < 0) keepResources.push(primary);
+    });
+    try {
+      const unlink = pmosUnlinkRemovedAccountGoogleResources_(result.customerId || customerId, removedAccountContactResources, keepResources);
+      if (unlink.removed.length) result.removedAccountContactLinks = unlink.removed;
+    } catch (error) {
+      warnings.push('Account Contact changes were saved in PMOS, but removed Google Contact links could not be detached from this account: ' +
+        String(error && error.message ? error.message : error));
+    }
+  }
   result.warnings = (result.warnings || []).concat(warnings).filter(Boolean);
+  result.profile = getPmosCustomerLifecycleProfile(result.customerId || customerId);
   result.verified = true;
   return result;
 }

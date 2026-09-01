@@ -23,43 +23,6 @@ function pmosUnlinkRemovedAccountGoogleResources_(customerId, removedResourceNam
   return {changed: true, removed: actuallyRemoved};
 }
 
-(function () {
-  if (typeof savePmosCustomerLifecycleEditorData === 'function') {
-    const baseLifecycleSave = savePmosCustomerLifecycleEditorData;
-    savePmosCustomerLifecycleEditorData = function(input) {
-      const request = Object.assign({}, input || {});
-      const rawContacts = Array.isArray(request.accountContacts) ? request.accountContacts : [];
-      let removed = [];
-      rawContacts.forEach(function(contact) {
-        const values = contact && contact.__pmosRemovedResourceNames;
-        if (Array.isArray(values)) removed = removed.concat(values);
-      });
-      removed = removed.map(function(value) { return String(value || '').trim(); }).filter(function(value, index, all) {
-        return value && all.indexOf(value) === index;
-      });
-      const result = baseLifecycleSave(request);
-      if (removed.length) {
-        const keep = rawContacts.map(function(contact) { return String(contact && contact.resourceName || '').trim(); }).filter(Boolean);
-        rawContacts.forEach(function(contact) {
-          const primary = String(contact && contact.__pmosPrimaryResourceName || '').trim();
-          if (primary && keep.indexOf(primary) < 0) keep.push(primary);
-        });
-        try {
-          const unlink = pmosUnlinkRemovedAccountGoogleResources_(result.customerId || request.customerId, removed, keep);
-          if (unlink.removed.length) result.removedAccountContactLinks = unlink.removed;
-        } catch (error) {
-          result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-          result.warnings.push('Account Contact changes were saved in PMOS, but removed Google Contact links could not be detached from this account: ' +
-            String(error && error.message ? error.message : error));
-        }
-      }
-      result.profile = getPmosCustomerLifecycleProfile(result.customerId || request.customerId);
-      return result;
-    };
-  }
-
-})();
-
 function pmosAccountContactRemovalIntegrityScript_() {
   return String.raw`
 (function(){
@@ -72,15 +35,6 @@ function pmosAccountContactRemovalIntegrityScript_() {
     var root=rootFor(row),resource=String(row.dataset.resourceName||'');if(!root||!root.id||!resource)return;
     var removed=window.__pmosRemovedAccountContactResources[root.id]||[];if(removed.indexOf(resource)<0)removed.push(resource);window.__pmosRemovedAccountContactResources[root.id]=removed;
   },true);
-  var baseCollect=typeof pmosCollectAccountContacts==='function'?pmosCollectAccountContacts:null;
-  if(baseCollect){
-    pmosCollectAccountContacts=function(containerId){
-      var contacts=baseCollect.apply(this,arguments)||[],root=document.getElementById(containerId),primary=root&&root.querySelector('.account-contact-primary'),primaryResource=String(primary&&primary.dataset.resourceName||''),removed=(window.__pmosRemovedAccountContactResources[containerId]||[]).slice();
-      var metadata={__pmosAccountContactMetadata:true,__pmosPrimaryResourceName:primaryResource,__pmosRemovedResourceNames:removed};
-      if(contacts.length){contacts[0].__pmosPrimaryResourceName=primaryResource;contacts[0].__pmosRemovedResourceNames=removed}else if(primaryResource||removed.length){contacts.push(metadata)}
-      return contacts;
-    };
-  }
   window.pmosResetRemovedAccountContacts=function(containerId){window.__pmosRemovedAccountContactResources[containerId]=[]};
 })();
 `;

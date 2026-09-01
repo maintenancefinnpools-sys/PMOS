@@ -88,6 +88,14 @@ def main() -> int:
     if (ROOT / "24-B_Pmos_Rolodex_Component.gs").exists():
         failures.append("removed Rolodex prototype file returned")
 
+    primary_integrity = (ROOT / "24-ZZZZ_Account_Contact_Primary_Link_Integrity.gs").read_text(encoding="utf-8")
+    removal_integrity = (ROOT / "24-ZZZZZ_Account_Contact_Removal_Integrity.gs").read_text(encoding="utf-8")
+    lifecycle_integrity = primary_integrity + "\n" + removal_integrity
+    if re.search(r"savePmosCustomerLifecycleEditorData\s*=\s*function", lifecycle_integrity):
+        failures.append("account-contact integrity module replaced the canonical lifecycle save")
+    if re.search(r"pmosCollectAccountContacts\s*=\s*function", lifecycle_integrity):
+        failures.append("account-contact integrity module replaced the canonical contact collector")
+
     for name in sorted(RETAINED_ENTRY_POINTS | RETAINED_TRIGGER_HANDLERS):
         if not declared(name):
             failures.append(f"required runtime boundary is missing: {name}")

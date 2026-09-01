@@ -185,7 +185,7 @@ def main() -> None:
     require(maintenance_transaction, "'filterModelNumber'", "Water Feature filter model-number persistence", failures)
     require(maintenance_transaction, "Array.isArray(rawDetails.featureEquipment)", "canonical Water Feature component persistence", failures)
 
-    require(equipment, "Solar Heating Equipment", "compact Solar Heating Equipment UI", failures)
+    require(equipment, "Solar Equipment", "compact Solar Equipment UI", failures)
     require(equipment, "window.pmosEnsureCustomerBodyEnhancements=ensureBody", "shared Solar/body enhancement hook", failures)
     require(shared_equipment, "pmosConfigureSolarHeating", "core Solar Heating renderer hook", failures)
     require(equipment, "data-solar-add", "Solar Heater add-equipment dropdown", failures)

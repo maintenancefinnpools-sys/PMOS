@@ -43,7 +43,7 @@ assertHash(
 assertHash(
   'Customer equipment script',
   context.pmosCustomerEquipmentEditorScript_(),
-  '1d309085109871cb19ae0ca9d4855d5da6f02eef96c17d3d7be78c4e2905f0d1',
+  'eea7b0e303722d8ca528907c2ece93e70b051db236d86436fbb80f47cafcdbbf',
 );
 assertHash(
   'Account-contact styles',
@@ -53,7 +53,7 @@ assertHash(
 assertHash(
   'Account-contact script',
   context.pmosAccountContactClientScript_(),
-  '1ed9f8e2e48c30de767bcac5404a0aa7ba03e78434a2037b303fb461ba38dc6a',
+  '06f9a4f66312ec82e6ae7949dcc056533ffbc15bd97a11f37636270d059b18b7',
 );
 assertHash(
   'Service-location-contact styles',
@@ -67,10 +67,10 @@ assertHash(
 );
 
 const runtimeHashes = {
-  ADD_CUSTOMER: 'c360ccb906eb53921a349df8923dace9ffec90b6990699728d72865b806bf868',
-  ADD_MAINTENANCE: '898a4d42cc0fb9e896e3fcc3b95f3bc156afb8d6f7172d148edd38e82285b4e2',
-  EDITOR: '5b53435f0ee0bd1d086ed42aa9a52ddf095868ef66bc7c87fdacfa184e1c903d',
-  LOOKUP: '5b53435f0ee0bd1d086ed42aa9a52ddf095868ef66bc7c87fdacfa184e1c903d',
+  ADD_CUSTOMER: '9eeab0e87fe551e3e84db420fcbb30fe8cff6a2501b6a2024a1aa1d56a22623e',
+  ADD_MAINTENANCE: '80ace1802c1e785dbffb301b4929d2fb536d8217f63e8cab5bd7831da267aa83',
+  EDITOR: '91b2563d39f943767ebf8141141c7641455f52c38be54f5c8e2c33a12284c529',
+  LOOKUP: '91b2563d39f943767ebf8141141c7641455f52c38be54f5c8e2c33a12284c529',
 };
 for (const [runtimeContext, expected] of Object.entries(runtimeHashes)) {
   const assets = context.pmosWithRuntimeCustomerFormAssets_(runtimeContext, function() {

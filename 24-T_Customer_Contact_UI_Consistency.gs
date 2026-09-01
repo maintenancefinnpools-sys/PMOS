@@ -112,10 +112,16 @@ function pmosAccountContactConsistencyScript_() {
     basePmosAddAccountContact(containerId,contact);var root=document.getElementById(containerId),rows=root&&root.querySelectorAll('.account-contact-row:not(.account-contact-primary)'),row=rows&&rows[rows.length-1];if(row){pmosAccountReorderNameFields(row);pmosConfigureAccountRole(row);pmosBindAccountRowDrag(row);var last=row.querySelector('[data-account-contact="lastName"]');if(last)last.focus()}
   };
 
-  var basePmosCollectAccountContacts=pmosCollectAccountContacts;
   pmosCollectAccountContacts=function(containerId){
     var root=document.getElementById(containerId);if(!root)return[];
-    return Array.prototype.map.call(root.querySelectorAll('.account-contact-row:not(.account-contact-primary)'),pmosReadAdditionalAccountRow).filter(function(contact){return contact.firstName||contact.lastName||contact.role||contact.phone||contact.email||contact.notes});
+    var contacts=Array.prototype.map.call(root.querySelectorAll('.account-contact-row:not(.account-contact-primary)'),pmosReadAdditionalAccountRow).filter(function(contact){return contact.firstName||contact.lastName||contact.role||contact.phone||contact.email||contact.notes});
+    var primary=root.querySelector('.account-contact-primary'),primaryResource=String(primary&&primary.dataset.resourceName||'');
+    if(!primaryResource&&window.__pmosAccountPrimaryResourceByList)primaryResource=String(window.__pmosAccountPrimaryResourceByList[containerId]||'');
+    var removed=(window.__pmosRemovedAccountContactResources&&window.__pmosRemovedAccountContactResources[containerId]||[]).slice();
+    contacts.forEach(function(contact){contact.__pmosPrimaryResourceName=primaryResource});
+    if(contacts.length)contacts[0].__pmosRemovedResourceNames=removed;
+    else if(primaryResource||removed.length)contacts.push({__pmosAccountContactMetadata:true,__pmosPrimaryResourceName:primaryResource,__pmosRemovedResourceNames:removed});
+    return contacts;
   };
 
   window.pmosMountPrimaryAccountContactCard=function(config){

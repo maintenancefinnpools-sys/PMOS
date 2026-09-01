@@ -45,46 +45,6 @@ function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResource
   return {changed: true, resourceName: requested};
 }
 
-(function () {
-  if (typeof pmosCustomerPrimaryAccountContact_ === 'function') {
-    const basePrimaryContact = pmosCustomerPrimaryAccountContact_;
-    pmosCustomerPrimaryAccountContact_ = function(customerId) {
-      const contact = basePrimaryContact(customerId);
-      contact.resourceName = pmosPrimaryAccountGoogleResourceName_(customerId);
-      return contact;
-    };
-  }
-
-  if (typeof savePmosCustomerLifecycleEditorData === 'function') {
-    const baseLifecycleSave = savePmosCustomerLifecycleEditorData;
-    savePmosCustomerLifecycleEditorData = function(input) {
-      const request = Object.assign({}, input || {});
-      const rawContacts = Array.isArray(request.accountContacts) ? request.accountContacts : [];
-      let requestedPrimaryResourceName = String(request.primaryAccountContactResourceName || '').trim();
-      if (!requestedPrimaryResourceName && rawContacts.length) {
-        requestedPrimaryResourceName = String(rawContacts[0] && rawContacts[0].__pmosPrimaryResourceName || '').trim();
-      }
-      const result = baseLifecycleSave(request);
-      if (requestedPrimaryResourceName) {
-        try {
-          const reorder = pmosReorderAccountGoogleResources_(result.customerId || request.customerId, requestedPrimaryResourceName);
-          if (reorder.warning) {
-            result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-            result.warnings.push(reorder.warning);
-          }
-        } catch (error) {
-          result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-          result.warnings.push('Account Contact order was saved in PMOS, but the Google Contact primary-link order could not be updated: ' +
-            String(error && error.message ? error.message : error));
-        }
-      }
-      result.profile = getPmosCustomerLifecycleProfile(result.customerId || request.customerId);
-      return result;
-    };
-  }
-
-})();
-
 function pmosAccountContactPrimaryIntegrityScript_() {
   return String.raw`
 (function(){
@@ -130,14 +90,6 @@ function pmosAccountContactPrimaryIntegrityScript_() {
     dragSnapshot=null;
   },true);
 
-  var baseCollect=typeof pmosCollectAccountContacts==='function'?pmosCollectAccountContacts:null;
-  if(baseCollect){
-    pmosCollectAccountContacts=function(containerId){
-      var contacts=baseCollect.apply(this,arguments)||[],root=document.getElementById(containerId),primary=primaryRow(root),primaryResource=resource(primary);
-      contacts.forEach(function(contact){contact.__pmosPrimaryResourceName=primaryResource});
-      return contacts;
-    };
-  }
 })();
 `;
 }
