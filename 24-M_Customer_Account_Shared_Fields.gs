@@ -64,7 +64,7 @@ function validatePmosAccountServiceLocationName_(customerId, requestedName) {
   return {account: account, name: name};
 }
 
-function savePmosCustomerAccountEditorData(input) {
+function savePmosCustomerAccountEditorDataCore_(input) {
   try {
     const request = Object.assign({}, input || {});
     if (request._pmosFastLifecycle === true) request._pmosSkipResultProfile = true;
@@ -91,6 +91,31 @@ function savePmosCustomerAccountEditorData(input) {
     if (error && error.message) error.message = pmosAccountTerminologyText_(error.message);
     throw error;
   }
+}
+
+/** Canonical account-editor save pipeline, independent of file evaluation order. */
+function savePmosCustomerAccountEditorData(input) {
+  const request = typeof unpackPmosContextNotesEnvelope_ === 'function'
+    ? unpackPmosContextNotesEnvelope_(input)
+    : (input || {});
+  const result = savePmosCustomerAccountEditorDataCore_(request);
+
+  if (typeof savePmosCustomerContextNotes_ === 'function') {
+    try {
+      result.contextNotes = savePmosCustomerContextNotes_(result.customerId, request);
+    } catch (error) {
+      result.contextNoteWarning = 'Customer saved, but contextual notes could not be saved: ' +
+        (error && error.message ? error.message : String(error));
+    }
+  }
+
+  if (typeof getPmosCustomerAccountProfile === 'function') {
+    const profile = getPmosCustomerAccountProfile(result.customerId);
+    result.profile = typeof normalizePmosProfileEquipmentForContext_ === 'function'
+      ? normalizePmosProfileEquipmentForContext_(profile)
+      : profile;
+  }
+  return result;
 }
 
 function savePmosCustomerEditorExistingAccountContacts(customerId, contacts, removedResourceNames) {

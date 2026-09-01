@@ -134,20 +134,6 @@ function normalizePmosProfileEquipmentForContext_(profile) {
 }
 
 (function () {
-  if (typeof savePmosCustomerAccountEditorData === 'function') {
-    const baseSavePmosCustomerAccountEditorData = savePmosCustomerAccountEditorData;
-    savePmosCustomerAccountEditorData = function(input) {
-      const result = baseSavePmosCustomerAccountEditorData(input);
-      try {
-        result.contextNotes = savePmosCustomerContextNotes_(result.customerId, input || {});
-      } catch (error) {
-        result.contextNoteWarning = 'Customer saved, but contextual notes could not be saved: ' + (error && error.message ? error.message : String(error));
-      }
-      result.profile = normalizePmosProfileEquipmentForContext_(getPmosCustomerAccountProfile(result.customerId));
-      return result;
-    };
-  }
-
   if (typeof getPmosCustomerAccountProfile === 'function') {
     const baseGetPmosCustomerAccountProfile = getPmosCustomerAccountProfile;
     getPmosCustomerAccountProfile = function(customerId) {

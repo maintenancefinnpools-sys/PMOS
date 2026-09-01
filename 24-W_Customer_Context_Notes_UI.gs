@@ -29,10 +29,6 @@ function packPmosContextNotesEnvelope_(notes) {
 }
 
 (function () {
-  if (typeof savePmosCustomerAccountEditorData === 'function') {
-    const base = savePmosCustomerAccountEditorData;
-    savePmosCustomerAccountEditorData = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };
-  }
   if (typeof createPmosAdditionalServiceLocationForAccount === 'function') {
     const base = createPmosAdditionalServiceLocationForAccount;
     createPmosAdditionalServiceLocationForAccount = function(input) {
