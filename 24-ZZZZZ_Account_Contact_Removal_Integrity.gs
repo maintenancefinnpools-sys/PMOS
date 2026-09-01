@@ -58,10 +58,10 @@ function pmosUnlinkRemovedAccountGoogleResources_(customerId, removedResourceNam
     };
   }
 
-  if (typeof pmosAccountContactClientScript_ === 'function') {
-    const baseAccountScript = pmosAccountContactClientScript_;
-    pmosAccountContactClientScript_ = function() {
-      return baseAccountScript() + String.raw`
+})();
+
+function pmosAccountContactRemovalIntegrityScript_() {
+  return String.raw`
 (function(){
   if(window.__pmosAccountContactRemovalIntegrity)return;window.__pmosAccountContactRemovalIntegrity=true;
   window.__pmosRemovedAccountContactResources=window.__pmosRemovedAccountContactResources||{};
@@ -84,6 +84,4 @@ function pmosUnlinkRemovedAccountGoogleResources_(customerId, removedResourceNam
   window.pmosResetRemovedAccountContacts=function(containerId){window.__pmosRemovedAccountContactResources[containerId]=[]};
 })();
 `;
-    };
-  }
-})();
+}

@@ -91,16 +91,14 @@
     };
   }
 
-  if (typeof pmosAccountContactClientScript_ === 'function') {
-    const baseAccountScript = pmosAccountContactClientScript_;
-    pmosAccountContactClientScript_ = function() {
-      return baseAccountScript() + String.raw`
+})();
+
+function pmosSheetsAccountContactLifecycleScript_() {
+  return String.raw`
 (function(){
   if(window.__pmosAccountContactRenderReset)return;window.__pmosAccountContactRenderReset=true;
   var baseRender=typeof pmosRenderAccountContacts==='function'?pmosRenderAccountContacts:null;
   if(baseRender){pmosRenderAccountContacts=function(containerId,contacts){if(typeof window.pmosResetRemovedAccountContacts==='function')window.pmosResetRemovedAccountContacts(containerId);return baseRender.apply(this,arguments)}}
 })();
 `;
-    };
-  }
-})();
+}

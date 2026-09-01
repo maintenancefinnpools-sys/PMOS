@@ -83,10 +83,10 @@ function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResource
     };
   }
 
-  if (typeof pmosAccountContactClientScript_ === 'function') {
-    const baseAccountContactScript = pmosAccountContactClientScript_;
-    pmosAccountContactClientScript_ = function() {
-      return baseAccountContactScript() + String.raw`
+})();
+
+function pmosAccountContactPrimaryIntegrityScript_() {
+  return String.raw`
 (function(){
   if(window.__pmosPrimaryContactLinkIntegrity)return;window.__pmosPrimaryContactLinkIntegrity=true;
   var dragSnapshot=null;
@@ -140,6 +140,4 @@ function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResource
   }
 })();
 `;
-    };
-  }
-})();
+}

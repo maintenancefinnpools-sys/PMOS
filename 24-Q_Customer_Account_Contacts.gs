@@ -199,7 +199,8 @@ function syncPmosAccountContactsToGoogle_(customerId, contacts) {
 }
 
 function pmosAccountContactStyles_() {
-  return '.account-contact-list{display:grid;gap:9px}.account-contact-row{position:relative;padding:11px;border:1px solid #d5e0e5;border-radius:9px;background:#f7fafb}.account-contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.account-contact-grid .wide{grid-column:1/-1}.account-contact-remove{position:absolute;right:8px;top:8px;border:0;background:transparent;color:#7a878d;font-size:17px;cursor:pointer}.account-contact-role{grid-column:1/-1}@media(max-width:760px){.account-contact-grid{grid-template-columns:1fr}.account-contact-grid .wide,.account-contact-role{grid-column:auto}}';
+  return '.account-contact-list{display:grid;gap:9px}.account-contact-row{position:relative;padding:11px;border:1px solid #d5e0e5;border-radius:9px;background:#f7fafb}.account-contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.account-contact-grid .wide{grid-column:1/-1}.account-contact-remove{position:absolute;right:8px;top:8px;border:0;background:transparent;color:#7a878d;font-size:17px;cursor:pointer}.account-contact-role{grid-column:1/-1}@media(max-width:760px){.account-contact-grid{grid-template-columns:1fr}.account-contact-grid .wide,.account-contact-role{grid-column:auto}}' +
+    (typeof pmosAccountContactConsistencyStyles_ === 'function' ? pmosAccountContactConsistencyStyles_() : '');
 }
 
 function pmosAccountContactClientScript_() {
@@ -210,5 +211,9 @@ function pmosAccountContactRow(contact){contact=contact||{};var row=document.cre
 function pmosRenderAccountContacts(containerId,contacts){var root=document.getElementById(containerId);if(!root)return;root.innerHTML='';(contacts||[]).forEach(function(contact){root.appendChild(pmosAccountContactRow(contact))})}
 function pmosAddAccountContact(containerId,contact){var root=document.getElementById(containerId);if(!root)return;var row=pmosAccountContactRow(contact||{});root.appendChild(row);var last=row.querySelector('[data-account-contact="lastName"]');if(last)last.focus()}
 function pmosCollectAccountContacts(containerId){var root=document.getElementById(containerId);if(!root)return[];return Array.prototype.map.call(root.querySelectorAll('.account-contact-row'),function(row){var read=function(key){var input=row.querySelector('[data-account-contact="'+key+'"]');return input?String(input.value||'').trim():''};return{firstName:read('firstName'),lastName:read('lastName'),role:read('role'),phone:read('phone'),email:read('email'),notes:read('notes'),resourceName:row.dataset.resourceName||''}}).filter(function(contact){return contact.firstName||contact.lastName||contact.role||contact.phone||contact.email||contact.notes})}
-`;
+` +
+    (typeof pmosAccountContactConsistencyScript_ === 'function' ? pmosAccountContactConsistencyScript_() : '') +
+    (typeof pmosSheetsAccountContactLifecycleScript_ === 'function' ? pmosSheetsAccountContactLifecycleScript_() : '') +
+    (typeof pmosAccountContactRemovalIntegrityScript_ === 'function' ? pmosAccountContactRemovalIntegrityScript_() : '') +
+    (typeof pmosAccountContactPrimaryIntegrityScript_ === 'function' ? pmosAccountContactPrimaryIntegrityScript_() : '');
 }

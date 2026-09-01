@@ -5,11 +5,8 @@
  * additional Account Contacts as one ordered card stack. The top card remains
  * backed by the authoritative First/Last/Phone/Email customer columns.
  */
-(function () {
-  if (typeof pmosAccountContactStyles_ === 'function') {
-    const baseAccountContactStyles = pmosAccountContactStyles_;
-    pmosAccountContactStyles_ = function () {
-      return baseAccountContactStyles() +
+function pmosAccountContactConsistencyStyles_() {
+  return (
         '.account-contact-list{position:relative}' +
         '.account-contact-row{padding-top:28px}' +
         '.account-contact-row[draggable="true"]{cursor:grab}' +
@@ -19,22 +16,16 @@
         '.account-contact-primary .account-contact-remove{display:none}' +
         '.account-contact-primary-badge,.account-contact-secondary-badge,.location-contact-badge{position:absolute;left:34px;top:6px;padding:2px 7px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}' +
         '.account-contact-primary-badge{background:#dcefdc;color:#356443}.account-contact-secondary-badge{background:#d9edf6;color:#0f5470}.location-contact-badge{background:#f3ead2;color:#6f5718}' +
-        '.account-contact-role select,.account-contact-role input{width:100%}';
-    };
-  }
+        '.account-contact-role select,.account-contact-role input{width:100%}'
+  );
+}
 
-  if (typeof pmosServiceLocationContactStyles_ === 'function') {
-    const baseLocationContactStyles = pmosServiceLocationContactStyles_;
-    pmosServiceLocationContactStyles_ = function () {
-      return baseLocationContactStyles() +
-        '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}.location-contact-badge{position:absolute;left:10px;top:6px;padding:2px 7px;border-radius:999px;background:#f3ead2;color:#6f5718;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}';
-    };
-  }
+function pmosLocationContactConsistencyStyles_() {
+  return '.location-contact-row{padding-top:28px}.location-contact-name-order{display:contents}.location-contact-badge{position:absolute;left:10px;top:6px;padding:2px 7px;border-radius:999px;background:#f3ead2;color:#6f5718;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}';
+}
 
-  if (typeof pmosAccountContactClientScript_ === 'function') {
-    const baseAccountContactScript = pmosAccountContactClientScript_;
-    pmosAccountContactClientScript_ = function () {
-      return baseAccountContactScript() + String.raw`
+function pmosAccountContactConsistencyScript_() {
+  return String.raw`
 (function(){
   var PMOS_ACCOUNT_ROLE_OPTIONS=[
     'Spouse','Partner','Parent','Child','Sibling','Family Member','Caregiver',
@@ -155,13 +146,10 @@
   document.addEventListener('pmos:viewchange',function(){setTimeout(mountKnownPrimaryCards,0)});
 })();
 `;
-    };
-  }
+}
 
-  if (typeof pmosServiceLocationContactClientScript_ === 'function') {
-    const baseLocationContactScript = pmosServiceLocationContactClientScript_;
-    pmosServiceLocationContactClientScript_ = function () {
-      return baseLocationContactScript() + String.raw`
+function pmosLocationContactConsistencyScript_() {
+  return String.raw`
 (function(){
   var baseLocationContactRow=pmosLocationContactRow;
   pmosLocationContactRow=function(contact){
@@ -176,10 +164,7 @@
   pmosAddLocationContact=function(containerId,contact){baseAddLocationContact(containerId,contact);var root=document.getElementById(containerId),rows=root&&root.querySelectorAll('.location-contact-row'),row=rows&&rows[rows.length-1],last=row&&row.querySelector('[data-location-contact="lastName"]');if(last)last.focus()};
 })();
 `;
-    };
-  }
-
-})();
+}
 
 function pmosCustomerContactConsistencyEquipmentStyles_() {
   return (
