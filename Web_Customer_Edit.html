@@ -145,7 +145,8 @@
       if(typeof configureSpaEquipment==='function')configureSpaEquipment(card);
       set('[data-body-field="location"]',body.location);
       set('[data-body-field="shape"]',body.shape);
-      set('[data-body-field="volume"]',body.volume);
+      const volume=set('[data-body-field="volume"]',body.volume);
+      if(volume&&window.pmosVolumeControl)window.pmosVolumeControl.setValue(volume,body.volume||'');
       set('[data-body-field="pumpMake"]',body.pump&&body.pump.make);
       set('[data-body-field="pumpModel"]',body.pump&&body.pump.model);
       set('[data-body-field="pumpModelNumber"]',body.pump&&body.pump.modelNumber);
