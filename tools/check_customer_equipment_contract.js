@@ -42,7 +42,7 @@ const completeBody = {
   sanitization: 'Chlorine', equipmentNotes: 'Body-specific equipment note',
   pump: {make: 'Pentair', model: 'SuperFlo VST', modelNumber: '342002', partNumber: '342002'},
   filter: {type: 'Cartridge', make: 'Pentair', model: 'Clean & Clear Plus 420', modelNumber: 'CCP420', partNumber: '160301', cartridgeSetNumber: 'R173576'},
-  heater: {type: 'Solar', connectedToEquipmentAutomation: true, solarEquipment: [{type: 'CONTROLLER', make: 'Pentair', model: 'SolarTouch', modelNumber: '521590'}]},
+  heater: {type: 'Solar', connectedToEquipmentAutomation: true, solarEquipment: [{type: 'CONTROLLER', make: 'Pentair', model: 'SolarTouch', modelNumber: '521590', notes: 'Dedicated differential controller'}]},
   cover: {type: 'Auto Cover', winterType: 'Safety Cover'},
   equipment: [
     {type: 'CHLORINE_FEEDER', details: {make: 'Pentair', model: '300', modelNumber: 'R171016', partNumber: 'R171016'}},
@@ -54,6 +54,7 @@ assert(normalizedBody.sanitization === 'Chlorine', 'Primary Sanitization is lost
 assert(normalizedBody.equipmentNotes === completeBody.equipmentNotes, 'Body Equipment Notes are lost during server normalization.');
 assert(normalizedBody.filter.cartridgeSetNumber === 'R173576', 'Replacement cartridge number is lost during server normalization.');
 assert(normalizedBody.heater.solarEquipment[0].model === 'SolarTouch', 'Solar equipment is lost during server normalization.');
+assert(normalizedBody.heater.solarEquipment[0].notes === 'Dedicated differential controller', 'Solar equipment notes are lost during server normalization.');
 assert(normalizedBody.heater.connectedToEquipmentAutomation === true, 'Solar Equipment Automation connection is lost during server normalization.');
 assert(normalizedBody.equipment[0].details.model === '300', 'Primary sanitizer make/model is lost during server normalization.');
 assert(normalizedBody.equipment[1].details.model === 'IntelliCenter', 'Equipment Automation is lost during server normalization.');
@@ -118,7 +119,9 @@ assert(context.editorStyles.includes('grid-template-columns:repeat(2,minmax(0,1f
 assert(context.clientSource.includes('chemistry-selectors'), 'Compact Chemistry Automation selectors are missing.');
 assert(context.clientSource.includes('chemistry-equipment-card'), 'Chemistry Automation equipment card is missing.');
 assert(context.editorStyles.includes('.chemistry-equipment-host{grid-column:1/-1;width:100%'), 'Chemistry Automation equipment card is not full width.');
-assert(context.clientSource.includes("box.insertAdjacentElement('afterend',host)"), 'Chemistry Automation equipment card is not below both automation selectors.');
+assert(context.clientSource.includes("pair.insertAdjacentElement('afterend',host)"), 'Chemistry Automation equipment card is not below both automation selectors.');
+assert(context.clientSource.includes("pair.appendChild(box);pair.appendChild(chemistry)"), 'Equipment and Chemistry Automation selectors are not aligned in one row.');
+assert(context.editorStyles.includes('.automation-selector-row{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))'), 'Automation selectors do not use the aligned two-column desktop layout.');
 assert(context.clientSource.includes("host.style.display=checkbox.checked?'block':'none'"), 'Full-width Chemistry Automation equipment card does not follow its toggle.');
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(context.clientSource.includes('pmosEnsureCustomerBodyEnhancements'), 'Core equipment renderer does not invoke the shared body enhancements.');
@@ -128,7 +131,10 @@ assert(context.clientSource.includes('data-solar-connected'), 'Solar Heating con
 assert(context.clientSource.includes("if(solar&&field)field.value=''"), 'Solar Heating does not immediately clear obsolete generic heater identity fields.');
 assert(context.clientSource.includes("bodies[index].heater.make=''"), 'Solar Heating still saves the obsolete generic heater make.');
 assert(context.clientSource.includes('AquaSolar GL-235'), 'Solar-specific controller catalog is missing AquaSolar GL-235.');
-assert(!context.clientSource.includes('data-solar-field="notes"'), 'Solar components still render individual Notes fields.');
+assert(context.clientSource.includes("{name:'SunTouch',numbers:[]}"), 'Legacy Pentair SunTouch is missing from the solar-specific controller catalog.');
+assert(context.clientSource.includes('data-solar-field="notes"'), 'Solar components are missing individual Notes fields.');
+assert(context.clientSource.includes('<option value="BOOSTER_PUMP">Pump</option>'), 'Solar equipment still uses the unwanted Booster Pump label.');
+assert(context.clientSource.includes('<option value="FILTER">Filter</option>'), 'Solar equipment still uses the unwanted Solar Filter label.');
 assert(context.clientSource.includes('pmosConfigureSharedBody'), 'Shared Pool/Spa equipment inheritance is missing.');
 assert(context.clientSource.includes('All equipment shared with Pool'), 'Shared Pool/Spa equipment summary is missing.');
 assert(context.clientSource.includes("bodies[index].sanitization=''"), 'Shared spa sanitization is still stored as duplicate equipment data.');

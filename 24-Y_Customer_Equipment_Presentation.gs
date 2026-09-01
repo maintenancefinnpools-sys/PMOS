@@ -13,7 +13,7 @@ const PMOS_EQUIPMENT_DISPLAY_LABELS_ = {
   CHLORINE_TANK: 'Chlorine Tank',
   PH_PROBE: 'pH Probe',
   ORP_PROBE: 'ORP Probe',
-  SOLAR_BOOSTER_PUMP: 'Solar Booster Pump',
+  SOLAR_BOOSTER_PUMP: 'Solar Pump',
   SOLAR_VALVE_ACTUATOR: 'Solar Valve Actuator',
   SOLAR_AUTOMATION: 'Solar Automation',
   SALT_SYSTEM: 'Salt Cell',
