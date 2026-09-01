@@ -42,6 +42,8 @@ require(SERVER, "normalizePmosAccountContacts_", "Account Contact validation cov
 require(SERVER, "normalizePmosServiceLocationContacts_", "Service Location Contact validation coverage is missing.")
 require(SERVER, "Additional Account Contact notes remain attached", "Account Contact note coverage is missing.")
 require(SERVER, "Service Location Contact notes remain attached", "Service Location Contact note coverage is missing.")
+require(SERVER, "Water Feature pump catalog fields persist", "Water Feature component persistence coverage is missing.")
+require(SERVER, "pumpModelNumber: '342002'", "Water Feature pump model-number fixture is missing.")
 require(CLIENT, "keepFixtures", "Fixture-retention review option is missing from the bot UI.")
 require(CLIENT, "Clean Up Test Fixtures", "Explicit cleanup control is missing from the bot UI.")
 require(CLIENT, "google.script.host.close()", "Opening results does not reveal the activated Sheet behind the bot dialog.")

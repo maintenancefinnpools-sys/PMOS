@@ -161,6 +161,7 @@
       set('[data-body-field="heaterModel"]',body.heater&&body.heater.model);
       set('[data-body-field="heaterModelNumber"]',body.heater&&body.heater.modelNumber);
       set('[data-body-field="heaterPartNumber"]',body.heater&&body.heater.partNumber);
+      if(typeof pmosRefreshMainBodyCatalogFields==='function')pmosRefreshMainBodyCatalogFields(card);
       set('[data-body-field="coverType"]',body.cover&&body.cover.type);
       set('[data-body-field="winterCoverType"]',body.cover&&body.cover.winterType);
       const sanitizer=set('[data-body-field="sanitization"]',body.sanitization);
@@ -184,6 +185,7 @@
         target=card.querySelector('.primary-sanitizer-card[data-equipment-type="'+item.type+'"]');
         if(!target){addEquipment(card,item.type,details);const added=card.querySelectorAll('.equipment-card[data-equipment-type="'+item.type+'"]');target=added[added.length-1];}
         if(!target)return;
+        if(typeof pmosHydrateEquipmentCard==='function')pmosHydrateEquipmentCard(target,item.type,details);
         const sanitizerMake=target.querySelector('[data-sanitizer-type][data-equipment-field="make"]');
         if(sanitizerMake&&details.make!=null){sanitizerMake.value=details.make;if(typeof updateSanitizerModels==='function')updateSanitizerModels(sanitizerMake);}
         const sanitizerModel=target.querySelector('[data-sanitizer-type][data-equipment-field="model"]');

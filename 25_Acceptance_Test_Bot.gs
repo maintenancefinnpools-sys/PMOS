@@ -486,6 +486,15 @@ function pmosAcceptanceRunAccountTests_(results, manifest) {
   const actuator = pmosAcceptanceFindEquipment_(body, 'WATER_FEATURE');
   pmosAcceptanceRecord_(results, 'Equipment', 'Water Feature actuator identifier persists',
     '263045', actuator && actuator.details && actuator.details.actuatorModelNumber);
+  const featurePump = actuator && actuator.details && (actuator.details.featureEquipment || []).filter(function(item) {
+    return item && item.type === 'PUMP';
+  })[0];
+  pmosAcceptanceRecord_(results, 'Equipment', 'Water Feature pump catalog fields persist',
+    'Pentair SuperFlo VST 342002', featurePump && [
+      featurePump.details && featurePump.details.pumpMake,
+      featurePump.details && featurePump.details.pumpModel,
+      featurePump.details && featurePump.details.pumpModelNumber
+    ].filter(Boolean).join(' '));
 
   // Exercise the same transaction used by the Web and Sheets Edit Customer
   // surfaces, then open a brand-new editor snapshot. This catches a successful
@@ -679,7 +688,11 @@ function pmosAcceptanceEquipmentFixture_() {
       type: 'WATER_FEATURE',
       details: {
         name: 'Sheer Descent', actuatorMake: 'Pentair', actuatorModel: 'CVA-24T',
-        actuatorModelNumber: '263045'
+        actuatorModelNumber: '263045',
+        featureEquipmentJson: JSON.stringify([{
+          type: 'PUMP',
+          details: {pumpMake: 'Pentair', pumpModel: 'SuperFlo VST', pumpModelNumber: '342002'}
+        }])
       }
     }]
   }];

@@ -627,7 +627,7 @@ function normalizeMaintenanceCustomerRequest_(input) {
   };
   const equipmentFields = [
     'purpose', 'make', 'model', 'modelNumber', 'name', 'featureType',
-    'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel',
+    'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake', 'filterModel', 'filterModelNumber',
     'cartridgeSetNumber',
     'automation', 'chlorineSource', 'manufacturer', 'equipmentType',
     'robotType', 'sanitizerType', 'connectedToAutomation', 'actuatorMake',
@@ -651,17 +651,19 @@ function normalizeMaintenanceCustomerRequest_(input) {
             : cleanEquipmentText(rawDetails[field]);
           if (value) details[field] = value;
         });
-        if (type === 'WATER_FEATURE' && details.featureEquipmentJson) {
+        if (type === 'WATER_FEATURE' && (details.featureEquipmentJson || Array.isArray(rawDetails.featureEquipment))) {
           try {
             const componentTypes = {PUMP: true, FILTER: true, HEATER: true, OTHER: true};
             const componentFields = [
               'pumpMake', 'pumpModel', 'pumpModelNumber', 'filterMake',
-              'filterType', 'filterModel', 'filterSize', 'cartridgeSetNumber',
+              'filterType', 'filterModel', 'filterModelNumber', 'filterSize', 'cartridgeSetNumber',
               'heaterType', 'heaterMake',
               'heaterModel', 'heaterModelNumber', 'featureEquipmentType',
               'featureEquipmentMake', 'featureEquipmentModel'
             ];
-            const parsedComponents = JSON.parse(details.featureEquipmentJson);
+            const parsedComponents = Array.isArray(rawDetails.featureEquipment)
+              ? rawDetails.featureEquipment
+              : JSON.parse(details.featureEquipmentJson);
             details.featureEquipment = (Array.isArray(parsedComponents) ? parsedComponents : [])
               .slice(0, 12).map(function (component) {
                 const componentType = cleanEquipmentText(component && component.type).toUpperCase();

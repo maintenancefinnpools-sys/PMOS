@@ -78,6 +78,28 @@ assert(sanitizerHtml.includes('data-equipment-field="modelNumber"'), 'Sanitizer 
 assert(sanitizerHtml.includes('data-equipment-field="partNumber"'), 'Sanitizer part-number field is missing.');
 assert(sanitizerHtml.includes('data-sanitizer-model-number style="display:none"'), 'Empty sanitizer model-number fields must start hidden.');
 assert(sanitizerHtml.includes('data-sanitizer-part-number style="display:none"'), 'Empty sanitizer part-number fields must start hidden.');
+const mainPumpHtml = context.pmosCatalogUnitFieldsHtml('pump', 'main_test', 'body');
+const addedPumpHtml = context.pmosCatalogUnitFieldsHtml('pump', 'added_test', 'added');
+const featurePumpHtml = context.waterFeatureEquipmentHtml('PUMP');
+for (const [surface, html] of [['main', mainPumpHtml], ['additional', addedPumpHtml], ['water-feature', featurePumpHtml]]) {
+  assert(html.includes('Pentair') && html.includes('Hayward') && html.includes('Jandy'), `${surface} pump does not use the shared make catalog.`);
+  assert(html.includes('Model Number'), `${surface} pump does not use the shared Model Number field.`);
+  assert(html.includes('placeholder="select or type"'), `${surface} pump does not use the shared editable dropdown.`);
+}
+assert(featurePumpHtml.includes('data-feature-catalog-unit="pump"'), 'Water-feature pump is not wired to the shared pump catalog handlers.');
+for (const surface of ['body', 'added', 'feature']) {
+  const html = context.pmosFilterFieldsHtml(`filter_${surface}`, surface);
+  assert(html.includes('filterModelNumber'), `${surface} filter is missing the shared model-number field.`);
+  assert(html.includes('cartridgeSetNumber'), `${surface} filter is missing the conditional Cartridge Set Number field.`);
+}
+const canonicalFeatureComponents = context.pmosWaterFeatureComponents({featureEquipment: [{type: 'PUMP', details: {pumpMake: 'Pentair'}}]});
+assert(canonicalFeatureComponents.length === 1 && canonicalFeatureComponents[0].type === 'PUMP', 'Canonical Water Feature components do not rehydrate.');
+const legacyFeatureComponents = context.pmosWaterFeatureComponents({pumpMake: 'Pentair', pumpModel: 'SuperFlo VST', pumpModelNumber: '342002'});
+assert(legacyFeatureComponents.length === 1 && legacyFeatureComponents[0].type === 'PUMP', 'Legacy Water Feature pump fields are not migrated into the shared component renderer.');
+assert(context.equipmentFieldsHtml('WATER_FEATURE', 'feature_test').indexOf('pumpMake') < 0, 'Water Feature still renders the obsolete plain pump fields.');
+assert(context.editorStyles.includes('.equipment-grid label'), 'Nested equipment fields do not inherit shared typography.');
+assert(context.clientSource.includes('function pmosRefreshMainBodyCatalogFields'), 'Existing main equipment does not repopulate shared catalog dropdowns.');
+assert(context.clientSource.includes("fields.style.display=checkbox.checked?'grid':'none'"), 'Water Feature actuator fields do not retain the shared grid layout.');
 assert(context.editorStyles.includes('.automation-fields>label'), 'Equipment Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-fields>label'), 'Chemistry Automation typography is not shared.');
 assert(context.editorStyles.includes('.chemistry-component-row'), 'Orderly Chemistry Automation component rows are missing.');
@@ -156,13 +178,17 @@ const sampleBodies = [{
   filter: {make: 'Pentair', type: 'Sand', model: 'SD60 (22.5 in · 250 lb)'},
   equipment: [{
     type: 'WATER_FEATURE',
-    details: {featureType: 'Sheer Descent', actuatorMake: 'Pentair', actuatorModel: 'CVA-24T (180°)', actuatorModelNumber: '263045'},
+    details: {
+      featureType: 'Sheer Descent',
+      actuatorMake: 'Pentair', actuatorModel: 'CVA-24T (180°)', actuatorModelNumber: '263045',
+      featureEquipment: [{type: 'PUMP', details: {pumpMake: 'Pentair', pumpModel: 'SuperFlo VST', pumpModelNumber: '342002'}}],
+    },
   }],
 }, {
   name: 'Spa', type: 'Spa', spaType: 'Spillover Spa', equipmentSetup: 'Shared with Pool', equipment: [],
 }];
 const profileHtml = profileContext.pmosRenderEquipmentProfiles(sampleBodies);
-for (const token of ['22.5&quot; Diameter · 250 lb Sand', '145322', 'Water Feature: Sheer Descent', '263045', 'Spillover']) {
+for (const token of ['22.5&quot; Diameter · 250 lb Sand', '145322', 'Water Feature: Sheer Descent', 'SuperFlo VST', '342002', '263045', 'Spillover']) {
   assert(profileHtml.includes(token), `Shared equipment profile is missing ${token}.`);
 }
 assert(profileContext.profileStyles.includes('align-items:start'), 'Equipment cards do not expand independently.');
