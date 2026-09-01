@@ -203,18 +203,6 @@ function pmosCustomerProfileEnhancementScript_() {
     };
   }
 
-  if (typeof createPmosCustomerAccount === 'function') {
-    const baseCreatePmosCustomerAccount = createPmosCustomerAccount;
-    createPmosCustomerAccount = function(input) {
-      const request = pmosCustomerNotesRequest_(input);
-      ensurePmosCustomerCategorizedNotes_();
-      const result = baseCreatePmosCustomerAccount(request);
-      savePmosCustomerCategorizedNotes_(result.customerId, request);
-      result.profile = getPmosCustomerAccountProfile(result.customerId);
-      return result;
-    };
-  }
-
   if (typeof createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling === 'function') {
     const baseCreatePmosAdditionalServiceLocationWithNotes = createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling;
     createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling = function(input) {

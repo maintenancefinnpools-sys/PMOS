@@ -134,20 +134,6 @@ function normalizePmosProfileEquipmentForContext_(profile) {
 }
 
 (function () {
-  if (typeof createPmosCustomerAccount === 'function') {
-    const baseCreatePmosCustomerAccount = createPmosCustomerAccount;
-    createPmosCustomerAccount = function(input) {
-      const result = baseCreatePmosCustomerAccount(input);
-      try {
-        result.contextNotes = savePmosCustomerContextNotes_(result.customerId, input || {});
-      } catch (error) {
-        result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-        result.warnings.push('Customer created, but contextual notes could not be saved: ' + (error && error.message ? error.message : String(error)));
-      }
-      return result;
-    };
-  }
-
   if (typeof savePmosCustomerAccountEditorData === 'function') {
     const baseSavePmosCustomerAccountEditorData = savePmosCustomerAccountEditorData;
     savePmosCustomerAccountEditorData = function(input) {

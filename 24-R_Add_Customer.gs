@@ -88,7 +88,7 @@ function applyPmosConfirmedAddressDetailsToCustomer_(customerId, addressDetails)
   SpreadsheetApp.flush();
 }
 
-function createPmosCustomerAccount(input) {
+function createPmosCustomerAccountCore_(input) {
   const request = normalizePmosAddCustomerRequest_(input);
   const warnings = [];
   const customersSheet = findFirstSheetByName_(SpreadsheetApp.getActive(), [
@@ -163,4 +163,43 @@ function createPmosCustomerAccount(input) {
     '\nPrimary service location: ' + request.serviceLocationName +
     '\nNo Water Maintenance route or recurring Calendar events were created.';
   return pmosAccountTerminologyState_(result);
+}
+
+/**
+ * Canonical add-customer pipeline. Keep cross-cutting persistence stages explicit
+ * here so behavior does not depend on Apps Script file evaluation order.
+ */
+function createPmosCustomerAccount(input) {
+  const decodedInput = typeof unpackPmosContextNotesEnvelope_ === 'function'
+    ? unpackPmosContextNotesEnvelope_(input)
+    : (input || {});
+  const request = typeof pmosCustomerNotesRequest_ === 'function'
+    ? pmosCustomerNotesRequest_(decodedInput)
+    : decodedInput;
+
+  if (typeof ensurePmosCustomerCategorizedNotes_ === 'function') {
+    ensurePmosCustomerCategorizedNotes_();
+  }
+
+  const result = createPmosCustomerAccountCore_(request);
+
+  if (typeof savePmosCustomerCategorizedNotes_ === 'function') {
+    savePmosCustomerCategorizedNotes_(result.customerId, request);
+  }
+  if (typeof getPmosCustomerAccountProfile === 'function') {
+    result.profile = getPmosCustomerAccountProfile(result.customerId);
+  }
+
+  if (typeof savePmosCustomerContextNotes_ === 'function') {
+    try {
+      result.contextNotes = savePmosCustomerContextNotes_(result.customerId, request);
+    } catch (error) {
+      result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
+      result.warnings.push(
+        'Customer created, but contextual notes could not be saved: ' +
+        (error && error.message ? error.message : String(error))
+      );
+    }
+  }
+  return result;
 }

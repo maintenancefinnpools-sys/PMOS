@@ -29,10 +29,6 @@ function packPmosContextNotesEnvelope_(notes) {
 }
 
 (function () {
-  if (typeof createPmosCustomerAccount === 'function') {
-    const base = createPmosCustomerAccount;
-    createPmosCustomerAccount = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };
-  }
   if (typeof savePmosCustomerAccountEditorData === 'function') {
     const base = savePmosCustomerAccountEditorData;
     savePmosCustomerAccountEditorData = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };
