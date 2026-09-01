@@ -1,10 +1,6 @@
-/** Account-ID extension for Add Maintenance Customer. */
-(function () {
-  if (typeof createMaintenanceCustomer !== 'function') return;
-  const baseCreateMaintenanceCustomer = createMaintenanceCustomer;
-  createMaintenanceCustomer = function(input) {
+/** Apply Account-ID and primary-location identity after the maintenance transaction. */
+function applyPmosMaintenanceAccountIdentity_(result, input) {
     const source = input || {};
-    const result = baseCreateMaintenanceCustomer(source);
     const isPrimary = source.primaryServiceLocation === false ? false : true;
     const lastName = String(source.lastName || '').trim();
     const requestedLocationName = String(source.serviceLocationName || '').trim();
@@ -22,5 +18,4 @@
     result.serviceLocationName = locationName;
     result.primaryServiceLocation = isPrimary;
     return result;
-  };
-})();
+}

@@ -215,17 +215,6 @@ function pmosCustomerProfileEnhancementScript_() {
     };
   }
 
-  if (typeof createMaintenanceCustomer === 'function') {
-    const baseCreateMaintenanceCustomer = createMaintenanceCustomer;
-    createMaintenanceCustomer = function(input) {
-      const request = pmosCustomerNotesRequest_(input);
-      ensurePmosCustomerCategorizedNotes_();
-      const result = baseCreateMaintenanceCustomer(request);
-      savePmosCustomerCategorizedNotes_(result.customerId, request);
-      return result;
-    };
-  }
-
   if (typeof createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling === 'function') {
     const baseCreatePmosAdditionalServiceLocationWithNotes = createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling;
     createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling = function(input) {

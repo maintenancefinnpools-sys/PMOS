@@ -33,10 +33,6 @@ function packPmosContextNotesEnvelope_(notes) {
     const base = createPmosCustomerAccount;
     createPmosCustomerAccount = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };
   }
-  if (typeof createMaintenanceCustomer === 'function') {
-    const base = createMaintenanceCustomer;
-    createMaintenanceCustomer = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };
-  }
   if (typeof savePmosCustomerAccountEditorData === 'function') {
     const base = savePmosCustomerAccountEditorData;
     savePmosCustomerAccountEditorData = function(input) { return base(unpackPmosContextNotesEnvelope_(input)); };

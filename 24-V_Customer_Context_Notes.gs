@@ -148,20 +148,6 @@ function normalizePmosProfileEquipmentForContext_(profile) {
     };
   }
 
-  if (typeof createMaintenanceCustomer === 'function') {
-    const baseCreateMaintenanceCustomer = createMaintenanceCustomer;
-    createMaintenanceCustomer = function(input) {
-      const result = baseCreateMaintenanceCustomer(input);
-      try {
-        result.contextNotes = savePmosCustomerContextNotes_(result.customerId, input || {});
-      } catch (error) {
-        result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
-        result.warnings.push('Maintenance customer created, but contextual notes could not be saved: ' + (error && error.message ? error.message : String(error)));
-      }
-      return result;
-    };
-  }
-
   if (typeof savePmosCustomerAccountEditorData === 'function') {
     const baseSavePmosCustomerAccountEditorData = savePmosCustomerAccountEditorData;
     savePmosCustomerAccountEditorData = function(input) {

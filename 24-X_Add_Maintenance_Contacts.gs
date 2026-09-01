@@ -36,16 +36,12 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
   return request;
 }
 
-(function () {
-  if (typeof createMaintenanceCustomer === 'function') {
-    const baseCreateMaintenanceCustomer = createMaintenanceCustomer;
-    createMaintenanceCustomer = function(input) {
-      const request = unpackPmosMaintenanceContactsEnvelope_(input);
+function completePmosMaintenanceCustomerContacts_(result, input) {
+      const request = input || {};
       const accountContacts = typeof normalizePmosAccountContacts_ === 'function'
         ? normalizePmosAccountContacts_(request.accountContacts || []) : [];
       const locationContacts = typeof normalizePmosServiceLocationContacts_ === 'function'
         ? normalizePmosServiceLocationContacts_(request.serviceLocationContacts || []) : [];
-      const result = baseCreateMaintenanceCustomer(request);
       result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
 
       if (Object.prototype.hasOwnProperty.call(request, 'accountBillingAddress') &&
@@ -88,10 +84,7 @@ function unpackPmosMaintenanceContactsEnvelope_(input) {
         }
       }
       return result;
-    };
-  }
-
-})();
+}
 
 function pmosAddMaintenanceContactsStyles_() {
   return (

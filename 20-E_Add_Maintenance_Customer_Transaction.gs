@@ -5,7 +5,7 @@
  * customer and route assignments, refreshes derived customer data, and marks
  * Calendar planning stale. It never mutates Calendar or starts Calendar Sync.
  */
-function createMaintenanceCustomer(input) {
+function createMaintenanceCustomerCore_(input) {
   const request = normalizeMaintenanceCustomerRequest_(input || {});
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(10000)) {
@@ -138,6 +138,49 @@ function createMaintenanceCustomer(input) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Canonical Add Maintenance Customer pipeline.
+ *
+ * Legacy envelopes are decoded before validation. The authoritative spreadsheet
+ * transaction runs once, followed by explicit account, note, billing and contact
+ * persistence stages. No load-time function replacement is involved.
+ */
+function createMaintenanceCustomer(input) {
+  let request = Object.assign({}, input || {});
+  if (typeof unpackPmosMaintenanceContactsEnvelope_ === 'function') {
+    request = unpackPmosMaintenanceContactsEnvelope_(request);
+  } else if (typeof unpackPmosContextNotesEnvelope_ === 'function') {
+    request = unpackPmosContextNotesEnvelope_(request);
+  }
+  if (typeof pmosCustomerNotesRequest_ === 'function') {
+    request = pmosCustomerNotesRequest_(request);
+  }
+  if (typeof ensurePmosCustomerCategorizedNotes_ === 'function') {
+    ensurePmosCustomerCategorizedNotes_();
+  }
+
+  let result = createMaintenanceCustomerCore_(request);
+  if (typeof applyPmosMaintenanceAccountIdentity_ === 'function') {
+    result = applyPmosMaintenanceAccountIdentity_(result, request);
+  }
+  if (typeof savePmosCustomerCategorizedNotes_ === 'function') {
+    savePmosCustomerCategorizedNotes_(result.customerId, request);
+  }
+  if (typeof savePmosCustomerContextNotes_ === 'function') {
+    try {
+      result.contextNotes = savePmosCustomerContextNotes_(result.customerId, request);
+    } catch (error) {
+      result.warnings = Array.isArray(result.warnings) ? result.warnings : [];
+      result.warnings.push('Maintenance customer created, but contextual notes could not be saved: ' +
+        String(error && error.message ? error.message : error));
+    }
+  }
+  if (typeof completePmosMaintenanceCustomerContacts_ === 'function') {
+    result = completePmosMaintenanceCustomerContacts_(result, request);
+  }
+  return result;
 }
 
 function ensureMaintenanceCustomerEquipmentSheet_(spreadsheet) {
