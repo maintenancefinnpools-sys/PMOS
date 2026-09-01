@@ -53,6 +53,7 @@ function createRecurringSeries_(calendar, plan) {
     {description: buildPmosManagedRecurringDescription_(plan), location: plan.location}
   );
   applyPmosRecurringSeriesIdentity_(series, plan);
+  applyPmosRecurringReminderPolicy_(series, plan);
   if (plan.color) series.setColor(plan.color);
   return series;
 }
@@ -116,6 +117,77 @@ function updateRecurringSeries_(series, plan, calendar) {
   // Preserve discoverability on the recurring-series parent without changing
   // its recurrence rule or rewriting historical occurrence content.
   applyPmosRecurringSeriesIdentityIfChanged_(series, plan);
+  applyPmosRecurringReminderPolicy_(series, plan);
+}
+
+/**
+ * Monthly maintenance needs enough notice for staff to contact the customer.
+ * Keep this policy on the recurring-series parent so every occurrence receives
+ * the same Google Calendar notifications without rewriting past instances.
+ */
+function pmosRecurringReminderPolicySignature_(plan) {
+  const frequency = normalize_(
+    plan && (plan.frequency || (plan.row && plan.row.frequency)) || ''
+  );
+  return frequency.indexOf('monthly') >= 0
+    ? 'MONTHLY_POPUP_48H_24H_V1'
+    : '';
+}
+
+function applyPmosRecurringReminderPolicy_(series, plan) {
+  if (!series) throw new Error('Recurring reminder policy requires a Calendar series.');
+  const policy = pmosRecurringReminderPolicySignature_(plan);
+  const reminderState = readPmosRecurringReminderState_(series);
+  const previousPolicy = reminderState.policy;
+
+  if (policy) {
+    const desiredPopupMinutes = [1440, 2880];
+    const alreadyCorrect =
+      reminderState.popupMinutes.length === desiredPopupMinutes.length &&
+      reminderState.popupMinutes.every(function(value,index){
+        return Number(value) === desiredPopupMinutes[index];
+      }) &&
+      reminderState.emailMinutes.length === 0 && reminderState.smsMinutes.length === 0;
+    if (!alreadyCorrect) {
+      series.removeAllReminders();
+      series.addPopupReminder(2880);
+      series.addPopupReminder(1440);
+    }
+    if (previousPolicy !== policy) series.setTag('PMOS_REMINDER_POLICY', policy);
+    return;
+  }
+
+  // Only undo overrides that PMOS itself applied. Other recurring frequencies
+  // retain their existing Calendar defaults or any user-managed reminders.
+  if (previousPolicy) {
+    series.resetRemindersToDefault();
+    series.deleteTag('PMOS_REMINDER_POLICY');
+  }
+}
+
+function readPmosRecurringReminderState_(series) {
+  const state = {policy:'',popupMinutes:[],emailMinutes:[],smsMinutes:[]};
+  try { state.policy = String(series.getTag('PMOS_REMINDER_POLICY') || ''); }
+  catch (error) {}
+  try {
+    state.popupMinutes = (series.getPopupReminders() || []).slice()
+      .sort(function(a,b){ return Number(a)-Number(b); });
+  } catch (error) {}
+  try { state.emailMinutes = series.getEmailReminders() || []; } catch (error) {}
+  try { state.smsMinutes = series.getSmsReminders() || []; } catch (error) {}
+  return state;
+}
+
+function verifyPmosRecurringReminderPolicy_(series, plan) {
+  const policy = pmosRecurringReminderPolicySignature_(plan);
+  const state = readPmosRecurringReminderState_(series);
+  if (!policy) return state.policy === '';
+  return state.policy === policy &&
+    state.popupMinutes.length === 2 &&
+    Number(state.popupMinutes[0]) === 1440 &&
+    Number(state.popupMinutes[1]) === 2880 &&
+    state.emailMinutes.length === 0 &&
+    state.smsMinutes.length === 0;
 }
 
 function normalizePmosCalendarDescriptionForWrite_(value) {
@@ -190,7 +262,8 @@ function recurringSeriesSignature_(plan) {
     JSON.stringify({
       title:plan.title,start:plan.start.toISOString(),end:plan.end.toISOString(),
       until:plan.until ? plan.until.toISOString() : '',location:plan.location,
-      description:plan.description,color:plan.color
+      description:plan.description,color:plan.color,
+      reminderPolicy:pmosRecurringReminderPolicySignature_(plan)
     })
   ));
 }

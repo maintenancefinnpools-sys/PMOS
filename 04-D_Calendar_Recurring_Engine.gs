@@ -131,6 +131,7 @@ function buildRecurringSeriesPlan_(routeReader) {
       customerId: row.customerId || '',
       layer: row.layer,
       title: row.title,
+      frequency: row.frequency,
       start,
       end,
       until,

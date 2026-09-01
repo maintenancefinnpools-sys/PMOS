@@ -26,6 +26,9 @@ jobs:
       - name: Check shared customer equipment behavior
         run: node tools/check_customer_equipment_contract.js
 
+      - name: Check recurring Calendar reminder policy
+        run: node tools/check_calendar_reminder_contract.js
+
       - name: Check Web navigation and customer lookup behavior
         run: node tools/check_web_navigation_lookup_contract.js
 
