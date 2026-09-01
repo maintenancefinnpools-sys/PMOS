@@ -86,6 +86,15 @@ for (const [surface, html] of [['main', mainPumpHtml], ['additional', addedPumpH
   assert(html.includes('Model Number'), `${surface} pump does not use the shared Model Number field.`);
   assert(html.includes('placeholder="select or type"'), `${surface} pump does not use the shared editable dropdown.`);
 }
+for (const [surface, html] of [
+  ['main', context.pmosCatalogUnitFieldsHtml('heater', 'main_heater_test', 'body')],
+  ['additional', context.pmosCatalogUnitFieldsHtml('heater', 'added_heater_test', 'added')],
+  ['water-feature', context.waterFeatureEquipmentHtml('HEATER')],
+]) {
+  assert(html.includes('data-pmos-shared-heater-type="true"'), `${surface} heater does not use the shared Heater Type control.`);
+  assert(html.includes('<option value="Solar">Solar Heating</option>'), `${surface} heater is missing Solar Heating.`);
+}
+assert(context.pmosCatalogUnitFieldsHtml('heater', 'main_heater_event_test', 'body').includes('onchange="configurePrimaryHeaterType(this)"'), 'Main Solar Heating does not open its specialized controls directly.');
 assert(featurePumpHtml.includes('data-feature-catalog-unit="pump"'), 'Water-feature pump is not wired to the shared pump catalog handlers.');
 for (const surface of ['body', 'added', 'feature']) {
   const html = context.pmosFilterFieldsHtml(`filter_${surface}`, surface);
@@ -113,6 +122,7 @@ assert(context.clientSource.includes("host.style.display=checkbox.checked?'block
 assert(context.clientSource.includes('hydrateChemistryAutomationDetails'), 'Chemistry Automation detail hydration is missing.');
 assert(context.clientSource.includes('pmosEnsureCustomerBodyEnhancements'), 'Core equipment renderer does not invoke the shared body enhancements.');
 assert(context.clientSource.includes('pmosConfigureSolarHeating'), 'Core equipment renderer does not wire Solar Heating changes.');
+assert(context.clientSource.includes("querySelector('[data-pmos-shared-heater-type]')"), 'Shared Heater Type repair still trusts a stale card-level marker.');
 assert(context.clientSource.includes('data-solar-connected'), 'Solar Heating connection-to-automation checkbox is missing.');
 assert(context.clientSource.includes('AquaSolar GL-235'), 'Solar-specific controller catalog is missing AquaSolar GL-235.');
 assert(!context.clientSource.includes('data-solar-field="notes"'), 'Solar components still render individual Notes fields.');
