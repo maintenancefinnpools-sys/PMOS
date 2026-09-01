@@ -78,7 +78,7 @@ function searchPmosCustomerAccountProfiles(query) {
   });
 }
 
-function getPmosCustomerAccountProfile(customerId) {
+function getPmosCustomerAccountProfileCore_(customerId) {
   const profile = getPmosCustomerProfile(customerId);
   const account = getPmosCustomerAccount_(customerId);
   const primary = account.locations.filter(function(location) {
@@ -100,7 +100,31 @@ function getPmosCustomerAccountProfile(customerId) {
   return profile;
 }
 
-function getPmosCustomerAccountEditorData(customerId) {
+function getPmosCustomerAccountProfile(customerId) {
+  let profile = getPmosCustomerAccountProfileCore_(customerId);
+  if (typeof readPmosCustomerCategorizedNotes_ === 'function') {
+    const notes = readPmosCustomerCategorizedNotes_(customerId);
+    profile.generalNotes = notes.generalNotes;
+    profile.notes = notes.generalNotes;
+    profile.openingNotes = notes.openingNotes;
+    profile.closingNotes = notes.closingNotes;
+    profile.maintenanceNotes = notes.maintenanceNotes;
+  }
+  if (typeof getPmosCustomerContextNotes_ === 'function') {
+    const notes = getPmosCustomerContextNotes_(customerId);
+    profile.generalNotes = notes.generalNotes;
+    profile.equipmentNotes = notes.equipmentNotes;
+    profile.maintenanceNotes = notes.maintenanceNotes;
+    profile.openingNotes = notes.openingNotes;
+    profile.closingNotes = notes.closingNotes;
+    profile.notes = notes.generalNotes;
+  }
+  return typeof normalizePmosProfileEquipmentForContext_ === 'function'
+    ? normalizePmosProfileEquipmentForContext_(profile)
+    : profile;
+}
+
+function getPmosCustomerAccountEditorDataCore_(customerId) {
   // Account initialization can fill missing Account ID, primary-location, or
   // default location-name cells. Do that before the editor token is generated;
   // otherwise a newly opened editor can invalidate its own optimistic-lock token.
@@ -114,6 +138,35 @@ function getPmosCustomerAccountEditorData(customerId) {
   data.isPrimaryServiceLocation = selected ? selected.primary : true;
   data.serviceLocationContacts = getPmosServiceLocationContacts_(customerId);
   data.accountBillingAddress = getPmosAccountBillingAddress_(customerId);
+  return data;
+}
+
+function getPmosCustomerAccountEditorData(customerId) {
+  let data = getPmosCustomerAccountEditorDataCore_(customerId);
+  if (typeof readPmosCustomerCategorizedNotes_ === 'function') {
+    const notes = readPmosCustomerCategorizedNotes_(customerId);
+    data.generalNotes = notes.generalNotes;
+    data.notes = notes.generalNotes;
+    data.equipmentNotes = notes.equipmentNotes;
+    data.openingNotes = notes.openingNotes;
+    data.closingNotes = notes.closingNotes;
+    data.maintenanceNotes = notes.maintenanceNotes;
+  }
+  if (typeof getPmosCustomerContextNotes_ === 'function') {
+    const notes = getPmosCustomerContextNotes_(customerId);
+    data.generalNotes = notes.generalNotes;
+    data.equipmentNotes = notes.equipmentNotes;
+    data.maintenanceNotes = notes.maintenanceNotes;
+    data.openingNotes = notes.openingNotes;
+    data.closingNotes = notes.closingNotes;
+    data.notes = notes.generalNotes;
+  }
+  if (typeof normalizePmosProfileEquipmentForContext_ === 'function') {
+    data = normalizePmosProfileEquipmentForContext_(data);
+  }
+  if (typeof packPmosContextNotesEnvelope_ === 'function') {
+    data.notes = packPmosContextNotesEnvelope_(data);
+  }
   return data;
 }
 

@@ -40,14 +40,6 @@ function packPmosContextNotesEnvelope_(notes) {
     };
   }
 
-  if (typeof getPmosCustomerAccountEditorData === 'function') {
-    const base = getPmosCustomerAccountEditorData;
-    getPmosCustomerAccountEditorData = function(customerId) {
-      const data = base(customerId);
-      data.notes = packPmosContextNotesEnvelope_(data);
-      return data;
-    };
-  }
   if (typeof getPmosCustomerEditorData === 'function') {
     const base = getPmosCustomerEditorData;
     getPmosCustomerEditorData = function(customerId) {

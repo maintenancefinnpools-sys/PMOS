@@ -174,35 +174,6 @@ function pmosCustomerProfileEnhancementScript_() {
     };
   }
 
-  if (typeof getPmosCustomerAccountProfile === 'function') {
-    const baseGetPmosCustomerAccountProfile = getPmosCustomerAccountProfile;
-    getPmosCustomerAccountProfile = function(customerId) {
-      const profile = baseGetPmosCustomerAccountProfile(customerId);
-      const notes = readPmosCustomerCategorizedNotes_(customerId);
-      profile.generalNotes = notes.generalNotes;
-      profile.notes = notes.generalNotes;
-      profile.openingNotes = notes.openingNotes;
-      profile.closingNotes = notes.closingNotes;
-      profile.maintenanceNotes = notes.maintenanceNotes;
-      return profile;
-    };
-  }
-
-  if (typeof getPmosCustomerAccountEditorData === 'function') {
-    const baseGetPmosCustomerAccountEditorData = getPmosCustomerAccountEditorData;
-    getPmosCustomerAccountEditorData = function(customerId) {
-      const data = baseGetPmosCustomerAccountEditorData(customerId);
-      const notes = readPmosCustomerCategorizedNotes_(customerId);
-      data.generalNotes = notes.generalNotes;
-      data.notes = notes.generalNotes;
-      data.equipmentNotes = notes.equipmentNotes;
-      data.openingNotes = notes.openingNotes;
-      data.closingNotes = notes.closingNotes;
-      data.maintenanceNotes = notes.maintenanceNotes;
-      return data;
-    };
-  }
-
   if (typeof createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling === 'function') {
     const baseCreatePmosAdditionalServiceLocationWithNotes = createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling;
     createPmosAdditionalServiceLocationForAccountWithLocationContactsAndBilling = function(input) {

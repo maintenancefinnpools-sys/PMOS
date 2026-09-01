@@ -134,36 +134,6 @@ function normalizePmosProfileEquipmentForContext_(profile) {
 }
 
 (function () {
-  if (typeof getPmosCustomerAccountProfile === 'function') {
-    const baseGetPmosCustomerAccountProfile = getPmosCustomerAccountProfile;
-    getPmosCustomerAccountProfile = function(customerId) {
-      const profile = baseGetPmosCustomerAccountProfile(customerId);
-      const notes = getPmosCustomerContextNotes_(customerId);
-      profile.generalNotes = notes.generalNotes;
-      profile.equipmentNotes = notes.equipmentNotes;
-      profile.maintenanceNotes = notes.maintenanceNotes;
-      profile.openingNotes = notes.openingNotes;
-      profile.closingNotes = notes.closingNotes;
-      profile.notes = notes.generalNotes;
-      return normalizePmosProfileEquipmentForContext_(profile);
-    };
-  }
-
-  if (typeof getPmosCustomerAccountEditorData === 'function') {
-    const baseGetPmosCustomerAccountEditorData = getPmosCustomerAccountEditorData;
-    getPmosCustomerAccountEditorData = function(customerId) {
-      const data = baseGetPmosCustomerAccountEditorData(customerId);
-      const notes = getPmosCustomerContextNotes_(customerId);
-      data.generalNotes = notes.generalNotes;
-      data.equipmentNotes = notes.equipmentNotes;
-      data.maintenanceNotes = notes.maintenanceNotes;
-      data.openingNotes = notes.openingNotes;
-      data.closingNotes = notes.closingNotes;
-      data.notes = notes.generalNotes;
-      return normalizePmosProfileEquipmentForContext_(data);
-    };
-  }
-
   if (typeof buildPmosCustomerAccountLookupHtml_ === 'function') {
     const baseBuildPmosCustomerAccountLookupHtml = buildPmosCustomerAccountLookupHtml_;
     buildPmosCustomerAccountLookupHtml_ = function(mode, initialCustomerId) {
