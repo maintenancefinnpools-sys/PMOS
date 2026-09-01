@@ -5,24 +5,19 @@
  * broader legacy pump/chlorinator coverage and explicit chemistry-automation
  * accessories.
  */
-(function () {
-  if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
-    const baseStyles = pmosCustomerEquipmentEditorStyles_;
-    pmosCustomerEquipmentEditorStyles_ = function () {
-      return baseStyles() +
+function pmosCustomerEquipmentCatalogStyles_() {
+  return (
         '.chemistry-selectors{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}' +
         '.chemistry-selectors>label,.chemistry-component-row>label,.chemistry-other-equipment{display:flex;flex-direction:column;gap:5px;color:#6f7d84;font-size:11px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}' +
         '.chemistry-equipment-host{grid-column:1/-1;width:100%;box-sizing:border-box}.chemistry-equipment-card{width:100%;margin-top:2px;box-sizing:border-box}' +
         '.chemistry-component-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.chemistry-component-row{display:grid;grid-template-columns:minmax(110px,.65fr) minmax(170px,1.35fr) minmax(125px,.8fr);gap:8px;align-items:end;padding:8px;border:1px solid #dbeafe;border-radius:8px;background:#f8fafc}.chemistry-component-row>label:last-child:nth-child(2){grid-column:2/-1}.chemistry-other-equipment{grid-column:1/-1}' +
         '.chemistry-component-name{align-self:center;color:#293944;font-size:12px;font-weight:900}.chemistry-other-equipment{padding-top:3px}' +
-        '@media(max-width:1100px){.chemistry-component-list{grid-template-columns:1fr}}@media(max-width:760px){.chemistry-selectors,.chemistry-component-row{grid-template-columns:1fr}.chemistry-component-row>label:last-child:nth-child(2){grid-column:auto}}';
-    };
-  }
+        '@media(max-width:1100px){.chemistry-component-list{grid-template-columns:1fr}}@media(max-width:760px){.chemistry-selectors,.chemistry-component-row{grid-template-columns:1fr}.chemistry-component-row>label:last-child:nth-child(2){grid-column:auto}}'
+  );
+}
 
-  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
-  const baseScript = pmosCustomerEquipmentEditorScript_;
-  pmosCustomerEquipmentEditorScript_ = function () {
-    return baseScript() + String.raw`
+function pmosCustomerEquipmentCatalogScript_() {
+  return String.raw`
 (function(){
   function pmosNormEquipmentNumber(value){return String(value||'').trim().toUpperCase().replace(/[\s_]/g,'-')}
   function pmosCatalogNumberValue(item){return typeof item==='string'?item:(item&&item.value)||''}
@@ -77,15 +72,14 @@
   equipmentTypeLabel=function(type){return {FLOW_CELL:'Flow Cell',ACID_TANK:'Acid Tank',CHLORINE_TANK:'Chlorine Tank',PH_PROBE:'pH Probe',ORP_PROBE:'ORP Probe'}[type]||previousEquipmentTypeLabel(type)};
 })();
 `;
-  };
-})();
+}
 
 /** Shared body overview and standalone-spa behavior used by every customer form. */
 (function () {
   if (typeof pmosCustomerEquipmentEditorStyles_ === 'function') {
     const baseStyles = pmosCustomerEquipmentEditorStyles_;
     pmosCustomerEquipmentEditorStyles_ = function () {
-      return baseStyles() +
+      return baseStyles() + pmosCustomerEquipmentCatalogStyles_() +
         '.body-grid{grid-template-columns:repeat(5,minmax(0,1fr))}' +
         '.body-overview-field select,.body-overview-field input{min-width:0}' +
         '.pmos-volume-field{grid-column:span 2}.pmos-volume-control{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:7px}.pmos-volume-unit{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;overflow:hidden;border:1px solid #bfcbd1;border-radius:7px;background:#fff}.pmos-volume-unit:focus-within{border-color:#017db1;box-shadow:0 0 0 3px rgba(1,125,177,.13)}.pmos-volume-unit input{width:100%;border:0!important;box-shadow:none!important;background:transparent!important}.pmos-volume-suffix{padding-right:9px;color:#64737b;font-size:11px;font-weight:900;white-space:nowrap}.pmos-volume-divider{color:#64737b;font-weight:900}' +
@@ -101,7 +95,7 @@
   if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
   const baseScript = pmosCustomerEquipmentEditorScript_;
   pmosCustomerEquipmentEditorScript_ = function () {
-    return baseScript() + String.raw`
+    return baseScript() + pmosCustomerEquipmentCatalogScript_() + String.raw`
 (function(){
   var PMOS_BODY_SHAPES=['Rectangle','Round','Oval','Kidney','L-Shaped','Roman','Grecian','Lazy L','Figure Eight','Coffin','Free Form','Other'];
   var PMOS_MAKE_ORDER=['Pentair','Hayward','Jandy','Sta-Rite','Nature2'];
