@@ -3,11 +3,8 @@
  * Keeps sanitizer data in PMOS_SANITIZER_CATALOG, restores controller values,
  * and broadens reverse model-number recognition across sanitizer equipment.
  */
-(function () {
-  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
-  const baseEquipmentEnhancementScript = pmosCustomerEquipmentEditorScript_;
-  pmosCustomerEquipmentEditorScript_ = function () {
-    return baseEquipmentEnhancementScript() + String.raw`
+function pmosCustomerEquipmentCatalogFixScript_() {
+  return String.raw`
 (function(){
   function normalizeEquipmentNumber(value){return String(value||'').trim().toUpperCase().replace(/[\s_]/g,'-')}
   function numberValue(item){return typeof item==='string'?item:(item&&item.value)||''}
@@ -88,5 +85,4 @@
   };
 })();
 `;
-  };
-})();
+}

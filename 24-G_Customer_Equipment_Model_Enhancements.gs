@@ -4,11 +4,8 @@
  * Extends the shared Add Maintenance Client / Edit Customer equipment editor
  * without duplicating its renderer. The base component remains authoritative.
  */
-(function () {
-  if (typeof pmosCustomerEquipmentEditorScript_ !== 'function') return;
-  const baseEquipmentEditorScript = pmosCustomerEquipmentEditorScript_;
-  pmosCustomerEquipmentEditorScript_ = function () {
-    return baseEquipmentEditorScript() + String.raw`
+function pmosCustomerEquipmentModelEnhancementScript_() {
+  return String.raw`
 
 /* PMOS equipment-model enhancement layer. */
 (function(){
@@ -125,5 +122,4 @@
   renderPrimarySanitizer=function(select){pmosBaseRenderPrimarySanitizer(select);var body=select.closest('.water-body'),card=body&&body.querySelector('.primary-sanitizer-card');if(card)pmosUpdateHaywardSaltController(card)};
 })();
 `;
-  };
-})();
+}
