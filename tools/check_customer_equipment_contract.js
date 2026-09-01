@@ -92,9 +92,10 @@ for (const [surface, html] of [
   ['water-feature', context.waterFeatureEquipmentHtml('HEATER')],
 ]) {
   assert(html.includes('data-pmos-shared-heater-type="true"'), `${surface} heater does not use the shared Heater Type control.`);
-  assert(html.includes('<option value="Solar">Solar Heating</option>'), `${surface} heater is missing Solar Heating.`);
+  assert(html.includes('<input ') && html.includes('list=') && html.includes('<option value="Solar Heating">'), `${surface} heater does not use the shared editable PMOS control with Solar Heating.`);
+  assert(!html.includes('<select ') && !html.includes('Select Heater Type</option>'), `${surface} heater regressed to a native select with a selectable prompt.`);
 }
-assert(context.pmosCatalogUnitFieldsHtml('heater', 'main_heater_event_test', 'body').includes('onchange="configurePrimaryHeaterType(this)"'), 'Main Solar Heating does not open its specialized controls directly.');
+assert(context.pmosCatalogUnitFieldsHtml('heater', 'main_heater_event_test', 'body').includes('oninput="configurePrimaryHeaterType(this)"'), 'Main Solar Heating does not open its specialized controls directly.');
 assert(featurePumpHtml.includes('data-feature-catalog-unit="pump"'), 'Water-feature pump is not wired to the shared pump catalog handlers.');
 for (const surface of ['body', 'added', 'feature']) {
   const html = context.pmosFilterFieldsHtml(`filter_${surface}`, surface);
@@ -124,6 +125,8 @@ assert(context.clientSource.includes('pmosEnsureCustomerBodyEnhancements'), 'Cor
 assert(context.clientSource.includes('pmosConfigureSolarHeating'), 'Core equipment renderer does not wire Solar Heating changes.');
 assert(context.clientSource.includes("querySelector('[data-pmos-shared-heater-type]')"), 'Shared Heater Type repair still trusts a stale card-level marker.');
 assert(context.clientSource.includes('data-solar-connected'), 'Solar Heating connection-to-automation checkbox is missing.');
+assert(context.clientSource.includes("if(solar&&field)field.value=''"), 'Solar Heating does not immediately clear obsolete generic heater identity fields.');
+assert(context.clientSource.includes("bodies[index].heater.make=''"), 'Solar Heating still saves the obsolete generic heater make.');
 assert(context.clientSource.includes('AquaSolar GL-235'), 'Solar-specific controller catalog is missing AquaSolar GL-235.');
 assert(!context.clientSource.includes('data-solar-field="notes"'), 'Solar components still render individual Notes fields.');
 assert(context.clientSource.includes('pmosConfigureSharedBody'), 'Shared Pool/Spa equipment inheritance is missing.');
