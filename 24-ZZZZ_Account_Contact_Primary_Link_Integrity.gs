@@ -45,6 +45,31 @@ function pmosReorderAccountGoogleResources_(customerId, requestedPrimaryResource
   return {changed: true, resourceName: requested};
 }
 
+/** Create or safely match a Google Contact when an unlinked person becomes Primary. */
+function pmosEnsurePrimaryAccountGoogleResource_(customerId) {
+  const customer = getPmosAccountHolderContactRecord_(customerId, true);
+  let person = null;
+  const candidates = findPmosGoogleContactCandidates_(customer).filter(function(candidate) {
+    return candidate.automaticMatch;
+  });
+  if (candidates.length > 1) {
+    return {changed: false, warning: 'More than one Google Contact matches the new Primary Account Contact. PMOS saved the new primary person, but Google Contact linking requires review.'};
+  }
+  if (candidates.length === 1) {
+    person = People.People.get(candidates[0].resourceName, {personFields: PMOS_CONTACT_FIELDS_});
+  } else {
+    person = People.People.createContact(buildPmosGooglePerson_(customer, null), {personFields: PMOS_CONTACT_FIELDS_});
+  }
+  const resourceName = String(person && person.resourceName || '').trim();
+  if (!resourceName) throw new Error('Google Contacts did not return the new Primary Account Contact identity.');
+  const resources = [person].concat((customer.resourceNames || []).filter(function(value) {
+    return String(value || '').trim() !== resourceName;
+  }));
+  writePmosGoogleContactLinks_(customer, resources);
+  if (typeof syncPmosAccountSharedCustomerFields_ === 'function') syncPmosAccountSharedCustomerFields_(customerId);
+  return {changed: true, resourceName: resourceName, created: candidates.length === 0};
+}
+
 function pmosAccountContactPrimaryIntegrityScript_() {
   return String.raw`
 (function(){

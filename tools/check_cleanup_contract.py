@@ -95,6 +95,9 @@ def main() -> int:
         failures.append("account-contact integrity module replaced the canonical lifecycle save")
     if re.search(r"pmosCollectAccountContacts\s*=\s*function", lifecycle_integrity):
         failures.append("account-contact integrity module replaced the canonical contact collector")
+    lifecycle = (ROOT / "24-Z_Customer_Profile_Editor_Lifecycle.gs").read_text(encoding="utf-8")
+    if "pmosEnsurePrimaryAccountGoogleResource_" not in lifecycle:
+        failures.append("canonical lifecycle save no longer prepares an unlinked promoted Primary Account Contact")
 
     for name in sorted(RETAINED_ENTRY_POINTS | RETAINED_TRIGGER_HANDLERS):
         if not declared(name):

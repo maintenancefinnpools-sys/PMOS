@@ -290,6 +290,14 @@ function savePmosCustomerLifecycleEditorData(input) {
       warnings.push('Account Contact order was saved in PMOS, but the Google Contact primary-link order could not be updated: ' +
         String(error && error.message ? error.message : error));
     }
+  } else if (!requestedPrimaryResourceName && typeof pmosEnsurePrimaryAccountGoogleResource_ === 'function') {
+    try {
+      const primaryLink = pmosEnsurePrimaryAccountGoogleResource_(result.customerId || customerId);
+      if (primaryLink.warning) warnings.push(primaryLink.warning);
+    } catch (error) {
+      warnings.push('The Primary Account Contact was saved in PMOS, but its Google Contact could not be created or linked: ' +
+        String(error && error.message ? error.message : error));
+    }
   }
   if (removedAccountContactResources.length && typeof pmosUnlinkRemovedAccountGoogleResources_ === 'function') {
     const keepResources = rawAccountContacts

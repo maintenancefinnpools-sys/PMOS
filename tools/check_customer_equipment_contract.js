@@ -134,6 +134,9 @@ assert(context.clientSource.includes('AquaSolar GL-235'), 'Solar-specific contro
 assert(context.clientSource.includes("{name:'SunTouch',numbers:[]}"), 'Legacy Pentair SunTouch is missing from the solar-specific controller catalog.');
 assert(!context.clientSource.includes('data-solar-field="notes"'), 'Solar components still render individual Notes fields.');
 assert(context.clientSource.includes('data-solar-notes'), 'The shared Solar Equipment Notes field is missing.');
+assert(context.clientSource.includes('pmos-solar-add-field'), 'Solar Add Equipment is not presented as a compact field beside Heater Type.');
+assert(context.clientSource.includes("heaterLabel.insertAdjacentElement('afterend',addField)"), 'Solar Add Equipment is not placed beside Heater Type.');
+assert(context.editorStyles.includes('.pmos-solar-equipment-head .remove-button{position:absolute;right:7px;top:7px'), 'Solar equipment Remove is not positioned at the card top-right.');
 assert(context.clientSource.includes('<option value="BOOSTER_PUMP">Pump</option>'), 'Solar equipment still uses the unwanted Booster Pump label.');
 const solarPanelSource = context.clientSource.slice(
   context.clientSource.indexOf('function ensureSolarPanel'),

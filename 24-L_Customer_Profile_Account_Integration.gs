@@ -93,6 +93,9 @@ function getPmosCustomerAccountProfileCore_(customerId) {
   profile.accountPrimaryCustomerId = primary ? primary.customerId : profile.customerId;
   profile.serviceLocations = account.locations;
   profile.selectedServiceLocation = selected;
+  profile.accountContacts = typeof pmosCustomerOrderedAccountContacts_ === 'function'
+    ? pmosCustomerOrderedAccountContacts_(customerId)
+    : (typeof getPmosAccountContacts_ === 'function' ? getPmosAccountContacts_(customerId) : []);
   profile.locationName = selected ? (selected.locationName || selected.calendarTitle || '') : '';
   profile.isPrimaryServiceLocation = selected ? selected.primary : true;
   profile.serviceLocationContacts = getPmosServiceLocationContacts_(profile.customerId);
